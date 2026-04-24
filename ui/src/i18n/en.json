@@ -25,6 +25,7 @@
     "sessionReloadedElsewhere": "Session was changed in another tab — reloaded the latest graph.",
     "promptCopied": "Prompt copied",
     "imageCopied": "Copied to clipboard",
+    "imageLinkCopied": "Image link copied",
     "copyFailed": "Copy failed",
     "noPromptToFork": "No prompt to fork",
     "forkStarted": "Prompt imported. Edit and generate again."

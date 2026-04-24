@@ -1,5 +1,6 @@
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
+import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
 
 export function ResultActions() {
   const { t } = useI18n();
@@ -18,19 +19,21 @@ export function ResultActions() {
 
   const copyImage = async () => {
     try {
-      const res = await fetch(currentImage.image);
-      const blob = await res.blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      showToast(t("toast.imageCopied"));
+      const copied = await copyImageToClipboard(currentImage.url ?? currentImage.image);
+      showToast(copied === "image" ? t("toast.imageCopied") : t("toast.imageLinkCopied"));
     } catch {
       showToast(t("toast.copyFailed"), true);
     }
   };
 
-  const copyPrompt = () => {
+  const copyPrompt = async () => {
     if (!currentImage.prompt) return;
-    void navigator.clipboard.writeText(currentImage.prompt);
-    showToast(t("toast.promptCopied"));
+    try {
+      await copyTextToClipboard(currentImage.prompt);
+      showToast(t("toast.promptCopied"));
+    } catch {
+      showToast(t("toast.copyFailed"), true);
+    }
   };
 
   const newFromHere = () => {
@@ -57,7 +60,7 @@ export function ResultActions() {
       <button type="button" className="action-btn" onClick={copyImage}>
         {t("result.copyImage")}
       </button>
-      <button type="button" className="action-btn" onClick={copyPrompt}>
+      <button type="button" className="action-btn" onClick={() => void copyPrompt()}>
         {t("result.copyPrompt")}
       </button>
       <button

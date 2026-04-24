@@ -3,6 +3,7 @@ import { useAppStore } from "../store/useAppStore";
 import { ResultActions } from "./ResultActions";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { copyTextToClipboard } from "../lib/clipboard";
 
 function sameImage(a: { filename?: string; image: string } | null, b: { filename?: string; image: string } | null) {
   if (!a || !b) return false;
@@ -23,10 +24,14 @@ export function Canvas() {
   const isMobile = useIsMobile();
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
-  const copyPrompt = () => {
+  const copyPrompt = async () => {
     if (!currentImage?.prompt) return;
-    void navigator.clipboard.writeText(currentImage.prompt);
-    showToast(t("toast.promptCopied"));
+    try {
+      await copyTextToClipboard(currentImage.prompt);
+      showToast(t("toast.promptCopied"));
+    } catch {
+      showToast(t("toast.copyFailed"), true);
+    }
   };
 
   const displayQuality = currentImage?.quality ?? quality;
@@ -99,7 +104,7 @@ export function Canvas() {
             />
           </div>
           {currentImage.prompt ? (
-            <div className="result-prompt" onClick={copyPrompt}>
+            <div className="result-prompt" onClick={() => void copyPrompt()}>
               {currentImage.prompt}
             </div>
           ) : null}
