@@ -1,4 +1,4 @@
-import { useRef, type TouchEvent } from "react";
+import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { ResultActions } from "./ResultActions";
 import { useI18n } from "../i18n";
@@ -23,6 +23,14 @@ export function Canvas() {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+  const imageKey = currentImage?.filename ?? currentImage?.url ?? currentImage?.image ?? "";
+  const currentPrompt = currentImage?.prompt ?? "";
+  const promptCanExpand = currentPrompt.length > 120 || currentPrompt.includes("\n");
+
+  useEffect(() => {
+    setIsPromptExpanded(false);
+  }, [imageKey]);
 
   const copyPrompt = async () => {
     if (!currentImage?.prompt) return;
@@ -104,8 +112,30 @@ export function Canvas() {
             />
           </div>
           {currentImage.prompt ? (
-            <div className="result-prompt" onClick={() => void copyPrompt()}>
-              {currentImage.prompt}
+            <div
+              className={`result-prompt${promptCanExpand && !isPromptExpanded ? " result-prompt--collapsed" : ""}${isPromptExpanded ? " result-prompt--expanded" : ""}`}
+              title={currentPrompt}
+            >
+              <p className="result-prompt__text">{currentPrompt}</p>
+              <div className="result-prompt__controls">
+                {promptCanExpand ? (
+                  <button
+                    type="button"
+                    className="result-prompt__toggle"
+                    onClick={() => setIsPromptExpanded((open) => !open)}
+                    aria-expanded={isPromptExpanded}
+                  >
+                    {isPromptExpanded ? t("result.hideFullPrompt") : t("result.showFullPrompt")}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="result-prompt__toggle"
+                  onClick={() => void copyPrompt()}
+                >
+                  {t("result.copyPrompt")}
+                </button>
+              </div>
             </div>
           ) : null}
           <div className="result-meta">

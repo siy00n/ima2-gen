@@ -429,8 +429,8 @@ body {
 }
 
 .result-prompt {
-  max-width: 600px;
-  padding: 10px 16px;
+  width: min(100%, 720px);
+  padding: 10px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -438,12 +438,55 @@ body {
   font-size: 12px;
   color: var(--text-dim);
   line-height: 1.5;
-  cursor: pointer;
   transition: all 0.15s;
   word-break: break-word;
-  text-align: center;
+  text-align: left;
 }
 .result-prompt:hover {
+  border-color: #444;
+  color: var(--text);
+}
+
+.result-prompt__text {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.result-prompt--collapsed .result-prompt__text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.result-prompt--expanded .result-prompt__text {
+  max-height: min(30dvh, 260px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.result-prompt__controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.result-prompt__toggle {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.result-prompt__toggle:hover {
   border-color: #444;
   color: var(--text);
 }
@@ -2013,13 +2056,28 @@ body {
   .result-prompt {
     width: 100%;
     max-width: none;
-    max-height: 32px;
-    overflow: hidden;
-    padding: 6px 10px;
+    padding: 8px 10px;
     font-size: 11px;
     line-height: 1.4;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+  }
+
+  .result-prompt--collapsed .result-prompt__text {
+    -webkit-line-clamp: 2;
+  }
+
+  .result-prompt--expanded .result-prompt__text {
+    max-height: min(24dvh, 190px);
+  }
+
+  .result-prompt__controls {
+    gap: 6px;
+    margin-top: 6px;
+  }
+
+  .result-prompt__toggle {
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 10px;
   }
 
   .result-meta {

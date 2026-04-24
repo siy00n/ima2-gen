@@ -197,7 +197,9 @@
     "continueHereTitle": "Import this image's prompt and keep working",
     "previousImage": "Previous image",
     "nextImage": "Next image",
-    "imageCounter": "{current} / {total}"
+    "imageCounter": "{current} / {total}",
+    "showFullPrompt": "Show full prompt",
+    "hideFullPrompt": "Collapse prompt"
   },
   "session": {
     "switchTitle": "Switch session",

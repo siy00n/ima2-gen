@@ -197,7 +197,9 @@
     "continueHereTitle": "이 이미지의 프롬프트를 가져와 이어서 작업",
     "previousImage": "이전 이미지",
     "nextImage": "다음 이미지",
-    "imageCounter": "{current} / {total}"
+    "imageCounter": "{current} / {total}",
+    "showFullPrompt": "프롬프트 전체 보기",
+    "hideFullPrompt": "프롬프트 접기"
   },
   "session": {
     "switchTitle": "세션 전환",
