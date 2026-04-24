@@ -36,23 +36,20 @@ export async function copyTextToClipboard(text: string): Promise<void> {
   if (!copied) throw new Error("copy command failed");
 }
 
-export async function copyImageToClipboard(source: string): Promise<"image" | "link"> {
+export async function copyImageToClipboard(source: string): Promise<void> {
   const imageUrl = new URL(source, window.location.href).href;
 
-  if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
-    try {
-      const res = await fetch(imageUrl);
-      if (!res.ok) throw new Error(`image fetch failed: ${res.status}`);
-      const blob = await res.blob();
-      const type = blob.type || "image/png";
-      if (!type.startsWith("image/")) throw new Error(`not an image: ${type}`);
-      await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
-      return "image";
-    } catch {
-      // Mobile browsers often block binary clipboard writes outside HTTPS.
-    }
+  if (!window.isSecureContext) {
+    throw new Error("image-copy-requires-https");
+  }
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+    throw new Error("image-copy-unsupported");
   }
 
-  await copyTextToClipboard(imageUrl);
-  return "link";
+  const res = await fetch(imageUrl);
+  if (!res.ok) throw new Error(`image fetch failed: ${res.status}`);
+  const blob = await res.blob();
+  const type = blob.type || "image/png";
+  if (!type.startsWith("image/")) throw new Error(`not an image: ${type}`);
+  await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
 }

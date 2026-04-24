@@ -19,10 +19,14 @@ export function ResultActions() {
 
   const copyImage = async () => {
     try {
-      const copied = await copyImageToClipboard(currentImage.url ?? currentImage.image);
-      showToast(copied === "image" ? t("toast.imageCopied") : t("toast.imageLinkCopied"));
-    } catch {
-      showToast(t("toast.copyFailed"), true);
+      await copyImageToClipboard(currentImage.url ?? currentImage.image);
+      showToast(t("toast.imageCopied"));
+    } catch (err) {
+      const key =
+        err instanceof Error && err.message === "image-copy-requires-https"
+          ? "toast.imageCopyNeedsHttps"
+          : "toast.copyFailed";
+      showToast(t(key), true);
     }
   };
 
