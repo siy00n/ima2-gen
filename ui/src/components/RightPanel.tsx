@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { BillingBar } from "./BillingBar";
 import { OptionGroup } from "./OptionGroup";
 import { SizePicker } from "./SizePicker";
 import { CostEstimate } from "./CostEstimate";
+import { ProviderSelect } from "./ProviderSelect";
 import type { Count, Format, Moderation, Quality } from "../types";
 import { useI18n } from "../i18n";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 const FORMAT_ITEMS = [
   { value: "png" as const, label: "PNG" },
@@ -21,19 +22,10 @@ const COUNT_ITEMS: { value: string; label: string }[] = [
 
 export function RightPanel() {
   const open = useAppStore((s) => s.rightPanelOpen);
+  const setOpen = useAppStore((s) => s.setRightPanelOpen);
   const toggle = useAppStore((s) => s.toggleRightPanel);
   const { t } = useI18n();
-  const [isMobile, setIsMobile] = useState(
-    typeof window !== "undefined" ? window.matchMedia("(max-width: 800px)").matches : false,
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(max-width: 800px)");
-    const onChange = () => setIsMobile(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+  const isMobile = useIsMobile();
 
   const drawerOpen = isMobile ? open : true;
 
@@ -69,7 +61,7 @@ export function RightPanel() {
           className="right-panel-backdrop"
           role="button"
           aria-label={t("panel.closeSettings")}
-          onClick={toggle}
+          onClick={() => setOpen(false)}
         />
       ) : null}
       <aside
@@ -81,7 +73,7 @@ export function RightPanel() {
           className="right-panel-toggle"
           aria-expanded={open}
           aria-controls="right-panel-body"
-          onClick={toggle}
+          onClick={() => (isMobile ? setOpen(false) : toggle())}
           title={open ? t("panel.toggleHide") : t("panel.toggleShow")}
         >
           {isMobile ? (open ? t("panel.close") : t("panel.open")) : open ? ">" : "<"}
@@ -92,6 +84,7 @@ export function RightPanel() {
           hidden={!open}
         >
           <BillingBar />
+          {isMobile ? <ProviderSelect /> : null}
           <div className="section-title">{t("panel.detailSettings")}</div>
           <OptionGroup<Quality>
             title={t("quality.title")}

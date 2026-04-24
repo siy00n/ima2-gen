@@ -106,7 +106,9 @@
     "useCurrent": "Use current",
     "useCurrentTitle": "Use current result as a reference",
     "hint": "Ctrl + Enter to generate",
-    "dropHere": "Drop to attach as reference (up to {max})"
+    "dropHere": "Drop to attach as reference (up to {max})",
+    "openComposer": "Tap to edit or generate another image",
+    "collapseComposer": "Hide prompt"
   },
   "canvas": {
     "resultAlt": "result",
@@ -191,7 +193,10 @@
     "copyImage": "Copy image",
     "copyPrompt": "Copy prompt",
     "continueHere": "Continue here",
-    "continueHereTitle": "Import this image's prompt and keep working"
+    "continueHereTitle": "Import this image's prompt and keep working",
+    "previousImage": "Previous image",
+    "nextImage": "Next image",
+    "imageCounter": "{current} / {total}"
   },
   "session": {
     "switchTitle": "Switch session",

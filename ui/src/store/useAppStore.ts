@@ -35,11 +35,22 @@ import { t, loadLocale, saveLocale, type Locale } from "../i18n";
 function loadRightPanelOpen(): boolean {
   try {
     const raw = localStorage.getItem("ima2.rightPanelOpen");
-    if (raw === null) return true;
+    if (raw === null) {
+      if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+        return !window.matchMedia("(max-width: 800px)").matches;
+      }
+      return true;
+    }
     return JSON.parse(raw) === true;
   } catch {
     return true;
   }
+}
+
+function saveRightPanelOpen(open: boolean): void {
+  try {
+    localStorage.setItem("ima2.rightPanelOpen", JSON.stringify(open));
+  } catch {}
 }
 
 function loadUIMode(): UIMode {
@@ -203,6 +214,22 @@ function mapSessionToGraph(session: SessionFull): {
 
 type ToastState = { message: string; error: boolean; id: number } | null;
 
+function sameGenerateItem(a: GenerateItem | null | undefined, b: GenerateItem | null | undefined): boolean {
+  if (!a || !b) return false;
+  if (a.filename && b.filename) return a.filename === b.filename;
+  return a.image === b.image;
+}
+
+function currentHistoryIndex(history: GenerateItem[], currentImage: GenerateItem | null): number {
+  if (!currentImage) return -1;
+  return history.findIndex((item) => sameGenerateItem(item, currentImage));
+}
+
+function selectHistoryItem(item: GenerateItem, set: (patch: Partial<AppState>) => void): void {
+  saveSelectedFilename(item.filename ?? null);
+  set({ currentImage: item });
+}
+
 type AppState = {
   provider: Provider;
   quality: Quality;
@@ -229,6 +256,7 @@ type AppState = {
   history: GenerateItem[];
   toast: ToastState;
   rightPanelOpen: boolean;
+  setRightPanelOpen: (open: boolean) => void;
   toggleRightPanel: () => void;
   galleryOpen: boolean;
   openGallery: () => void;
@@ -277,6 +305,8 @@ type AppState = {
   setCount: (c: Count) => void;
   setPrompt: (p: string) => void;
   selectHistory: (item: GenerateItem) => void;
+  selectPreviousImage: () => void;
+  selectNextImage: () => void;
   removeFromHistory: (filename: string) => void;
   addHistoryItem: (item: GenerateItem) => void;
   generate: () => Promise<void>;
@@ -525,12 +555,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   history: [],
   toast: null,
   rightPanelOpen: loadRightPanelOpen(),
+  setRightPanelOpen: (rightPanelOpen) => {
+    saveRightPanelOpen(rightPanelOpen);
+    set({ rightPanelOpen });
+  },
   toggleRightPanel: () =>
     set((s) => {
       const next = !s.rightPanelOpen;
-      try {
-        localStorage.setItem("ima2.rightPanelOpen", JSON.stringify(next));
-      } catch {}
+      saveRightPanelOpen(next);
       return { rightPanelOpen: next };
     }),
   galleryOpen: false,
@@ -1110,8 +1142,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   setPrompt: (prompt) => set({ prompt }),
 
   selectHistory: (item) => {
-    saveSelectedFilename(item.filename ?? null);
-    set({ currentImage: item });
+    selectHistoryItem(item, set);
+  },
+
+  selectPreviousImage: () => {
+    const s = get();
+    const idx = currentHistoryIndex(s.history, s.currentImage);
+    if (idx <= 0) return;
+    selectHistoryItem(s.history[idx - 1], set);
+  },
+
+  selectNextImage: () => {
+    const s = get();
+    const idx = currentHistoryIndex(s.history, s.currentImage);
+    if (idx < 0 || idx >= s.history.length - 1) return;
+    selectHistoryItem(s.history[idx + 1], set);
   },
 
   removeFromHistory: (filename) => {

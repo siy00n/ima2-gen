@@ -5,6 +5,7 @@ import { NodeCanvas } from "./components/NodeCanvas";
 import { RightPanel } from "./components/RightPanel";
 import { Toast } from "./components/Toast";
 import { GalleryModal } from "./components/GalleryModal";
+import { MobileToolbar } from "./components/MobileToolbar";
 import { useAppStore, flushGraphSaveBeacon } from "./store/useAppStore";
 import { IS_DEV_UI } from "./lib/devMode";
 
@@ -49,6 +50,7 @@ export default function App() {
 
   return (
     <>
+      <MobileToolbar />
       <div className="app">
         <Sidebar />
         {uiMode === "classic" ? <Canvas /> : <NodeCanvas />}
