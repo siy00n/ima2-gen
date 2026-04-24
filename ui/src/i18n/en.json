@@ -28,7 +28,12 @@
     "imageCopyNeedsHttps": "Open over HTTPS to copy the image itself.",
     "copyFailed": "Copy failed",
     "noPromptToFork": "No prompt to fork",
-    "forkStarted": "Prompt imported. Edit and generate again."
+    "forkStarted": "Prompt imported. Edit and generate again.",
+    "nodeParentRequired": "Generate the parent image before branching from it.",
+    "nodeTargetMustBeEmpty": "Connect only to an empty node.",
+    "nodeImportNeedsFile": "Only saved history images can be imported into Node mode.",
+    "nodeImported": "Imported into Node mode",
+    "nodeImportFailed": "Failed to import into Node mode."
   },
   "inflight": {
     "queued": "Queued",
@@ -92,7 +97,10 @@
     "toggleShow": "Show settings",
     "toggleHide": "Hide settings",
     "open": "Open",
-    "close": "Close"
+    "close": "Close",
+    "nodeTabs": "Node panel tabs",
+    "node": "Node",
+    "settings": "Settings"
   },
   "prompt": {
     "label": "Prompt",
@@ -123,6 +131,8 @@
     "imageAltFallback": "Generated image",
     "deleteTitle": "Delete (10s undo)",
     "deleteAria": "Delete image",
+    "importToNodeTitle": "Import to Node mode",
+    "importToNodeAria": "Import image to Node mode",
     "ariaLabel": "Image gallery",
     "title": "Gallery",
     "total": "{n} total",
@@ -164,6 +174,7 @@
     "promptPlaceholder": "Prompt...",
     "regenerate": "Regenerate",
     "generate": "Generate",
+    "retry": "Retry",
     "addChild": "Add child",
     "duplicateBranch": "Duplicate branch",
     "duplicateBranchTitle": "Duplicate as a new branch root",
@@ -199,7 +210,9 @@
     "nextImage": "Next image",
     "imageCounter": "{current} / {total}",
     "showFullPrompt": "Show full prompt",
-    "hideFullPrompt": "Collapse prompt"
+    "hideFullPrompt": "Collapse prompt",
+    "openInNode": "Open in Node",
+    "openInNodeTitle": "Import this image as a Node root"
   },
   "session": {
     "switchTitle": "Switch session",
@@ -229,6 +242,13 @@
     "addFirst": "+ Add first node",
     "addRootTitle": "Add root node",
     "hint": "Drag a handle into empty space to branch. Press Delete or Backspace to remove."
+  },
+  "nodeInspector": {
+    "title": "Selected node",
+    "noSelection": "Select a node to inspect it, edit its prompt, and create branches.",
+    "importCurrent": "Import current image",
+    "createVariation": "Create variation",
+    "statusValue": "{value}"
   },
   "apiDisabled": {
     "title": "{provider} unavailable",

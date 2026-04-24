@@ -8,16 +8,14 @@ import { HistoryStrip } from "./HistoryStrip";
 import { SessionPicker } from "./SessionPicker";
 import { LanguageToggle } from "./LanguageToggle";
 import { useAppStore } from "../store/useAppStore";
-import { IS_DEV_UI } from "../lib/devMode";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 export function Sidebar() {
   const { t } = useI18n();
-  const uiModeRaw = useAppStore((s) => s.uiMode);
+  const uiMode = useAppStore((s) => s.uiMode);
   const currentImage = useAppStore((s) => s.currentImage);
   const prompt = useAppStore((s) => s.prompt);
-  const uiMode = IS_DEV_UI ? uiModeRaw : "classic";
   const isMobile = useIsMobile();
   const [composerOpen, setComposerOpen] = useState(false);
   const hasMobileResult = isMobile && uiMode === "classic" && !!currentImage;

@@ -197,6 +197,27 @@ export type NodeGenerateResponse = {
   moderation?: string;
 };
 
+export type NodeImportRequest = {
+  filename: string;
+  prompt?: string;
+  sessionId?: string | null;
+  clientNodeId?: string | null;
+};
+
+export type NodeImportResponse = {
+  nodeId: string;
+  filename: string;
+  url: string;
+  prompt: string;
+  provider: string;
+  createdAt: number;
+  quality?: string | null;
+  size?: string | null;
+  format?: string | null;
+  moderation?: string | null;
+  webSearchCalls?: number;
+};
+
 export type NodeErrorResponse = {
   error: { code: string; message: string };
   parentNodeId: string | null;
@@ -217,6 +238,14 @@ export async function postNodeGenerate(payload: NodeGenerateRequest): Promise<No
     throw e;
   }
   return data as NodeGenerateResponse;
+}
+
+export function postNodeImport(payload: NodeImportRequest): Promise<NodeImportResponse> {
+  return jsonFetch("/api/node/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 // ── Sessions (0.06) ──

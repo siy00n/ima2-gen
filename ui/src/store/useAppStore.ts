@@ -17,6 +17,7 @@ import {
   getInflight,
   cancelInflight,
   postNodeGenerate,
+  postNodeImport,
   listSessions as apiListSessions,
   createSession as apiCreateSession,
   getSession as apiGetSession,
@@ -134,7 +135,7 @@ function saveSelectedFilename(filename: string | null): void {
 const HISTORY_LIMIT = 500;
 
 function narrowGenerateKind(k?: string | null): GenerateItem["kind"] {
-  return k === "classic" || k === "edit" || k === "generate" ? k : null;
+  return k === "classic" || k === "edit" || k === "generate" || k === "import" ? k : null;
 }
 
 export type ImageNodeStatus =
@@ -159,6 +160,14 @@ export type ImageNodeData = {
   error?: string;
   elapsed?: number;
   webSearchCalls?: number;
+  filename?: string;
+  provider?: string;
+  quality?: string;
+  size?: string;
+  format?: string;
+  moderation?: string;
+  usage?: GenerateItem["usage"];
+  createdAt?: number;
 };
 
 export type GraphNode = FlowNode<ImageNodeData>;
@@ -192,6 +201,14 @@ function mapSessionToGraph(session: SessionFull): {
       error: d.error as string | undefined,
       elapsed: d.elapsed as number | undefined,
       webSearchCalls: d.webSearchCalls as number | undefined,
+      filename: d.filename as string | undefined,
+      provider: d.provider as string | undefined,
+      quality: d.quality as string | undefined,
+      size: d.size as string | undefined,
+      format: d.format as string | undefined,
+      moderation: d.moderation as string | undefined,
+      usage: d.usage as GenerateItem["usage"] | undefined,
+      createdAt: d.createdAt as number | undefined,
     };
     return {
       id: n.id,
@@ -270,6 +287,8 @@ type AppState = {
 
   graphNodes: GraphNode[];
   graphEdges: GraphEdge[];
+  selectedNodeId: ClientNodeId | null;
+  selectNode: (clientId: ClientNodeId | null) => void;
   setGraphNodes: (n: GraphNode[]) => void;
   setGraphEdges: (e: GraphEdge[]) => void;
   addRootNode: () => ClientNodeId;
@@ -282,6 +301,8 @@ type AppState = {
   generateNode: (clientId: ClientNodeId) => Promise<void>;
   deleteNode: (clientId: ClientNodeId) => void;
   deleteNodes: (clientIds: ClientNodeId[]) => void;
+  importHistoryItemAsNode: (item: GenerateItem) => Promise<void>;
+  importCurrentImageAsNode: () => Promise<void>;
 
   // Sessions (0.06)
   sessions: SessionSummary[];
@@ -583,6 +604,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   graphNodes: [],
   graphEdges: [],
+  selectedNodeId: null,
+  selectNode: (selectedNodeId) => set({ selectedNodeId }),
   setGraphNodes: (graphNodes) => {
     set({ graphNodes });
     get().scheduleGraphSave();
@@ -623,6 +646,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeSessionGraphVersion: graphVersion,
         graphNodes,
         graphEdges,
+        selectedNodeId: null,
         sessionLoading: false,
       });
       // Serialize reconcile and recovery so the two async writers don't race.
@@ -707,6 +731,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeSessionGraphVersion: session.graphVersion,
         graphNodes: [],
         graphEdges: [],
+        selectedNodeId: null,
       });
     } catch (err) {
       console.warn("[sessions] create failed:", err);
@@ -740,6 +765,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           activeSessionGraphVersion: null,
           graphNodes: [],
           graphEdges: [],
+          selectedNodeId: null,
         });
         if (remaining.length > 0) {
           await get().switchSession(remaining[0].id);
@@ -779,7 +805,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           pendingPhase: null,
         },
       };
-    set({ graphNodes: [...get().graphNodes, node] });
+    set({ graphNodes: [...get().graphNodes, node], selectedNodeId: clientId });
     get().scheduleGraphSave();
     return clientId;
   },
@@ -787,6 +813,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   addChildNode: (parentClientId) => {
     const parent = get().graphNodes.find((n) => n.id === parentClientId);
     if (!parent) return parentClientId;
+    if (parent.data.status !== "ready" || !parent.data.serverNodeId) {
+      get().showToast(t("toast.nodeParentRequired"), true);
+      return parentClientId;
+    }
     const clientId = newClientNodeId();
     const siblings = get().graphEdges.filter((e) => e.source === parentClientId).length;
     const node: GraphNode = {
@@ -812,6 +842,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
+      selectedNodeId: clientId,
     });
     get().scheduleGraphSave();
     return clientId;
@@ -841,7 +872,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           pendingPhase: null,
         },
       };
-      set({ graphNodes: [...get().graphNodes, node] });
+      set({ graphNodes: [...get().graphNodes, node], selectedNodeId: clientId });
       get().scheduleGraphSave();
       return clientId;
     }
@@ -875,6 +906,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
+      selectedNodeId: clientId,
     });
     get().scheduleGraphSave();
     return clientId;
@@ -911,7 +943,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
     // no parent edge — becomes a new branch root at root layer
     void rootSiblings;
-    set({ graphNodes: [...get().graphNodes, node] });
+    set({ graphNodes: [...get().graphNodes, node], selectedNodeId: clientId });
     get().scheduleGraphSave();
     return clientId;
   },
@@ -1002,10 +1034,19 @@ export const useAppStore = create<AppState>((set, get) => ({
                     pendingStartedAt: null,
                     elapsed: res.elapsed,
                     webSearchCalls: res.webSearchCalls,
+                    filename: res.filename,
+                    provider: res.provider,
+                    quality: s.quality,
+                    size,
+                    format: s.format,
+                    moderation: res.moderation ?? s.moderation,
+                    usage: res.usage,
+                    createdAt: Date.now(),
                   },
                 }
               : n,
           ),
+          selectedNodeId: targetClientId,
         });
         graphMutated = true;
         get().showToast(t("toast.nodeCreated", { id: res.nodeId.slice(0, 8), elapsed: res.elapsed }));
@@ -1060,12 +1101,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       graphNodes: get().graphNodes.filter((n) => n.id !== clientId),
       graphEdges: get().graphEdges.filter((e) => e.source !== clientId && e.target !== clientId),
+      selectedNodeId: get().selectedNodeId === clientId ? null : get().selectedNodeId,
     });
     get().scheduleGraphSave();
   },
 
   deleteNodes: (clientIds) => {
     const set_ = new Set(clientIds);
+    const selectedNodeId = get().selectedNodeId;
     for (const n of get().graphNodes) {
       if (set_.has(n.id) && n.data?.pendingRequestId) {
         void cancelInflight(n.data.pendingRequestId);
@@ -1074,6 +1117,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       graphNodes: get().graphNodes.filter((n) => !set_.has(n.id)),
       graphEdges: get().graphEdges.filter((e) => !set_.has(e.source) && !set_.has(e.target)),
+      selectedNodeId: selectedNodeId && set_.has(selectedNodeId) ? null : selectedNodeId,
     });
     get().scheduleGraphSave();
   },
@@ -1081,6 +1125,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   addChildNodeAt: (parentClientId, position) => {
     const parent = get().graphNodes.find((n) => n.id === parentClientId);
     if (!parent) return parentClientId;
+    if (parent.data.status !== "ready" || !parent.data.serverNodeId) {
+      get().showToast(t("toast.nodeParentRequired"), true);
+      return parentClientId;
+    }
     const clientId = newClientNodeId();
     const node: GraphNode = {
       id: clientId,
@@ -1105,6 +1153,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
+      selectedNodeId: clientId,
     });
     get().scheduleGraphSave();
     return clientId;
@@ -1117,7 +1166,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     );
     if (existing) return;
     const source = get().graphNodes.find((n) => n.id === sourceClientId);
+    const target = get().graphNodes.find((n) => n.id === targetClientId);
     if (!source) return;
+    if (!target) return;
+    if (source.data.status !== "ready" || !source.data.serverNodeId) {
+      get().showToast(t("toast.nodeParentRequired"), true);
+      return;
+    }
+    if (target.data.status !== "empty" || target.data.serverNodeId || target.data.imageUrl) {
+      get().showToast(t("toast.nodeTargetMustBeEmpty"), true);
+      return;
+    }
     set({
       graphNodes: get().graphNodes.map((n) =>
         n.id === targetClientId
@@ -1125,11 +1184,83 @@ export const useAppStore = create<AppState>((set, get) => ({
           : n,
       ),
       graphEdges: [
-        ...get().graphEdges,
+        ...get().graphEdges.filter((e) => e.target !== targetClientId),
         { id: `${sourceClientId}->${targetClientId}`, source: sourceClientId, target: targetClientId },
       ],
+      selectedNodeId: targetClientId,
     });
     get().scheduleGraphSave();
+  },
+
+  async importHistoryItemAsNode(item) {
+    if (!item.filename) {
+      get().showToast(t("toast.nodeImportNeedsFile"), true);
+      return;
+    }
+    let sessionId = get().activeSessionId;
+    if (!sessionId) {
+      await get().createAndSwitchSession(t("session.firstGraph"));
+      sessionId = get().activeSessionId;
+    }
+    if (!sessionId) {
+      get().showToast(t("toast.nodeImportFailed"), true);
+      return;
+    }
+    const clientId = newClientNodeId();
+    try {
+      const res = await postNodeImport({
+        filename: item.filename,
+        prompt: item.prompt,
+        sessionId,
+        clientNodeId: clientId,
+      });
+      const rootCount = get().graphNodes.filter((n) => !n.data.parentServerNodeId).length;
+      const node: GraphNode = {
+        id: clientId,
+        type: "imageNode",
+        position: initialPos(0, rootCount),
+        data: {
+          clientId,
+          serverNodeId: res.nodeId,
+          parentServerNodeId: null,
+          prompt: res.prompt,
+          imageUrl: res.url,
+          status: "ready",
+          pendingRequestId: null,
+          pendingPhase: null,
+          filename: res.filename,
+          provider: res.provider,
+          quality: res.quality ?? item.quality,
+          size: res.size ?? item.size,
+          format: res.format ?? item.format,
+          moderation: res.moderation ?? item.moderation,
+          webSearchCalls: res.webSearchCalls ?? 0,
+          createdAt: res.createdAt,
+        },
+      };
+      set({
+        uiMode: "node",
+        graphNodes: [...get().graphNodes, node],
+        selectedNodeId: clientId,
+        rightPanelOpen: true,
+      });
+      saveRightPanelOpen(true);
+      try { localStorage.setItem("ima2.uiMode", "node"); } catch {}
+      get().scheduleGraphSave();
+      get().showToast(t("toast.nodeImported"));
+    } catch (err) {
+      console.warn("[node] import failed:", err);
+      get().showToast(t("toast.nodeImportFailed"), true);
+    }
+  },
+
+  async importCurrentImageAsNode() {
+    const item = get().currentImage;
+    if (!item) {
+      get().showToast(t("toast.noCurrentImageForRef"), true);
+      return;
+    }
+    await get().importHistoryItemAsNode(item);
   },
 
   setProvider: (provider) => set({ provider }),

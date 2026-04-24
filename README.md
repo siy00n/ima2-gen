@@ -117,7 +117,7 @@ Public roadmap — subject to change. Version numbers reflect the actual ship cy
 - **0.06** Session DB — SQLite-backed history with sidecar JSON
 - **0.07** Multi-reference — up to 5 attachments, i2i merged into unified flow
 - **0.08** Inflight tracking — refresh-safe pending state, phase tracking
-- **0.09** Node mode (dev-only) — graph-based canvas for branching generations
+- **0.09** Node mode — graph-based canvas for branching generations (desktop-enabled in this custom branch)
 - **0.09.1** CLI integration — `gen / edit / ls / show / ps / ping` + `/api/health` + port advertisement
 
 ### 🚧 0.10 — Compare & Reuse (current cycle)
@@ -156,15 +156,16 @@ ima2 serve
   │   ├── POST /api/edit           — ref-heavy edit path
   │   ├── GET  /api/history        — paginated sidecar listing
   │   ├── GET  /api/inflight       — in-progress jobs (kind/session filters)
-  │   ├── GET  /api/sessions/*     — node-graph sessions (dev-only)
+  │   ├── POST /api/node/import    — promote history image into node graph
+  │   ├── GET  /api/sessions/*     — node-graph sessions
   │   ├── GET  /api/billing        — API credit / cost info
-  │   └── Static files (public/)   — web UI
+  │   └── Static files (ui/dist)   — web UI
   │
   ├── openai-oauth proxy (:10531)  — embedded OAuth relay
   └── ~/.ima2/server.json          — port advertisement for CLI auto-discovery
 ```
 
-**Node mode** is dev-only (`npm run dev`) and gated from npm publishes until the session DB + multi-user story lands.
+In this custom branch, **Node mode** is available in the regular web UI for desktop branching workflows. Upstream packaging policy may still differ.
 
 ---
 
@@ -204,13 +205,13 @@ cp .env.example .env
 git clone https://github.com/lidge-jun/ima2-gen.git
 cd ima2-gen
 npm install
-npm run dev    # server with --watch + Node mode enabled
+npm run dev    # server with --watch
 npm test       # 51+ tests (health, CLI lib, commands, server)
 ```
 
 Frontend stack:
-- Vanilla HTML/CSS/JS (no framework in the published build)
-- Vite + React for the Node-mode canvas (dev-only, gated)
+- Vite + React for the active web UI
+- `@xyflow/react` for the Node-mode canvas
 - Fonts: Outfit + Geist Mono
 
 ## Tech Stack

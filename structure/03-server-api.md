@@ -75,9 +75,10 @@ The inflight registry tracks both classic and node jobs. The UI uses it to recon
 | Method | Path | Body or query | Response |
 |---|---|---|---|
 | `POST` | `/api/node/generate` | `{ parentNodeId?, prompt, quality?, size?, format?, moderation?, references?, externalSrc?, sessionId?, clientNodeId?, requestId?, provider? }` | `{ nodeId, parentNodeId, requestId, image, filename, url, elapsed, usage, webSearchCalls, provider, moderation }` |
+| `POST` | `/api/node/import` | `{ filename, prompt?, sessionId?, clientNodeId? }` | `{ nodeId, filename, url, prompt, provider, createdAt, quality, size, format, moderation, webSearchCalls }` |
 | `GET` | `/api/node/:nodeId` | none | `{ nodeId, meta, url }` |
 
-When `parentNodeId` is present, the server reads the stored parent image and uses the edit path. Without a parent node, it generates a new image. `externalSrc` is a controlled fallback for promoting an existing history asset into a node workflow.
+When `parentNodeId` is present, the server reads the stored parent image and uses the edit path. Without a parent node, it generates a new image. `externalSrc` is a controlled fallback for generation-time reads from `generated/`. `/api/node/import` is the durable promotion path: it validates the source filename, copies the asset into a node-owned `n_<id>.<ext>` file under `generated/`, and writes import metadata that makes the node visible in history.
 
 ## Session DB API
 

@@ -1,12 +1,15 @@
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 export function ResultActions() {
   const { t } = useI18n();
   const currentImage = useAppStore((s) => s.currentImage);
   const showToast = useAppStore((s) => s.showToast);
   const setPrompt = useAppStore((s) => s.setPrompt);
+  const importCurrentImageAsNode = useAppStore((s) => s.importCurrentImageAsNode);
+  const isMobile = useIsMobile();
 
   if (!currentImage) return null;
 
@@ -75,6 +78,17 @@ export function ResultActions() {
       >
         {t("result.continueHere")}
       </button>
+      {!isMobile ? (
+        <button
+          type="button"
+          className="action-btn"
+          onClick={() => void importCurrentImageAsNode()}
+          disabled={!currentImage.filename}
+          title={t("result.openInNodeTitle")}
+        >
+          {t("result.openInNode")}
+        </button>
+      ) : null}
     </div>
   );
 }

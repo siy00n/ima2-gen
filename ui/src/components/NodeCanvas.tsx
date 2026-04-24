@@ -28,6 +28,7 @@ function NodeCanvasInner() {
   const addChildNodeAt = useAppStore((s) => s.addChildNodeAt);
   const connectNodes = useAppStore((s) => s.connectNodes);
   const deleteNodes = useAppStore((s) => s.deleteNodes);
+  const selectNode = useAppStore((s) => s.selectNode);
   const sessionLoading = useAppStore((s) => s.sessionLoading);
 
   const { screenToFlowPosition } = useReactFlow();
@@ -90,6 +91,8 @@ function NodeCanvasInner() {
             onConnect={onConnect}
             onConnectEnd={onConnectEnd}
             onNodesDelete={onNodesDelete}
+            onNodeClick={(_, node) => selectNode(node.id)}
+            onPaneClick={() => selectNode(null)}
             nodeTypes={nodeTypes}
             fitView
             deleteKeyCode={["Delete", "Backspace"]}

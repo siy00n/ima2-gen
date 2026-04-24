@@ -30,6 +30,7 @@ export type GenerateItem = {
   provider?: string;
   quality?: string;
   size?: string;
+  format?: string;
   moderation?: string;
   usage?: { total_tokens?: number } & Record<string, unknown>;
   thumb?: string;
@@ -37,7 +38,7 @@ export type GenerateItem = {
   sessionId?: string | null;
   nodeId?: string | null;
   clientNodeId?: string | null;
-  kind?: "classic" | "edit" | "generate" | null;
+  kind?: "classic" | "edit" | "generate" | "import" | null;
 };
 
 export type GenerateSingleResponse = {

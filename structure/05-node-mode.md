@@ -6,7 +6,7 @@ aliases: [ima2 Node Mode, image graph mode, node canvas]
 
 # Node Mode
 
-Node mode extends `ima2-gen` from a single-image generator into a graph-based image workspace. Users can create a root image, branch from it, and generate or edit child images. The UI is based on `@xyflow/react`, while the server provides node-level generation and session graph persistence.
+Node mode extends `ima2-gen` from a single-image generator into a graph-based image workspace. Users can create a root image, branch from it, generate or edit child images, and import existing history images as graph roots. The UI is based on `@xyflow/react`, while the server provides node-level generation, import, and session graph persistence.
 
 This mode matters because it is the likely center of future workflows. Classic UI revolves around one prompt and a list of image results. Node mode can represent lineage, retries, comparisons, research mode, and card-news flows as a graph. That connects API contracts, store state, session DB, and asset lifecycle.
 
@@ -68,6 +68,7 @@ sequenceDiagram
 | Endpoint | Role | Key fields |
 |---|---|---|
 | `POST /api/node/generate` | Generate/edit one node | `parentNodeId`, `prompt`, `quality`, `size`, `format`, `moderation`, `references`, `sessionId`, `clientNodeId`, `requestId` |
+| `POST /api/node/import` | Promote a generated history asset into node storage | `filename`, `prompt`, `sessionId`, `clientNodeId` |
 | `GET /api/node/:nodeId` | Fetch node metadata | `nodeId`, `meta`, `url` |
 | `GET /api/sessions` | List sessions | `sessions` |
 | `POST /api/sessions` | Create a session | `title` |
@@ -83,6 +84,7 @@ sequenceDiagram
 | `parentNodeId` present | Load stored parent node image and use the edit path | Generating a child node |
 | `parentNodeId` absent | Generate a new image from prompt and references | Generating a root node |
 | `externalSrc` present | Read an existing asset from `generated/` | Promoting a history image into the graph |
+| `filename` import | Copy an existing `generated/` image to `n_<id>.<ext>` and write `kind: "import"` metadata | Durable history-to-node promotion |
 
 ## Difference From Classic Mode
 

@@ -7,7 +7,6 @@ import { Toast } from "./components/Toast";
 import { GalleryModal } from "./components/GalleryModal";
 import { MobileToolbar } from "./components/MobileToolbar";
 import { useAppStore, flushGraphSaveBeacon } from "./store/useAppStore";
-import { IS_DEV_UI } from "./lib/devMode";
 
 export default function App() {
   const hydrateHistory = useAppStore((s) => s.hydrateHistory);
@@ -15,8 +14,7 @@ export default function App() {
   const startInFlightPolling = useAppStore((s) => s.startInFlightPolling);
   const reconcileInflight = useAppStore((s) => s.reconcileInflight);
   const syncFromStorage = useAppStore((s) => s.syncFromStorage);
-  const uiModeRaw = useAppStore((s) => s.uiMode);
-  const uiMode = IS_DEV_UI ? uiModeRaw : "classic";
+  const uiMode = useAppStore((s) => s.uiMode);
 
   useEffect(() => {
     hydrateHistory();

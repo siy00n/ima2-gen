@@ -8,7 +8,15 @@ import { spawnBin, onShutdown } from "./bin/lib/platform.js";
 import { existsSync, writeFileSync, unlinkSync, mkdirSync, readFileSync as fsReadFileSync } from "fs";
 import { homedir } from "os";
 import { randomBytes } from "crypto";
-import { newNodeId, saveNode, loadNodeB64, loadNodeMeta, loadAssetB64 } from "./lib/nodeStore.js";
+import {
+  newNodeId,
+  saveNode,
+  loadNodeB64,
+  loadNodeMeta,
+  loadAssetB64,
+  loadAssetMeta,
+  importAssetAsNode,
+} from "./lib/nodeStore.js";
 import { startJob, finishJob, listJobs, setJobPhase } from "./lib/inflight.js";
 import {
   createSession,
@@ -860,6 +868,82 @@ app.post("/api/node/generate", async (req, res) => {
     });
   } finally {
     finishJob(requestId);
+  }
+});
+
+app.post("/api/node/import", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const filename = body.filename;
+    if (typeof filename !== "string" || filename.length === 0) {
+      return res.status(400).json({
+        error: { code: "NODE_SOURCE_INVALID", message: "filename is required" },
+      });
+    }
+
+    const sourceMeta = await loadAssetMeta(__dirname, filename);
+    const sourceOptions =
+      sourceMeta && typeof sourceMeta.options === "object" && sourceMeta.options
+        ? sourceMeta.options
+        : {};
+    const nodeId = newNodeId();
+    const now = Date.now();
+    const prompt =
+      typeof body.prompt === "string"
+        ? body.prompt
+        : typeof sourceMeta?.prompt === "string"
+          ? sourceMeta.prompt
+          : "";
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId : null;
+    const clientNodeId = typeof body.clientNodeId === "string" ? body.clientNodeId : null;
+    const ext = filename.split(".").pop()?.toLowerCase() || "png";
+    const quality = sourceOptions.quality ?? sourceMeta?.quality ?? null;
+    const size = sourceOptions.size ?? sourceMeta?.size ?? null;
+    const format = sourceOptions.format ?? sourceMeta?.format ?? ext;
+    const moderation = sourceOptions.moderation ?? sourceMeta?.moderation ?? null;
+    const provider = sourceMeta?.provider || "oauth";
+    const webSearchCalls =
+      typeof sourceMeta?.webSearchCalls === "number" ? sourceMeta.webSearchCalls : 0;
+
+    const meta = {
+      nodeId,
+      parentNodeId: null,
+      sessionId,
+      clientNodeId,
+      prompt,
+      options: { quality, size, format, moderation },
+      quality,
+      size,
+      format,
+      moderation,
+      createdAt: now,
+      createdAtIso: new Date(now).toISOString(),
+      elapsed: null,
+      usage: null,
+      webSearchCalls,
+      provider,
+      kind: "import",
+    };
+    const result = await importAssetAsNode(__dirname, { filename, nodeId, meta });
+
+    res.json({
+      nodeId,
+      filename: result.filename,
+      url: `/generated/${encodeURIComponent(result.filename)}`,
+      prompt,
+      provider,
+      createdAt: now,
+      quality,
+      size,
+      format,
+      moderation,
+      webSearchCalls,
+    });
+  } catch (err) {
+    console.error("[node/import] error:", err.message);
+    res.status(err.status || 500).json({
+      error: { code: err.code || "NODE_IMPORT_FAILED", message: err.message },
+    });
   }
 });
 

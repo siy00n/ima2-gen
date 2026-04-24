@@ -33,6 +33,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   const onDelete = useCallback(() => deleteNode(id), [id, deleteNode]);
 
   const isBusy = d.status === "pending" || d.status === "reconciling";
+  const canBranch = d.status === "ready" && !!d.serverNodeId;
 
   const computeStatusLabel = (): string => {
     switch (d.status) {
@@ -102,7 +103,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
           </button>
           {d.status === "ready" ? (
             <>
-              <button type="button" onClick={onBranch}>{t("node.addChild")}</button>
+              <button type="button" onClick={onBranch} disabled={!canBranch}>{t("node.addChild")}</button>
               <button
                 type="button"
                 onClick={onDuplicateBranch}
@@ -115,7 +116,9 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
           <button type="button" onClick={onDelete} className="image-node__del" title={t("node.deleteTitle")}>×</button>
         </div>
       </div>
-      <Handle type="source" position={Position.Right} className="image-node__handle image-node__handle--source" />
+      {d.status === "ready" && d.serverNodeId ? (
+        <Handle type="source" position={Position.Right} className="image-node__handle image-node__handle--source" />
+      ) : null}
     </div>
   );
 }

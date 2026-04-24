@@ -44,6 +44,7 @@ export function GalleryModal() {
   const currentImage = useAppStore((s) => s.currentImage);
   const removeFromHistory = useAppStore((s) => s.removeFromHistory);
   const addHistoryItem = useAppStore((s) => s.addHistoryItem);
+  const importHistoryItemAsNode = useAppStore((s) => s.importHistoryItemAsNode);
 
   const [query, setQuery] = useState("");
   const [groupBy, setGroupBy] = useState<"date" | "session">("date");
@@ -77,7 +78,7 @@ export function GalleryModal() {
         const toItem = (h: (typeof page.loose)[number]): GenerateItem => {
           const k = h.kind;
           const narrowedKind: GenerateItem["kind"] =
-            k === "classic" || k === "edit" || k === "generate" ? k : null;
+            k === "classic" || k === "edit" || k === "generate" || k === "import" ? k : null;
           return {
             image: h.url,
             url: h.url,
@@ -159,6 +160,12 @@ export function GalleryModal() {
     }
   }
 
+  async function handleImportToNode(item: GenerateItem, e: MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    await importHistoryItemAsNode(item);
+    close();
+  }
+
   async function handleUndo() {
     if (!pending) return;
     try {
@@ -204,15 +211,26 @@ export function GalleryModal() {
           )}
         </button>
         {item.filename && (
-          <button
-            type="button"
-            className="gallery__delete"
-            onClick={(e) => handleDelete(item, e)}
-            title={t("gallery.deleteTitle")}
-            aria-label={t("gallery.deleteAria")}
-          >
-            ×
-          </button>
+          <>
+            <button
+              type="button"
+              className="gallery__import-node"
+              onClick={(e) => void handleImportToNode(item, e)}
+              title={t("gallery.importToNodeTitle")}
+              aria-label={t("gallery.importToNodeAria")}
+            >
+              ↗
+            </button>
+            <button
+              type="button"
+              className="gallery__delete"
+              onClick={(e) => handleDelete(item, e)}
+              title={t("gallery.deleteTitle")}
+              aria-label={t("gallery.deleteAria")}
+            >
+              ×
+            </button>
+          </>
         )}
       </div>
     );

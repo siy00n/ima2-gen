@@ -29,7 +29,7 @@ graph TD
     API --> SERVER["server.js /api"]
 ```
 
-`App.tsx` hydrates history, loads sessions, reconciles inflight jobs, and starts polling on mount. If UI mode is `classic`, it renders `Canvas`. If dev UI is enabled and UI mode is `node`, it renders `NodeCanvas`. Before unload or visibility changes, it flushes the graph save beacon.
+`App.tsx` hydrates history, loads sessions, reconciles inflight jobs, and starts polling on mount. If UI mode is `classic`, it renders `Canvas`; if UI mode is `node`, it renders `NodeCanvas`. Before unload or visibility changes, it flushes the graph save beacon.
 
 ## Major Areas
 
@@ -75,7 +75,7 @@ graph TD
 | Mode | Condition | Main component | State flow |
 |---|---|---|---|
 | Classic | Default UI | `Canvas.tsx` | Sends prompt to `/api/generate`, then updates current image/history |
-| Node | Dev UI gate enabled | `NodeCanvas.tsx` | Calls `/api/node/generate` per node and saves the graph to the session |
+| Node | Desktop branching mode | `NodeCanvas.tsx` | Calls `/api/node/generate` per node, imports history assets through `/api/node/import`, and saves the graph to the session |
 
 Node mode uses `@xyflow/react`. Empty canvas creates a root node. Dragging an edge from an existing node can create a child node. Session loading displays a canvas overlay.
 

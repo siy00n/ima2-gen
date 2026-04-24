@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { BillingBar } from "./BillingBar";
 import { OptionGroup } from "./OptionGroup";
 import { SizePicker } from "./SizePicker";
 import { CostEstimate } from "./CostEstimate";
 import { ProviderSelect } from "./ProviderSelect";
+import { NodeInspector } from "./NodeInspector";
 import type { Count, Format, Moderation, Quality } from "../types";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -24,10 +26,13 @@ export function RightPanel() {
   const open = useAppStore((s) => s.rightPanelOpen);
   const setOpen = useAppStore((s) => s.setRightPanelOpen);
   const toggle = useAppStore((s) => s.toggleRightPanel);
+  const uiMode = useAppStore((s) => s.uiMode);
   const { t } = useI18n();
   const isMobile = useIsMobile();
+  const [nodePanelTab, setNodePanelTab] = useState<"node" | "settings">("node");
 
   const drawerOpen = isMobile ? open : true;
+  const showNodeTabs = uiMode === "node";
 
   const quality = useAppStore((s) => s.quality);
   const setQuality = useAppStore((s) => s.setQuality);
@@ -65,7 +70,7 @@ export function RightPanel() {
         />
       ) : null}
       <aside
-        className={`right-panel${open ? "" : " collapsed"}${isMobile && drawerOpen ? " drawer-open" : ""}`}
+        className={`right-panel${uiMode === "node" ? " right-panel--node" : ""}${open ? "" : " collapsed"}${isMobile && drawerOpen ? " drawer-open" : ""}`}
         aria-label={t("panel.detailSettings")}
       >
         <button
@@ -84,37 +89,67 @@ export function RightPanel() {
           hidden={!open}
         >
           <BillingBar />
-          {isMobile ? <ProviderSelect /> : null}
-          <div className="section-title">{t("panel.detailSettings")}</div>
-          <OptionGroup<Quality>
-            title={t("quality.title")}
-            items={QUALITY_ITEMS}
-            value={quality}
-            onChange={setQuality}
-          />
-          <SizePicker />
-          <OptionGroup<Format>
-            title={t("format.title")}
-            items={FORMAT_ITEMS}
-            value={format}
-            onChange={setFormat}
-          />
-          <OptionGroup<Moderation>
-            title={t("moderation.title")}
-            items={MOD_ITEMS}
-            value={moderation}
-            onChange={setModeration}
-          />
-          <p className="option-help">
-            {t("moderation.explain")}
-          </p>
-          <OptionGroup<string>
-            title={t("count.title")}
-            items={COUNT_ITEMS}
-            value={String(count)}
-            onChange={(v) => setCount(Number(v) as Count)}
-          />
-          <CostEstimate />
+          {showNodeTabs ? (
+            <div className="right-panel-tabs" role="tablist" aria-label={t("panel.nodeTabs")}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={nodePanelTab === "node"}
+                className={nodePanelTab === "node" ? "active" : ""}
+                onClick={() => setNodePanelTab("node")}
+              >
+                {t("panel.node")}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={nodePanelTab === "settings"}
+                className={nodePanelTab === "settings" ? "active" : ""}
+                onClick={() => setNodePanelTab("settings")}
+              >
+                {t("panel.settings")}
+              </button>
+            </div>
+          ) : null}
+          {showNodeTabs && nodePanelTab === "node" ? (
+            <NodeInspector />
+          ) : (
+            <>
+              {isMobile || uiMode === "node" ? <ProviderSelect /> : null}
+              <div className="section-title">{t("panel.detailSettings")}</div>
+              <OptionGroup<Quality>
+                title={t("quality.title")}
+                items={QUALITY_ITEMS}
+                value={quality}
+                onChange={setQuality}
+              />
+              <SizePicker />
+              <OptionGroup<Format>
+                title={t("format.title")}
+                items={FORMAT_ITEMS}
+                value={format}
+                onChange={setFormat}
+              />
+              <OptionGroup<Moderation>
+                title={t("moderation.title")}
+                items={MOD_ITEMS}
+                value={moderation}
+                onChange={setModeration}
+              />
+              <p className="option-help">
+                {t("moderation.explain")}
+              </p>
+              {uiMode === "classic" ? (
+                <OptionGroup<string>
+                  title={t("count.title")}
+                  items={COUNT_ITEMS}
+                  value={String(count)}
+                  onChange={(v) => setCount(Number(v) as Count)}
+                />
+              ) : null}
+              <CostEstimate />
+            </>
+          )}
         </div>
       </aside>
     </>
