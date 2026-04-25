@@ -108,7 +108,7 @@ function WorkflowEdgeImpl({
           </span>
           <button
             type="button"
-            className={`workflow-edge-badge__chip${edgeData.transferContext ? " is-on" : ""}`}
+            className={`workflow-edge-badge__chip workflow-edge-badge__chip--context${edgeData.transferContext ? " is-on" : ""}`}
             onClick={(event) => toggle("transferContext", event)}
             title={t("edgeBadge.contextTitle")}
           >
@@ -116,7 +116,7 @@ function WorkflowEdgeImpl({
           </button>
           <button
             type="button"
-            className={`workflow-edge-badge__chip${edgeData.transferSettings ? " is-on" : ""}`}
+            className={`workflow-edge-badge__chip workflow-edge-badge__chip--settings${edgeData.transferSettings ? " is-on" : ""}`}
             onClick={(event) => toggle("transferSettings", event)}
             title={t("edgeBadge.settingsTitle")}
           >

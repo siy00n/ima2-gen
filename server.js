@@ -11,7 +11,7 @@ import { randomBytes } from "crypto";
 import {
   newNodeId,
   saveNode,
-  loadNodeB64,
+  loadNodeImage,
   loadNodeMeta,
   loadAssetB64,
   loadAssetMeta,
@@ -598,7 +598,7 @@ app.post("/api/generate", async (req, res) => {
 });
 
 // ── OAuth edit: send image as input to Responses API ──
-async function editViaOAuth(prompt, imageB64, quality, size, moderation = "low") {
+async function editViaOAuth(prompt, imageB64, quality, size, moderation = "low", imageMime = "image/png") {
   const res = await fetch(`${OAUTH_URL}/v1/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
@@ -609,7 +609,7 @@ async function editViaOAuth(prompt, imageB64, quality, size, moderation = "low")
         {
           role: "user",
           content: [
-            { type: "input_image", image_url: `data:image/png;base64,${imageB64}` },
+            { type: "input_image", image_url: `data:${imageMime};base64,${imageB64}` },
             { type: "input_text", text: `Edit this image: ${prompt}` },
           ],
         },
@@ -795,14 +795,14 @@ app.post("/api/node/generate", async (req, res) => {
     const refB64s = refCheck.refs;
 
     const startTime = Date.now();
-    let parentB64 = null;
+    let parentImage = null;
     if (parentNodeId) {
-      parentB64 = await loadNodeB64(__dirname, `${parentNodeId}.png`);
+      parentImage = await loadNodeImage(__dirname, parentNodeId);
     } else if (typeof externalSrc === "string" && externalSrc.length > 0) {
       // TODO(0.09 D4): history promotion should materialize imported assets into a
       // node-owned file path. This stub allows controlled reads from generated/
       // so promotion can fail gracefully instead of assuming <nodeId>.png only.
-      parentB64 = await loadAssetB64(__dirname, externalSrc);
+      parentImage = { b64: await loadAssetB64(__dirname, externalSrc), mime: "image/png" };
     }
 
     let b64, usage, webSearchCalls = 0;
@@ -810,8 +810,8 @@ app.post("/api/node/generate", async (req, res) => {
     let lastErr;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const r = parentB64
-          ? await editViaOAuth(effectivePrompt, parentB64, quality, size, moderation)
+        const r = parentImage
+          ? await editViaOAuth(effectivePrompt, parentImage.b64, quality, size, moderation, parentImage.mime)
           : await generateViaOAuth(effectivePrompt, quality, size, moderation, refB64s, requestId);
         if (r.b64) {
           b64 = r.b64;
@@ -852,7 +852,7 @@ app.post("/api/node/generate", async (req, res) => {
       usage: usage || null,
       webSearchCalls,
       provider: "oauth",
-      kind: parentB64 ? "edit" : "generate",
+      kind: parentImage ? "edit" : "generate",
       // Fields consumed by /api/history flat scan (so node images appear in history too)
       quality, size, format, moderation,
     };

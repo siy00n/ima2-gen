@@ -84,10 +84,10 @@ export function NodeInspector() {
           <span className="node-inspector__edge-chip node-inspector__edge-chip--image">
             {t("edgeBadge.image")}
           </span>
-          <span className={`node-inspector__edge-chip${edgeData.transferContext ? " is-on" : ""}`}>
+          <span className={`node-inspector__edge-chip node-inspector__edge-chip--context${edgeData.transferContext ? " is-on" : ""}`}>
             {t(edgeData.transferContext ? "edgeBadge.contextOn" : "edgeBadge.contextOff")}
           </span>
-          <span className={`node-inspector__edge-chip${edgeData.transferSettings ? " is-on" : ""}`}>
+          <span className={`node-inspector__edge-chip node-inspector__edge-chip--settings${edgeData.transferSettings ? " is-on" : ""}`}>
             {t(edgeData.transferSettings ? "edgeBadge.settingsOn" : "edgeBadge.settingsOff")}
           </span>
         </div>

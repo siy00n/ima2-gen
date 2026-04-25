@@ -212,6 +212,17 @@ function cloneNodeSettings(settings: NodeSettings): NodeSettings {
   return { ...settings };
 }
 
+function sameNodeSettings(a: NodeSettings, b: NodeSettings): boolean {
+  return (
+    a.quality === b.quality &&
+    a.sizePreset === b.sizePreset &&
+    a.customW === b.customW &&
+    a.customH === b.customH &&
+    a.format === b.format &&
+    a.moderation === b.moderation
+  );
+}
+
 function normalizeEdgeTransferData(raw: unknown): EdgeTransferData {
   const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   return {
@@ -377,7 +388,7 @@ function mapSessionToGraph(session: SessionFull): {
     data: normalizeEdgeTransferData(e.data),
   }));
   return {
-    graphNodes,
+    graphNodes: syncEffectiveNodeSettings(graphNodes, graphEdges),
     graphEdges,
     graphVersion: session.graphVersion,
   };
@@ -575,6 +586,20 @@ function resolveEffectiveNodeSettings(
   }
 
   return settings;
+}
+
+function syncEffectiveNodeSettings(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
+  return nodes.map((node) => {
+    const settings = resolveEffectiveNodeSettings(nodes, edges, node.id as ClientNodeId);
+    if (sameNodeSettings(node.data.settings, settings)) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        settings,
+      },
+    };
+  });
 }
 
 function wouldCreateCycle(
@@ -1208,15 +1233,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateEdgeTransfer: (edgeId, patch) => {
+    const edges = get().graphEdges;
+    const edge = edges.find((e) => e.id === edgeId);
+    if (!edge) return;
+    const nextEdges = edges.map((e) =>
+      e.id === edgeId
+        ? {
+            ...e,
+            data: normalizeEdgeTransferData({ ...e.data, ...patch }),
+          }
+        : e,
+    );
+    const nextNodes =
+      typeof patch.transferSettings === "boolean"
+        ? syncEffectiveNodeSettings(get().graphNodes, nextEdges)
+        : get().graphNodes;
     set({
-      graphEdges: get().graphEdges.map((e) =>
-        e.id === edgeId
-          ? {
-              ...e,
-              data: normalizeEdgeTransferData({ ...e.data, ...patch }),
-            }
-          : e,
-      ),
+      graphNodes: nextNodes,
+      graphEdges: nextEdges,
       selectedEdgeId: edgeId,
       selectedNodeId: null,
     });
@@ -1231,18 +1265,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateNodeSettings: (clientId, patch) => {
+    const nodes = get().graphNodes;
+    const edges = get().graphEdges;
+    const node = nodes.find((n) => n.id === clientId);
+    if (!node) return;
+    const incomingEdge = findIncomingEdgeFor(edges, clientId);
+    const shouldDisableIncomingSettings =
+      !!incomingEdge && normalizeEdgeTransferData(incomingEdge.data).transferSettings;
+    const nextEdges = shouldDisableIncomingSettings
+      ? edges.map((e) =>
+          e.id === incomingEdge.id
+            ? {
+                ...e,
+                data: normalizeEdgeTransferData({ ...e.data, transferSettings: false }),
+              }
+            : e,
+        )
+      : edges;
+    const nextSettings = normalizeNodeSettings({ ...node.data.settings, ...patch }, node.data.settings);
+    const nextNodes = nodes.map((n) =>
+      n.id === clientId
+        ? {
+            ...n,
+            data: {
+              ...n.data,
+              settings: nextSettings,
+            },
+          }
+        : n,
+    );
     set({
-      graphNodes: get().graphNodes.map((n) =>
-        n.id === clientId
-          ? {
-              ...n,
-              data: {
-                ...n.data,
-                settings: normalizeNodeSettings({ ...n.data.settings, ...patch }, n.data.settings),
-              },
-            }
-          : n,
-      ),
+      graphNodes: syncEffectiveNodeSettings(nextNodes, nextEdges),
+      graphEdges: nextEdges,
     });
     get().scheduleGraphSave();
   },
@@ -1270,15 +1324,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   copyParentSettingsToNode: (clientId) => {
     const nodes = get().graphNodes;
-    const parent = findParentNodeFor(nodes, get().graphEdges, clientId);
+    const edges = get().graphEdges;
+    const parent = findParentNodeFor(nodes, edges, clientId);
     if (!parent) return;
-    set({
-      graphNodes: nodes.map((n) =>
-        n.id === clientId
-          ? { ...n, data: { ...n.data, settings: cloneNodeSettings(parent.data.settings) } }
-          : n,
-      ),
-    });
+    const nextNodes = nodes.map((n) =>
+      n.id === clientId
+        ? { ...n, data: { ...n.data, settings: cloneNodeSettings(parent.data.settings) } }
+        : n,
+    );
+    set({ graphNodes: syncEffectiveNodeSettings(nextNodes, edges) });
     get().scheduleGraphSave();
   },
 
@@ -1570,26 +1624,34 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().showToast(t("toast.nodeCycleRejected"), true);
       return;
     }
+    const edge = createGraphEdge(sourceClientId, targetClientId);
+    const edgeData = normalizeEdgeTransferData(edge.data);
     const nextTargetData =
       target.data.status === "empty" && !target.data.serverNodeId && !target.data.imageUrl
         ? {
             ...target.data,
             parentServerNodeId: source.data.serverNodeId,
-            settings: cloneNodeSettings(source.data.settings),
+            settings: edgeData.transferSettings
+              ? cloneNodeSettings(source.data.settings)
+              : target.data.settings,
           }
         : {
             ...target.data,
             parentServerNodeId: source.data.serverNodeId,
+            settings: edgeData.transferSettings
+              ? cloneNodeSettings(source.data.settings)
+              : target.data.settings,
           };
-    const edge = createGraphEdge(sourceClientId, targetClientId);
+    const nextEdges = [
+      ...get().graphEdges.filter((e) => e.target !== targetClientId),
+      edge,
+    ];
+    const nextNodes = get().graphNodes.map((n) =>
+      n.id === targetClientId ? { ...n, data: nextTargetData } : n,
+    );
     set({
-      graphNodes: get().graphNodes.map((n) =>
-        n.id === targetClientId ? { ...n, data: nextTargetData } : n,
-      ),
-      graphEdges: [
-        ...get().graphEdges.filter((e) => e.target !== targetClientId),
-        edge,
-      ],
+      graphNodes: syncEffectiveNodeSettings(nextNodes, nextEdges),
+      graphEdges: nextEdges,
       selectedNodeId: targetClientId,
       selectedEdgeId: null,
     });

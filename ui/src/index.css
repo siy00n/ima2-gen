@@ -23,9 +23,9 @@
   --amber: #f59e0b;
   --red: #ef4444;
   --edge-image: #9aa1ad;
-  --edge-context: #5eead4;
+  --edge-context: #38bdf8;
   --edge-settings: #f5b84b;
-  --edge-combined: #66e3a4;
+  --edge-combined: #a78bfa;
   --edge-off: #686f7b;
   --radius: 10px;
   --font: "Outfit", sans-serif;
@@ -1682,7 +1682,7 @@ body {
 }
 
 .node-inspector__edge-state[data-state="context"] {
-  border-color: rgba(94, 234, 212, 0.34);
+  border-color: rgba(56, 189, 248, 0.36);
 }
 
 .node-inspector__edge-state[data-state="settings"] {
@@ -1690,7 +1690,7 @@ body {
 }
 
 .node-inspector__edge-state[data-state="both"] {
-  border-color: rgba(102, 227, 164, 0.38);
+  border-color: rgba(167, 139, 250, 0.44);
 }
 
 .node-inspector__edge-chip {
@@ -1716,13 +1716,13 @@ body {
   color: #dce2ea;
 }
 
-.node-inspector__edge-chip.is-on {
-  border-color: rgba(94, 234, 212, 0.5);
-  background: rgba(74, 222, 188, 0.13);
-  color: #7fffd7;
+.node-inspector__edge-chip--context.is-on {
+  border-color: rgba(56, 189, 248, 0.58);
+  background: rgba(56, 189, 248, 0.14);
+  color: #9bdfff;
 }
 
-.node-inspector__edge-state[data-state="settings"] .node-inspector__edge-chip.is-on {
+.node-inspector__edge-chip--settings.is-on {
   border-color: rgba(245, 184, 75, 0.55);
   background: rgba(245, 184, 75, 0.13);
   color: #ffd37c;
@@ -1961,9 +1961,17 @@ body {
   stroke-width: 1.8 !important;
 }
 .workflow-edge__path--image { stroke: var(--edge-off) !important; }
-.workflow-edge__path--context { stroke: var(--edge-context) !important; }
-.workflow-edge__path--settings { stroke: var(--edge-settings) !important; stroke-dasharray: 7 5; }
-.workflow-edge__path--both { stroke: var(--edge-combined) !important; }
+.workflow-edge__path--context {
+  stroke: var(--edge-context) !important;
+}
+.workflow-edge__path--settings {
+  stroke: var(--edge-settings) !important;
+  stroke-dasharray: 7 5;
+}
+.workflow-edge__path--both {
+  stroke: var(--edge-combined) !important;
+  stroke-width: 2.2 !important;
+}
 
 .workflow-edge__path--active,
 .react-flow__edge:hover .workflow-edge__path {
@@ -2000,9 +2008,9 @@ body {
   border-color: rgba(124, 108, 255, 0.65);
 }
 .workflow-edge-badge[data-state="image"] { border-color: rgba(154, 161, 173, 0.34); }
-.workflow-edge-badge[data-state="context"] { border-color: rgba(94, 234, 212, 0.55); }
+.workflow-edge-badge[data-state="context"] { border-color: rgba(56, 189, 248, 0.58); }
 .workflow-edge-badge[data-state="settings"] { border-color: rgba(245, 184, 75, 0.55); }
-.workflow-edge-badge[data-state="both"] { border-color: rgba(102, 227, 164, 0.58); }
+.workflow-edge-badge[data-state="both"] { border-color: rgba(167, 139, 250, 0.68); }
 
 .workflow-edge-badge__chip {
   min-height: 20px;
@@ -2031,12 +2039,12 @@ button.workflow-edge-badge__chip {
   color: #dce2ea;
 }
 
-.workflow-edge-badge__chip.is-on {
-  border-color: rgba(74, 222, 188, 0.48);
-  background: rgba(74, 222, 188, 0.13);
-  color: #7fffd7;
+.workflow-edge-badge__chip--context.is-on {
+  border-color: rgba(56, 189, 248, 0.58);
+  background: rgba(56, 189, 248, 0.14);
+  color: #9bdfff;
 }
-.workflow-edge-badge[data-state="settings"] .workflow-edge-badge__chip.is-on {
+.workflow-edge-badge__chip--settings.is-on {
   border-color: rgba(245, 184, 75, 0.55);
   background: rgba(245, 184, 75, 0.13);
   color: #ffd37c;
