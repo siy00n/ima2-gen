@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { BillingBar } from "./BillingBar";
 import { OptionGroup } from "./OptionGroup";
@@ -29,10 +28,8 @@ export function RightPanel() {
   const uiMode = useAppStore((s) => s.uiMode);
   const { t } = useI18n();
   const isMobile = useIsMobile();
-  const [nodePanelTab, setNodePanelTab] = useState<"node" | "settings">("node");
 
   const drawerOpen = isMobile ? open : true;
-  const showNodeTabs = uiMode === "node";
 
   const quality = useAppStore((s) => s.quality);
   const setQuality = useAppStore((s) => s.setQuality);
@@ -89,33 +86,11 @@ export function RightPanel() {
           hidden={!open}
         >
           <BillingBar />
-          {showNodeTabs ? (
-            <div className="right-panel-tabs" role="tablist" aria-label={t("panel.nodeTabs")}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={nodePanelTab === "node"}
-                className={nodePanelTab === "node" ? "active" : ""}
-                onClick={() => setNodePanelTab("node")}
-              >
-                {t("panel.node")}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={nodePanelTab === "settings"}
-                className={nodePanelTab === "settings" ? "active" : ""}
-                onClick={() => setNodePanelTab("settings")}
-              >
-                {t("panel.settings")}
-              </button>
-            </div>
-          ) : null}
-          {showNodeTabs && nodePanelTab === "node" ? (
+          {uiMode === "node" ? (
             <NodeInspector />
           ) : (
             <>
-              {isMobile || uiMode === "node" ? <ProviderSelect /> : null}
+              {isMobile ? <ProviderSelect /> : null}
               <div className="section-title">{t("panel.detailSettings")}</div>
               <OptionGroup<Quality>
                 title={t("quality.title")}

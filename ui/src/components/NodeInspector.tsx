@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useAppStore, type ImageNodeData } from "../store/useAppStore";
+import { useAppStore, type ImageNodeData, type ImageNodeStatus } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
 import { OptionGroup, type OptionItem } from "./OptionGroup";
@@ -30,6 +30,14 @@ function sizeItems(row: ReadonlyArray<{ value: string; label: string; sub: strin
     label: it.label,
     sub: it.sub,
   })) as ReadonlyArray<OptionItem<SizePreset>>;
+}
+
+function statusTone(status: ImageNodeStatus) {
+  if (status === "ready") return "ready";
+  if (status === "pending" || status === "reconciling") return "busy";
+  if (status === "error" || status === "asset-missing") return "error";
+  if (status === "stale") return "stale";
+  return "empty";
 }
 
 export function NodeInspector() {
@@ -293,17 +301,40 @@ export function NodeInspector() {
         ? t("node.retry")
         : t("node.generate");
 
-  const meta = [
-    data.status ? t("nodeInspector.statusValue", { value: data.status }) : null,
-    data.elapsed != null ? `${data.elapsed}s` : null,
-    data.quality ?? null,
-    data.size ?? null,
-    data.provider ?? null,
-  ].filter((v): v is string => Boolean(v));
+  const resolvedSize =
+    data.settings.sizePreset === "custom"
+      ? `${snap16(data.settings.customW)}x${snap16(data.settings.customH)}`
+      : data.settings.sizePreset;
+  const settingsSummary = [
+    data.settings.quality,
+    resolvedSize,
+    data.settings.format,
+    data.settings.moderation,
+  ].join(" · ");
+  const statusLabel =
+    data.status === "ready"
+      ? t("nodeInspector.statusReady")
+      : data.status === "pending"
+        ? t("nodeInspector.statusGenerating")
+        : data.status === "reconciling"
+          ? t("nodeInspector.statusSyncing")
+          : data.status === "stale"
+            ? t("nodeInspector.statusStale")
+            : data.status === "asset-missing"
+              ? t("nodeInspector.statusMissing")
+              : data.status === "error"
+                ? t("nodeInspector.statusError")
+                : t("nodeInspector.statusEmpty");
+  const metaPills = [
+    { label: statusLabel, tone: statusTone(data.status) },
+    data.elapsed != null ? { label: `${data.elapsed}s` } : null,
+    { label: data.settings.quality },
+    { label: resolvedSize },
+    data.provider ? { label: data.provider } : null,
+  ].filter((v): v is { label: string; tone?: string } => Boolean(v));
 
   return (
     <div className="node-inspector">
-      <div className="section-title">{t("nodeInspector.title")}</div>
       <div className="node-inspector__node-header">
         <label className="node-inspector__name-field">
           <span>{t("nodeInspector.nodeName")}</span>
@@ -320,23 +351,35 @@ export function NodeInspector() {
           <span>{t("nodeInspector.level")}: L{selectedMeta.level}</span>
         </div>
       </div>
-      <div className="node-inspector__preview">
+      <div className={`node-inspector__preview${imageSrc ? "" : " node-inspector__preview--empty"}`}>
         {imageSrc ? (
           <img src={imageSrc} alt={t("node.nodeImageAlt")} />
         ) : (
           <div className="node-inspector__placeholder">{t("node.noImage")}</div>
         )}
       </div>
-      <textarea
-        className="node-inspector__prompt"
-        value={data.prompt}
-        disabled={busy}
-        onChange={(e) => updateNodePrompt(selected.id, e.target.value)}
-        placeholder={data.parentServerNodeId ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
-        rows={5}
-      />
+      <div className="node-inspector__pills" aria-label={t("nodeInspector.statusMeta")}>
+        {metaPills.map((pill) => (
+          <span
+            key={`${pill.label}-${pill.tone ?? "meta"}`}
+            className={`node-inspector__pill${pill.tone ? ` node-inspector__pill--${pill.tone}` : ""}`}
+          >
+            {pill.label}
+          </span>
+        ))}
+      </div>
+      <label className="node-inspector__prompt-block">
+        <span className="node-inspector__section-label">{t("nodeInspector.prompt")}</span>
+        <textarea
+          className="node-inspector__prompt"
+          value={data.prompt}
+          disabled={busy}
+          onChange={(e) => updateNodePrompt(selected.id, e.target.value)}
+          placeholder={data.parentServerNodeId ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
+          rows={5}
+        />
+      </label>
       {data.error ? <div className="node-inspector__error">{data.error}</div> : null}
-      <div className="node-inspector__meta">{meta.join(" · ")}</div>
       {hasParent ? (
         <div className="node-inspector__actions node-inspector__actions--parent">
           <button
@@ -357,97 +400,102 @@ export function NodeInspector() {
           </button>
         </div>
       ) : null}
-      <div className="node-inspector__settings">
-        <div className="section-title">{t("nodeInspector.nodeSettings")}</div>
-        <OptionGroup<Quality>
-          title={t("quality.title")}
-          items={QUALITY_ITEMS}
-          value={data.settings.quality}
-          onChange={(quality) => updateNodeSettings(selected.id, { quality })}
-        />
-        <div className="option-group">
-          <div className="section-title">{t("size.title")}</div>
-          <OptionGroup<SizePreset>
-            title=""
-            items={sizeItems(SIZE_PRESETS_ROW1)}
-            value={data.settings.sizePreset}
-            onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+      <details className="node-inspector__settings" open>
+        <summary className="node-inspector__settings-summary">
+          <span>{t("nodeInspector.nodeSettings")}</span>
+          <small>{settingsSummary}</small>
+        </summary>
+        <div className="node-inspector__settings-body">
+          <OptionGroup<Quality>
+            title={t("quality.title")}
+            items={QUALITY_ITEMS}
+            value={data.settings.quality}
+            onChange={(quality) => updateNodeSettings(selected.id, { quality })}
           />
-          <OptionGroup<SizePreset>
-            title=""
-            items={sizeItems(SIZE_PRESETS_ROW2)}
-            value={data.settings.sizePreset}
-            onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+          <div className="option-group">
+            <div className="section-title">{t("size.title")}</div>
+            <OptionGroup<SizePreset>
+              title=""
+              items={sizeItems(SIZE_PRESETS_ROW1)}
+              value={data.settings.sizePreset}
+              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+            />
+            <OptionGroup<SizePreset>
+              title=""
+              items={sizeItems(SIZE_PRESETS_ROW2)}
+              value={data.settings.sizePreset}
+              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+            />
+            <OptionGroup<SizePreset>
+              title=""
+              items={sizeItems(SIZE_PRESETS_ROW3)}
+              value={data.settings.sizePreset}
+              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+            />
+            <OptionGroup<SizePreset>
+              title=""
+              items={sizeItems(SIZE_PRESETS_ROW4)}
+              value={data.settings.sizePreset}
+              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+            />
+            <OptionGroup<SizePreset>
+              title=""
+              items={sizeItems(getSizePresetsRow5())}
+              value={data.settings.sizePreset}
+              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+            />
+            {data.settings.sizePreset === "custom" ? (
+              <>
+                <div className="option-row">
+                  <input
+                    type="number"
+                    className="custom-size-input"
+                    min={1024}
+                    max={3824}
+                    step={16}
+                    value={data.settings.customW}
+                    onChange={(e) =>
+                      updateNodeSettings(selected.id, {
+                        customW: snap16(parseInt(e.target.value) || 1024),
+                      })
+                    }
+                    placeholder={t("size.width")}
+                  />
+                  <span className="node-inspector__size-separator">x</span>
+                  <input
+                    type="number"
+                    className="custom-size-input"
+                    min={1024}
+                    max={3824}
+                    step={16}
+                    value={data.settings.customH}
+                    onChange={(e) =>
+                      updateNodeSettings(selected.id, {
+                        customH: snap16(parseInt(e.target.value) || 1024),
+                      })
+                    }
+                    placeholder={t("size.height")}
+                  />
+                </div>
+                <div className="size-hint">{t("size.hint")}</div>
+              </>
+            ) : null}
+          </div>
+          <OptionGroup<Format>
+            title={t("format.title")}
+            items={FORMAT_ITEMS}
+            value={data.settings.format}
+            onChange={(format) => updateNodeSettings(selected.id, { format })}
           />
-          <OptionGroup<SizePreset>
-            title=""
-            items={sizeItems(SIZE_PRESETS_ROW3)}
-            value={data.settings.sizePreset}
-            onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+          <OptionGroup<Moderation>
+            title={t("moderation.title")}
+            items={MOD_ITEMS}
+            value={data.settings.moderation}
+            onChange={(moderation) => updateNodeSettings(selected.id, { moderation })}
           />
-          <OptionGroup<SizePreset>
-            title=""
-            items={sizeItems(SIZE_PRESETS_ROW4)}
-            value={data.settings.sizePreset}
-            onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
-          />
-          <OptionGroup<SizePreset>
-            title=""
-            items={sizeItems(getSizePresetsRow5())}
-            value={data.settings.sizePreset}
-            onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
-          />
-          {data.settings.sizePreset === "custom" ? (
-            <>
-              <div className="option-row">
-                <input
-                  type="number"
-                  className="custom-size-input"
-                  min={1024}
-                  max={3824}
-                  step={16}
-                  value={data.settings.customW}
-                  onChange={(e) =>
-                    updateNodeSettings(selected.id, {
-                      customW: snap16(parseInt(e.target.value) || 1024),
-                    })
-                  }
-                  placeholder={t("size.width")}
-                />
-                <span className="node-inspector__size-separator">x</span>
-                <input
-                  type="number"
-                  className="custom-size-input"
-                  min={1024}
-                  max={3824}
-                  step={16}
-                  value={data.settings.customH}
-                  onChange={(e) =>
-                    updateNodeSettings(selected.id, {
-                      customH: snap16(parseInt(e.target.value) || 1024),
-                    })
-                  }
-                  placeholder={t("size.height")}
-                />
-              </div>
-              <div className="size-hint">{t("size.hint")}</div>
-            </>
-          ) : null}
         </div>
-        <OptionGroup<Format>
-          title={t("format.title")}
-          items={FORMAT_ITEMS}
-          value={data.settings.format}
-          onChange={(format) => updateNodeSettings(selected.id, { format })}
-        />
-        <OptionGroup<Moderation>
-          title={t("moderation.title")}
-          items={MOD_ITEMS}
-          value={data.settings.moderation}
-          onChange={(moderation) => updateNodeSettings(selected.id, { moderation })}
-        />
-      </div>
-      <div className="node-inspector__actions">
+      </details>
+      <div className="node-inspector__action-panel">
         <button
           type="button"
           className="node-inspector__primary"
@@ -456,40 +504,46 @@ export function NodeInspector() {
         >
           {generateLabel}
         </button>
+        <div className="node-inspector__action-title">{t("nodeInspector.workflowActions")}</div>
+        <div className="node-inspector__actions">
+          <button
+            type="button"
+            className="node-inspector__button"
+            onClick={() => void regenerateBranch(selected.id)}
+            disabled={!canRegenerateBranch}
+          >
+            {t("node.regenerateBranch")}
+          </button>
+          <button type="button" className="node-inspector__button" onClick={() => addChildNode(selected.id)} disabled={!canBranch}>
+            {t("node.addChild")}
+          </button>
+          <button type="button" className="node-inspector__button" onClick={() => duplicateBranchRoot(selected.id)}>
+            {t("node.duplicateBranch")}
+          </button>
+          <button
+            type="button"
+            className="node-inspector__button"
+            onClick={() => detachNodeFromParent(selected.id)}
+            disabled={!hasParent}
+          >
+            {t("nodeInspector.detachConnection")}
+          </button>
+        </div>
+        <div className="node-inspector__action-title">{t("nodeInspector.exportActions")}</div>
+        <div className="node-inspector__actions">
+          <button type="button" className="node-inspector__button" onClick={download} disabled={!imageSrc}>
+            {t("result.download")}
+          </button>
+          <button type="button" className="node-inspector__button" onClick={() => void copyImage()} disabled={!imageSrc}>
+            {t("result.copyImage")}
+          </button>
+          <button type="button" className="node-inspector__button" onClick={() => void copyPrompt()} disabled={!data.prompt}>
+            {t("result.copyPrompt")}
+          </button>
+        </div>
         <button
           type="button"
-          className="node-inspector__button"
-          onClick={() => void regenerateBranch(selected.id)}
-          disabled={!canRegenerateBranch}
-        >
-          {t("node.regenerateBranch")}
-        </button>
-        <button type="button" className="node-inspector__button" onClick={() => addChildNode(selected.id)} disabled={!canBranch}>
-          {t("node.addChild")}
-        </button>
-        <button type="button" className="node-inspector__button" onClick={() => duplicateBranchRoot(selected.id)}>
-          {t("node.duplicateBranch")}
-        </button>
-        <button
-          type="button"
-          className="node-inspector__button"
-          onClick={() => detachNodeFromParent(selected.id)}
-          disabled={!hasParent}
-        >
-          {t("nodeInspector.detachConnection")}
-        </button>
-        <button type="button" className="node-inspector__button" onClick={download} disabled={!imageSrc}>
-          {t("result.download")}
-        </button>
-        <button type="button" className="node-inspector__button" onClick={() => void copyImage()} disabled={!imageSrc}>
-          {t("result.copyImage")}
-        </button>
-        <button type="button" className="node-inspector__button" onClick={() => void copyPrompt()} disabled={!data.prompt}>
-          {t("result.copyPrompt")}
-        </button>
-        <button
-          type="button"
-          className="node-inspector__danger"
+          className="node-inspector__danger node-inspector__danger--wide"
           onClick={() => {
             deleteNode(selected.id);
             selectNode(null);
