@@ -1,5 +1,5 @@
-import { memo, useCallback, type CSSProperties } from "react";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { memo, useCallback, useEffect, type CSSProperties } from "react";
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
 import { useAppStore, type ImageNodeData, type GraphNode } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 
@@ -11,6 +11,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   const addChildNode = useAppStore((s) => s.addChildNode);
   const duplicateBranchRoot = useAppStore((s) => s.duplicateBranchRoot);
   const deleteNode = useAppStore((s) => s.deleteNode);
+  const updateNodeInternals = useUpdateNodeInternals();
 
   const onPromptChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => updateNodePrompt(id, e.target.value),
@@ -79,6 +80,10 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   };
   const statusLabel = computeStatusLabel();
 
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, updateNodeInternals, d.status, d.serverNodeId]);
+
   return (
     <div
       className={`image-node image-node--${d.status}${selected ? " image-node--selected" : ""}`}
@@ -145,9 +150,13 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
           </button>
         </div>
       </div>
-      {d.status === "ready" && d.serverNodeId ? (
-        <Handle type="source" position={Position.Right} className="image-node__handle image-node__handle--source" />
-      ) : null}
+      <Handle
+        type="source"
+        position={Position.Right}
+        className={`image-node__handle image-node__handle--source${canBranch ? "" : " image-node__handle--disabled"}`}
+        isConnectable={canBranch}
+        aria-disabled={!canBranch}
+      />
     </div>
   );
 }

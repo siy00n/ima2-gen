@@ -1970,8 +1970,17 @@ body {
 .image-node__handle--source {
   background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 72%, white) !important;
 }
+.image-node__handle--disabled {
+  opacity: 0.32;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 24%, #2b2f3a) !important;
+  box-shadow: none;
+}
 .image-node:hover .image-node__handle {
   background: var(--accent-bright, #fff) !important;
+}
+.image-node:hover .image-node__handle--disabled {
+  background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 24%, #2b2f3a) !important;
 }
 
 .node-canvas__hint {
