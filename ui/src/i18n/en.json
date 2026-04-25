@@ -33,6 +33,9 @@
     "nodeTargetMustBeEmpty": "Connect only to an empty node.",
     "nodeTargetBusy": "Wait for that node to finish before reconnecting it.",
     "nodeCycleRejected": "That connection would create a loop.",
+    "nodeBranchBusy": "A node in this branch is still generating.",
+    "nodeBranchStopped": "Branch regeneration stopped.",
+    "nodeBranchComplete": "Regenerated {count} branch nodes.",
     "nodeImportNeedsFile": "Only saved history images can be imported into Node mode.",
     "nodeImported": "Imported into Node mode",
     "nodeImportFailed": "Failed to import into Node mode."
@@ -176,12 +179,16 @@
     "editPromptPlaceholder": "Edit prompt...",
     "promptPlaceholder": "Prompt...",
     "regenerate": "Regenerate",
+    "regenerateBranch": "Regenerate branch",
+    "branchRegenerateConfirm": "This will overwrite {count} nodes including the current node. Continue?",
     "generate": "Generate",
     "retry": "Retry",
     "addChild": "Add child",
     "duplicateBranch": "Duplicate branch",
     "duplicateBranchTitle": "Duplicate as a new branch root",
-    "deleteTitle": "Delete"
+    "deleteTitle": "Delete",
+    "confirmDeleteShort": "OK",
+    "confirmDeleteTitle": "Click again to delete this node and its parent/child connections."
   },
   "provider": {
     "authTitle": "Authentication",
@@ -268,6 +275,9 @@
     "transferContext": "Pass full prompt and context",
     "transferContextOn": "ON: pass parent image, prompt, and previous context.",
     "transferContextOff": "OFF: pass only the parent image.",
+    "transferAncestorImages": "Include ancestor images",
+    "transferAncestorImagesOn": "ON: pass up to 3 ancestor images as visual context.",
+    "transferAncestorImagesOff": "OFF: pass only the direct parent image.",
     "transferSettings": "Pass parent node settings",
     "transferSettingsOn": "ON: pass generation settings such as quality, size, and format.",
     "transferSettingsOff": "OFF: use the child node's independent settings."

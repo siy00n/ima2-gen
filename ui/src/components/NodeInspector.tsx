@@ -52,6 +52,7 @@ export function NodeInspector() {
   const detachSelectedEdge = useAppStore((s) => s.detachSelectedEdge);
   const addChildFromSelectedEdge = useAppStore((s) => s.addChildFromSelectedEdge);
   const generateNode = useAppStore((s) => s.generateNode);
+  const regenerateBranch = useAppStore((s) => s.regenerateBranch);
   const deleteNode = useAppStore((s) => s.deleteNode);
   const importCurrentImageAsNode = useAppStore((s) => s.importCurrentImageAsNode);
   const currentImage = useAppStore((s) => s.currentImage);
@@ -74,9 +75,13 @@ export function NodeInspector() {
   };
 
   if (selectedEdge && edgeParent && edgeChild) {
+    const transferContext = selectedEdge.data?.transferContext ?? true;
     const edgeData = {
-      transferContext: selectedEdge.data?.transferContext ?? true,
+      transferContext,
       transferSettings: selectedEdge.data?.transferSettings ?? true,
+      transferAncestorImages: transferContext
+        ? (selectedEdge.data?.transferAncestorImages ?? false)
+        : false,
     };
     const edgeState =
       edgeData.transferContext && edgeData.transferSettings
@@ -128,6 +133,26 @@ export function NodeInspector() {
               checked={edgeData.transferContext}
               onChange={(event) =>
                 updateEdgeTransfer(selectedEdge.id, { transferContext: event.target.checked })
+              }
+            />
+          </label>
+          <label className="node-inspector__toggle-row">
+            <span>
+              {t("nodeInspector.transferAncestorImages")}
+              <small>
+                {t(
+                  edgeData.transferAncestorImages
+                    ? "nodeInspector.transferAncestorImagesOn"
+                    : "nodeInspector.transferAncestorImagesOff",
+                )}
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={edgeData.transferAncestorImages}
+              disabled={!edgeData.transferContext}
+              onChange={(event) =>
+                updateEdgeTransfer(selectedEdge.id, { transferAncestorImages: event.target.checked })
               }
             />
           </label>
@@ -200,6 +225,8 @@ export function NodeInspector() {
   const busy = isBusy(data);
   const canBranch = data.status === "ready" && !!data.serverNodeId;
   const canGenerate = !busy && data.prompt.trim().length > 0;
+  const hasChildren = edges.some((edge) => edge.source === selected.id);
+  const canRegenerateBranch = canGenerate && data.status === "ready" && !!data.serverNodeId && hasChildren;
   const imageSrc = data.imageUrl ?? null;
   const parent = selected ? nodes.find((n) => edges.some((e) => e.source === n.id && e.target === selected.id)) : null;
   const hasParent = !!parent;
@@ -428,6 +455,14 @@ export function NodeInspector() {
           disabled={!canGenerate}
         >
           {generateLabel}
+        </button>
+        <button
+          type="button"
+          className="node-inspector__button"
+          onClick={() => void regenerateBranch(selected.id)}
+          disabled={!canRegenerateBranch}
+        >
+          {t("node.regenerateBranch")}
         </button>
         <button type="button" className="node-inspector__button" onClick={() => addChildNode(selected.id)} disabled={!canBranch}>
           {t("node.addChild")}

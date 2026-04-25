@@ -171,11 +171,13 @@ export type NodeSettings = {
 export type EdgeTransferData = {
   transferContext: boolean;
   transferSettings: boolean;
+  transferAncestorImages: boolean;
 };
 
 const DEFAULT_EDGE_TRANSFER: EdgeTransferData = {
   transferContext: true,
   transferSettings: true,
+  transferAncestorImages: false,
 };
 
 const FALLBACK_NODE_SETTINGS: NodeSettings = {
@@ -226,15 +228,20 @@ function sameNodeSettings(a: NodeSettings, b: NodeSettings): boolean {
 
 function normalizeEdgeTransferData(raw: unknown): EdgeTransferData {
   const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const transferContext =
+    typeof obj.transferContext === "boolean"
+      ? obj.transferContext
+      : DEFAULT_EDGE_TRANSFER.transferContext;
   return {
-    transferContext:
-      typeof obj.transferContext === "boolean"
-        ? obj.transferContext
-        : DEFAULT_EDGE_TRANSFER.transferContext,
+    transferContext,
     transferSettings:
       typeof obj.transferSettings === "boolean"
         ? obj.transferSettings
         : DEFAULT_EDGE_TRANSFER.transferSettings,
+    transferAncestorImages:
+      transferContext && typeof obj.transferAncestorImages === "boolean"
+        ? obj.transferAncestorImages
+        : false,
   };
 }
 
@@ -625,7 +632,8 @@ type AppState = {
   detachNodeFromParent: (clientId: ClientNodeId) => void;
   detachSelectedEdge: () => void;
   addChildFromSelectedEdge: () => ClientNodeId | null;
-  generateNode: (clientId: ClientNodeId) => Promise<void>;
+  generateNode: (clientId: ClientNodeId) => Promise<boolean>;
+  regenerateBranch: (clientId: ClientNodeId) => Promise<void>;
   deleteNode: (clientId: ClientNodeId) => void;
   deleteNodes: (clientIds: ClientNodeId[]) => void;
   importHistoryItemAsNode: (item: GenerateItem) => Promise<void>;
@@ -717,6 +725,29 @@ function buildEffectivePrompt(
   ].join("\n");
 }
 
+function collectAncestorImageNodeIds(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  clientId: ClientNodeId,
+): string[] {
+  const incoming = findIncomingEdgeFor(edges, clientId);
+  const incomingData = incoming ? normalizeEdgeTransferData(incoming.data) : null;
+  if (!incoming || !incomingData?.transferContext || !incomingData.transferAncestorImages) return [];
+
+  const ancestorIds: string[] = [];
+  let currentId = incoming.source as ClientNodeId;
+  while (true) {
+    const edge = findIncomingEdgeFor(edges, currentId);
+    if (!edge || !normalizeEdgeTransferData(edge.data).transferContext) break;
+    const parent = nodes.find((n) => n.id === edge.source);
+    if (!parent) break;
+    if (parent.data.serverNodeId) ancestorIds.push(parent.data.serverNodeId);
+    currentId = parent.id as ClientNodeId;
+  }
+
+  return ancestorIds.reverse().slice(-3);
+}
+
 function resolveEffectiveNodeSettings(
   nodes: GraphNode[],
   edges: GraphEdge[],
@@ -795,6 +826,22 @@ function wouldCreateCycle(
     }
   }
   return false;
+}
+
+function collectBranchNodeIds(edges: GraphEdge[], rootId: ClientNodeId): ClientNodeId[] {
+  const order: ClientNodeId[] = [];
+  const queue: ClientNodeId[] = [rootId];
+  const seen = new Set<ClientNodeId>();
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current || seen.has(current)) continue;
+    seen.add(current);
+    order.push(current);
+    for (const edge of edges) {
+      if (edge.source === current) queue.push(edge.target as ClientNodeId);
+    }
+  }
+  return order;
 }
 
 function joinParentPrompt(parentPrompt: string, childPrompt: string): string {
@@ -1591,20 +1638,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     const graphNodes = get().graphNodes;
     const graphEdges = get().graphEdges;
     const node = graphNodes.find((n) => n.id === targetClientId);
-    if (!node) return;
+    if (!node) return false;
     const hadGeneratedImage = !!node.data.serverNodeId || !!node.data.imageUrl;
     const displayPrompt = node.data.prompt;
     const effectivePrompt = buildEffectivePrompt(graphNodes, graphEdges, targetClientId);
     const nodeSettings = resolveEffectiveNodeSettings(graphNodes, graphEdges, targetClientId);
     const parentNode = findParentNodeFor(graphNodes, graphEdges, targetClientId);
     const parentServerNodeId = parentNode?.data.serverNodeId ?? null;
+    const ancestorNodeIds = collectAncestorImageNodeIds(graphNodes, graphEdges, targetClientId);
     if (!displayPrompt.trim()) {
       get().showToast(t("toast.promptRequired"), true);
-      return;
+      return false;
     }
     if (parentNode && !parentServerNodeId) {
       get().showToast(t("toast.nodeParentRequired"), true);
-      return;
+      return false;
     }
     const s = get();
     const size = resolveNodeSize(nodeSettings);
@@ -1650,10 +1698,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().scheduleGraphSave();
 
     let graphMutated = true; // pending set above already mutated the graph if same-session
+    let succeeded = false;
 
     try {
       const res = await postNodeGenerate({
         parentNodeId: parentServerNodeId,
+        ancestorNodeIds,
         prompt: effectivePrompt,
         displayPrompt,
         effectivePrompt,
@@ -1665,6 +1715,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         sessionId: requestSessionId,
         clientNodeId: targetClientId,
       });
+      succeeded = true;
       if (get().activeSessionId === requestSessionId) {
         const nextNodes = get().graphNodes.map((n) =>
           n.id === targetClientId
@@ -1759,6 +1810,34 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().scheduleGraphSave();
       }
     }
+    return succeeded;
+  },
+
+  async regenerateBranch(clientId) {
+    const nodes = get().graphNodes;
+    const edges = get().graphEdges;
+    const branchIds = collectBranchNodeIds(edges, clientId);
+    const branchNodes = branchIds
+      .map((id) => nodes.find((n) => n.id === id))
+      .filter((node): node is GraphNode => Boolean(node));
+    if (branchNodes.length === 0) return;
+    if (branchNodes.some((node) => node.data.status === "pending" || node.data.status === "reconciling")) {
+      get().showToast(t("toast.nodeBranchBusy"), true);
+      return;
+    }
+    const confirmed =
+      typeof window === "undefined" ||
+      window.confirm(t("node.branchRegenerateConfirm", { count: branchNodes.length }));
+    if (!confirmed) return;
+
+    for (const id of branchIds) {
+      const ok = await get().generateNode(id);
+      if (!ok) {
+        get().showToast(t("toast.nodeBranchStopped"), true);
+        return;
+      }
+    }
+    get().showToast(t("toast.nodeBranchComplete", { count: branchIds.length }));
   },
 
   deleteNode: (clientId) => {

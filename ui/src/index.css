@@ -1557,6 +1557,12 @@ body {
 }
 .image-node__actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 .image-node__del { color: #e05050 !important; }
+.image-node__del.is-confirming {
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  background: rgba(239, 68, 68, 0.14) !important;
+  color: #ffb4b4 !important;
+  font-weight: 800;
+}
 
 .node-inspector {
   display: flex;
@@ -2248,6 +2254,11 @@ button.workflow-edge-badge__chip {
   height: 22px;
   flex-shrink: 0;
   accent-color: #7c6cff;
+}
+
+.workflow-edge-popover__toggle input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .workflow-edge-popover__footer {

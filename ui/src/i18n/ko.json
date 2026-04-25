@@ -33,6 +33,9 @@
     "nodeTargetMustBeEmpty": "비어 있는 노드에만 연결할 수 있습니다.",
     "nodeTargetBusy": "생성 중인 노드는 완료된 뒤 다시 연결할 수 있습니다.",
     "nodeCycleRejected": "순환 연결은 만들 수 없습니다.",
+    "nodeBranchBusy": "브랜치 안에 생성 중인 노드가 있어 다시 생성할 수 없습니다.",
+    "nodeBranchStopped": "브랜치 다시 생성이 중단되었습니다.",
+    "nodeBranchComplete": "브랜치 {count}개 노드 다시 생성 완료",
     "nodeImportNeedsFile": "저장된 히스토리 이미지만 노드 모드로 가져올 수 있습니다.",
     "nodeImported": "노드 모드로 가져왔습니다",
     "nodeImportFailed": "노드 모드로 가져오지 못했습니다."
@@ -176,12 +179,16 @@
     "editPromptPlaceholder": "수정 프롬프트...",
     "promptPlaceholder": "프롬프트...",
     "regenerate": "다시 생성",
+    "regenerateBranch": "브랜치 다시 생성",
+    "branchRegenerateConfirm": "현재 노드 포함 총 {count}개 노드를 덮어씁니다. 계속할까요?",
     "generate": "생성",
     "retry": "다시 시도",
     "addChild": "자식 추가",
     "duplicateBranch": "브랜치 복제",
     "duplicateBranchTitle": "새 브랜치 루트로 복제",
-    "deleteTitle": "삭제"
+    "deleteTitle": "삭제",
+    "confirmDeleteShort": "확인",
+    "confirmDeleteTitle": "한 번 더 누르면 이 노드와 연결된 부모/자식 연결선이 함께 삭제됩니다."
   },
   "provider": {
     "authTitle": "인증 방식",
@@ -268,6 +275,9 @@
     "transferContext": "프롬프트와 맥락 전체 전달",
     "transferContextOn": "ON: 부모 이미지, 프롬프트, 이전 맥락을 함께 전달합니다.",
     "transferContextOff": "OFF: 부모 이미지만 전달합니다.",
+    "transferAncestorImages": "조상 이미지 포함",
+    "transferAncestorImagesOn": "ON: 최대 3개의 조상 이미지를 시각 맥락으로 함께 전달합니다.",
+    "transferAncestorImagesOff": "OFF: 직전 부모 이미지만 전달합니다.",
     "transferSettings": "부모 노드 설정값 전달",
     "transferSettingsOn": "ON: 품질, 크기, 포맷 등 생성 설정값을 전달합니다.",
     "transferSettingsOff": "OFF: 자식 노드의 독립 설정을 사용합니다."

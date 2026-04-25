@@ -14,9 +14,11 @@ import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
 
 function normalizeEdgeData(data: EdgeTransferData | undefined): EdgeTransferData {
+  const transferContext = data?.transferContext ?? true;
   return {
-    transferContext: data?.transferContext ?? true,
+    transferContext,
     transferSettings: data?.transferSettings ?? true,
+    transferAncestorImages: transferContext ? (data?.transferAncestorImages ?? false) : false,
   };
 }
 
@@ -150,6 +152,17 @@ function WorkflowEdgeImpl({
                 checked={edgeData.transferContext}
                 onChange={(event) =>
                   updateEdgeTransfer(id, { transferContext: event.target.checked })
+                }
+              />
+            </label>
+            <label className="workflow-edge-popover__toggle">
+              <span>{t("nodeInspector.transferAncestorImages")}</span>
+              <input
+                type="checkbox"
+                checked={edgeData.transferAncestorImages}
+                disabled={!edgeData.transferContext}
+                onChange={(event) =>
+                  updateEdgeTransfer(id, { transferAncestorImages: event.target.checked })
                 }
               />
             </label>

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useState, type CSSProperties } from "react";
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
 import { useAppStore, type ImageNodeData, type GraphNode } from "../store/useAppStore";
 import { useI18n } from "../i18n";
@@ -12,6 +12,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   const duplicateBranchRoot = useAppStore((s) => s.duplicateBranchRoot);
   const deleteNode = useAppStore((s) => s.deleteNode);
   const updateNodeInternals = useUpdateNodeInternals();
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const onPromptChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => updateNodePrompt(id, e.target.value),
@@ -31,7 +32,13 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
     duplicateBranchRoot(id);
   }, [id, duplicateBranchRoot]);
 
-  const onDelete = useCallback(() => deleteNode(id), [id, deleteNode]);
+  const onDelete = useCallback(() => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    deleteNode(id);
+  }, [id, confirmDelete, deleteNode]);
 
   const isBusy = d.status === "pending" || d.status === "reconciling";
   const canBranch = d.status === "ready" && !!d.serverNodeId;
@@ -83,6 +90,10 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   useEffect(() => {
     updateNodeInternals(id);
   }, [id, updateNodeInternals, d.status, d.serverNodeId]);
+
+  useEffect(() => {
+    if (!selected) setConfirmDelete(false);
+  }, [id, selected]);
 
   return (
     <div
@@ -145,8 +156,18 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
           >
             D
           </button>
-          <button type="button" onClick={onDelete} className="image-node__del" title={t("node.deleteTitle")}>
-            ×
+          <button
+            type="button"
+            onClick={onDelete}
+            onBlur={() => setConfirmDelete(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setConfirmDelete(false);
+            }}
+            className={`image-node__del${confirmDelete ? " is-confirming" : ""}`}
+            title={confirmDelete ? t("node.confirmDeleteTitle") : t("node.deleteTitle")}
+            aria-label={confirmDelete ? t("node.confirmDeleteTitle") : t("node.deleteTitle")}
+          >
+            {confirmDelete ? t("node.confirmDeleteShort") : "×"}
           </button>
         </div>
       </div>

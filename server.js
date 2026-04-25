@@ -598,7 +598,26 @@ app.post("/api/generate", async (req, res) => {
 });
 
 // ── OAuth edit: send image as input to Responses API ──
-async function editViaOAuth(prompt, imageB64, quality, size, moderation = "low", imageMime = "image/png", requestId = null) {
+async function editViaOAuth(
+  prompt,
+  imageB64,
+  quality,
+  size,
+  moderation = "low",
+  imageMime = "image/png",
+  requestId = null,
+  contextImages = [],
+) {
+  const imageInputs = [
+    ...contextImages.map((image) => ({
+      type: "input_image",
+      image_url: `data:${image.mime};base64,${image.b64}`,
+    })),
+    { type: "input_image", image_url: `data:${imageMime};base64,${imageB64}` },
+  ];
+  const editText = contextImages.length
+    ? `Edit the final input image. Earlier input images are ancestor visual context only; use them for continuity, but treat the final image as the direct parent and primary source. Instruction: ${prompt}`
+    : `Edit this image: ${prompt}`;
   const res = await fetch(`${OAUTH_URL}/v1/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
@@ -609,8 +628,8 @@ async function editViaOAuth(prompt, imageB64, quality, size, moderation = "low",
         {
           role: "user",
           content: [
-            { type: "input_image", image_url: `data:${imageMime};base64,${imageB64}` },
-            { type: "input_text", text: `Edit this image: ${prompt}` },
+            ...imageInputs,
+            { type: "input_text", text: editText },
           ],
         },
       ],
@@ -751,6 +770,7 @@ app.post("/api/node/generate", async (req, res) => {
       format = "png",
       moderation = "low",
       references = [],
+      ancestorNodeIds = [],
       externalSrc = null,
     } = body;
     const { provider = "oauth" } = body;
@@ -781,6 +801,12 @@ app.post("/api/node/generate", async (req, res) => {
         parentNodeId,
       });
     }
+    if (!Array.isArray(ancestorNodeIds) || ancestorNodeIds.length > 3 || ancestorNodeIds.some((id) => typeof id !== "string")) {
+      return res.status(400).json({
+        error: { code: "INVALID_ANCESTORS", message: "ancestorNodeIds must be an array of up to 3 node ids" },
+        parentNodeId,
+      });
+    }
     const refCheck = validateAndNormalizeRefs(references);
     if (refCheck.error) {
       return res.status(400).json({
@@ -799,8 +825,15 @@ app.post("/api/node/generate", async (req, res) => {
 
     const startTime = Date.now();
     let parentImage = null;
+    let ancestorImages = [];
     if (parentNodeId) {
       parentImage = await loadNodeImage(__dirname, parentNodeId);
+      ancestorImages = await Promise.all(
+        ancestorNodeIds
+          .filter((nodeId) => nodeId !== parentNodeId)
+          .slice(0, 3)
+          .map((nodeId) => loadNodeImage(__dirname, nodeId)),
+      );
     } else if (typeof externalSrc === "string" && externalSrc.length > 0) {
       // TODO(0.09 D4): history promotion should materialize imported assets into a
       // node-owned file path. This stub allows controlled reads from generated/
@@ -814,7 +847,7 @@ app.post("/api/node/generate", async (req, res) => {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const r = parentImage
-          ? await editViaOAuth(effectivePrompt, parentImage.b64, quality, size, moderation, parentImage.mime, requestId)
+          ? await editViaOAuth(effectivePrompt, parentImage.b64, quality, size, moderation, parentImage.mime, requestId, ancestorImages)
           : await generateViaOAuth(effectivePrompt, quality, size, moderation, refB64s, requestId);
         if (r.b64) {
           b64 = r.b64;
@@ -843,6 +876,7 @@ app.post("/api/node/generate", async (req, res) => {
     const meta = {
       nodeId,
       parentNodeId,
+      ancestorNodeIds: parentImage ? ancestorImages.map((image) => image.filename.replace(/\.[^.]+$/, "")) : [],
       sessionId,
       clientNodeId,
       prompt: displayPrompt,
