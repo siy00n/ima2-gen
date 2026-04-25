@@ -362,6 +362,7 @@ export type GraphNode = FlowNode<ImageNodeData>;
 export type GraphEdge = FlowEdge<EdgeTransferData>;
 
 type NodePosition = { x: number; y: number };
+type GenerateNodeOptions = { selectOnComplete?: boolean };
 
 const NODE_PLACEMENT_WIDTH = 282;
 const NODE_PLACEMENT_HEIGHT = 260;
@@ -632,7 +633,7 @@ type AppState = {
   detachNodeFromParent: (clientId: ClientNodeId) => void;
   detachSelectedEdge: () => void;
   addChildFromSelectedEdge: () => ClientNodeId | null;
-  generateNode: (clientId: ClientNodeId) => Promise<boolean>;
+  generateNode: (clientId: ClientNodeId, options?: GenerateNodeOptions) => Promise<boolean>;
   regenerateBranch: (clientId: ClientNodeId) => Promise<void>;
   deleteNode: (clientId: ClientNodeId) => void;
   deleteNodes: (clientIds: ClientNodeId[]) => void;
@@ -828,20 +829,21 @@ function wouldCreateCycle(
   return false;
 }
 
-function collectBranchNodeIds(edges: GraphEdge[], rootId: ClientNodeId): ClientNodeId[] {
-  const order: ClientNodeId[] = [];
-  const queue: ClientNodeId[] = [rootId];
+function collectBranchNodeLevels(edges: GraphEdge[], rootId: ClientNodeId): ClientNodeId[][] {
+  const levels: ClientNodeId[][] = [];
+  const queue: Array<{ id: ClientNodeId; depth: number }> = [{ id: rootId, depth: 0 }];
   const seen = new Set<ClientNodeId>();
   while (queue.length > 0) {
     const current = queue.shift();
-    if (!current || seen.has(current)) continue;
-    seen.add(current);
-    order.push(current);
+    if (!current || seen.has(current.id)) continue;
+    seen.add(current.id);
+    if (!levels[current.depth]) levels[current.depth] = [];
+    levels[current.depth].push(current.id);
     for (const edge of edges) {
-      if (edge.source === current) queue.push(edge.target as ClientNodeId);
+      if (edge.source === current.id) queue.push({ id: edge.target as ClientNodeId, depth: current.depth + 1 });
     }
   }
-  return order;
+  return levels;
 }
 
 function joinParentPrompt(parentPrompt: string, childPrompt: string): string {
@@ -1633,8 +1635,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     return clientId;
   },
 
-  async generateNode(clientId) {
+  async generateNode(clientId, options) {
     const targetClientId = clientId;
+    const selectOnComplete = options?.selectOnComplete ?? true;
     const graphNodes = get().graphNodes;
     const graphEdges = get().graphEdges;
     const node = graphNodes.find((n) => n.id === targetClientId);
@@ -1746,7 +1749,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         );
         set({
           graphNodes: normalizeGraphParentPointers(nextNodes, get().graphEdges),
-          selectedNodeId: targetClientId,
+          ...(selectOnComplete ? { selectedNodeId: targetClientId } : {}),
         });
         get().addHistoryItem({
           image: res.url,
@@ -1816,7 +1819,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   async regenerateBranch(clientId) {
     const nodes = get().graphNodes;
     const edges = get().graphEdges;
-    const branchIds = collectBranchNodeIds(edges, clientId);
+    const branchLevels = collectBranchNodeLevels(edges, clientId);
+    const branchIds = branchLevels.flat();
     const branchNodes = branchIds
       .map((id) => nodes.find((n) => n.id === id))
       .filter((node): node is GraphNode => Boolean(node));
@@ -1830,13 +1834,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       window.confirm(t("node.branchRegenerateConfirm", { count: branchNodes.length }));
     if (!confirmed) return;
 
-    for (const id of branchIds) {
-      const ok = await get().generateNode(id);
-      if (!ok) {
+    for (const level of branchLevels) {
+      const results = await Promise.all(
+        level.map((id) => get().generateNode(id, { selectOnComplete: false })),
+      );
+      if (results.some((ok) => !ok)) {
         get().showToast(t("toast.nodeBranchStopped"), true);
+        set({ selectedNodeId: clientId, selectedEdgeId: null });
         return;
       }
     }
+    set({ selectedNodeId: clientId, selectedEdgeId: null });
     get().showToast(t("toast.nodeBranchComplete", { count: branchIds.length }));
   },
 
