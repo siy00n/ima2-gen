@@ -1048,6 +1048,24 @@ export const useAppStore = create<AppState>((set, get) => ({
           ),
           selectedNodeId: targetClientId,
         });
+        get().addHistoryItem({
+          image: res.url,
+          url: res.url,
+          filename: res.filename,
+          prompt,
+          provider: res.provider,
+          quality: s.quality,
+          size,
+          format: s.format,
+          moderation: res.moderation ?? s.moderation,
+          usage: res.usage,
+          thumb: res.url,
+          createdAt: Date.now(),
+          sessionId: requestSessionId,
+          nodeId: res.nodeId,
+          clientNodeId: targetClientId,
+          kind: parentServerNodeId ? "edit" : "generate",
+        });
         graphMutated = true;
         get().showToast(t("toast.nodeCreated", { id: res.nodeId.slice(0, 8), elapsed: res.elapsed }));
       }
@@ -1244,6 +1262,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedNodeId: clientId,
         rightPanelOpen: true,
       });
+      get().addHistoryItem({
+        image: res.url,
+        url: res.url,
+        filename: res.filename,
+        prompt: res.prompt,
+        provider: res.provider,
+        quality: res.quality ?? item.quality,
+        size: res.size ?? item.size,
+        format: res.format ?? item.format,
+        moderation: res.moderation ?? item.moderation,
+        thumb: res.url,
+        createdAt: res.createdAt,
+        sessionId,
+        nodeId: res.nodeId,
+        clientNodeId: clientId,
+        kind: "import",
+      });
       saveRightPanelOpen(true);
       try { localStorage.setItem("ima2.uiMode", "node"); } catch {}
       get().scheduleGraphSave();
@@ -1307,6 +1342,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (exists) return;
     const withDefaults: GenerateItem = {
       ...item,
+      image: item.image || item.url || "",
+      url: item.url ?? item.image,
+      thumb: item.thumb ?? item.url ?? item.image,
       createdAt: item.createdAt || Date.now(),
     };
     set({ history: [withDefaults, ...s.history].slice(0, HISTORY_LIMIT) });
