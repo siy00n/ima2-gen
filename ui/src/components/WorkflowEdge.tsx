@@ -40,10 +40,11 @@ function WorkflowEdgeImpl({
   const selectedEdgeId = useAppStore((s) => s.selectedEdgeId);
   const selectEdge = useAppStore((s) => s.selectEdge);
   const updateEdgeTransfer = useAppStore((s) => s.updateEdgeTransfer);
-  const toggleEdgeTransfer = useAppStore((s) => s.toggleEdgeTransfer);
+  const toggleEdgeTransferQuiet = useAppStore((s) => s.toggleEdgeTransferQuiet);
   const detachSelectedEdge = useAppStore((s) => s.detachSelectedEdge);
   const edgeData = normalizeEdgeData(data);
-  const active = selected || selectedEdgeId === id;
+  const popoverOpen = selectedEdgeId === id;
+  const active = selected || popoverOpen;
   const edgeState =
     edgeData.transferContext && edgeData.transferSettings
       ? "both"
@@ -73,9 +74,9 @@ function WorkflowEdgeImpl({
   });
 
   const toggle = (key: keyof EdgeTransferData, event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
     event.stopPropagation();
-    selectEdge(id);
-    toggleEdgeTransfer(id, key);
+    toggleEdgeTransferQuiet(id, key);
   };
 
   const select = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -129,7 +130,7 @@ function WorkflowEdgeImpl({
             {t(edgeData.transferSettings ? "edgeBadge.settingsOn" : "edgeBadge.settingsOff")}
           </button>
         </div>
-        {active && !isMobile ? (
+        {popoverOpen && !isMobile ? (
           <div
             className="workflow-edge-popover nodrag nopan"
             style={{
@@ -162,16 +163,25 @@ function WorkflowEdgeImpl({
                 }
               />
             </label>
-            <button
-              type="button"
-              className="workflow-edge-popover__danger"
-              onClick={() => {
-                selectEdge(id);
-                detachSelectedEdge();
-              }}
-            >
-              {t("nodeInspector.detachConnection")}
-            </button>
+            <div className="workflow-edge-popover__footer">
+              <button
+                type="button"
+                className="workflow-edge-popover__danger"
+                onClick={() => {
+                  selectEdge(id);
+                  detachSelectedEdge();
+                }}
+              >
+                {t("nodeInspector.detachConnection")}
+              </button>
+              <button
+                type="button"
+                className="workflow-edge-popover__confirm"
+                onClick={() => selectEdge(null)}
+              >
+                {t("common.ok")}
+              </button>
+            </div>
           </div>
         ) : null}
       </EdgeLabelRenderer>

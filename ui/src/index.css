@@ -2250,17 +2250,32 @@ button.workflow-edge-badge__chip {
   accent-color: #7c6cff;
 }
 
-.workflow-edge-popover__danger {
-  width: 100%;
-  min-height: 32px;
+.workflow-edge-popover__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 82px;
+  gap: 8px;
   margin-top: 8px;
-  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.workflow-edge-popover__danger,
+.workflow-edge-popover__confirm {
+  min-height: 32px;
   border-radius: 7px;
-  background: rgba(239, 68, 68, 0.08);
-  color: #ff9a9a;
   font-family: var(--mono);
   font-size: 11px;
   cursor: pointer;
+}
+
+.workflow-edge-popover__danger {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ff9a9a;
+}
+
+.workflow-edge-popover__confirm {
+  border: 1px solid rgba(124, 108, 255, 0.36);
+  background: rgba(124, 108, 255, 0.14);
+  color: #d8d1ff;
 }
 
 /* Connection line while dragging */

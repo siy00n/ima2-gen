@@ -354,6 +354,62 @@ export type ImageNodeData = {
 export type GraphNode = FlowNode<ImageNodeData>;
 export type GraphEdge = FlowEdge<EdgeTransferData>;
 
+type NodePosition = { x: number; y: number };
+
+const NODE_PLACEMENT_WIDTH = 282;
+const NODE_PLACEMENT_HEIGHT = 260;
+const NODE_PLACEMENT_MARGIN = 24;
+const NODE_CHILD_X_OFFSET = NODE_PLACEMENT_WIDTH + NODE_PLACEMENT_MARGIN * 2 + 8;
+const NODE_PLACEMENT_ROW_STEP = NODE_PLACEMENT_HEIGHT + NODE_PLACEMENT_MARGIN * 2;
+const NODE_PLACEMENT_COL_STEP = NODE_CHILD_X_OFFSET;
+
+function placementRect(position: NodePosition) {
+  return {
+    left: position.x - NODE_PLACEMENT_MARGIN,
+    top: position.y - NODE_PLACEMENT_MARGIN,
+    right: position.x + NODE_PLACEMENT_WIDTH + NODE_PLACEMENT_MARGIN,
+    bottom: position.y + NODE_PLACEMENT_HEIGHT + NODE_PLACEMENT_MARGIN,
+  };
+}
+
+function rectsOverlap(a: ReturnType<typeof placementRect>, b: ReturnType<typeof placementRect>): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function isNodePositionFree(position: NodePosition, nodes: GraphNode[]): boolean {
+  const candidate = placementRect(position);
+  return !nodes.some((node) => rectsOverlap(candidate, placementRect(node.position)));
+}
+
+function findNearbyFreeNodePosition(preferred: NodePosition, nodes: GraphNode[]): NodePosition {
+  const rowOffsets = [0];
+  for (let row = 1; row <= 10; row += 1) {
+    rowOffsets.push(row * NODE_PLACEMENT_ROW_STEP, -row * NODE_PLACEMENT_ROW_STEP);
+  }
+
+  for (let col = 0; col <= 10; col += 1) {
+    for (const yOffset of rowOffsets) {
+      const candidate = {
+        x: preferred.x + col * NODE_PLACEMENT_COL_STEP,
+        y: preferred.y + yOffset,
+      };
+      if (isNodePositionFree(candidate, nodes)) return candidate;
+    }
+  }
+
+  return {
+    x: preferred.x + NODE_PLACEMENT_COL_STEP * 11,
+    y: preferred.y,
+  };
+}
+
+function preferredChildPosition(parent: GraphNode): NodePosition {
+  return {
+    x: parent.position.x + NODE_CHILD_X_OFFSET,
+    y: parent.position.y,
+  };
+}
+
 function normalizeGraphParentPointers(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
   const nodeById = new Map(nodes.map((node) => [node.id, node]));
   const incomingByTarget = new Map(edges.map((edge) => [edge.target, edge]));
@@ -560,6 +616,7 @@ type AppState = {
   connectNodes: (sourceClientId: ClientNodeId, targetClientId: ClientNodeId) => void;
   updateEdgeTransfer: (edgeId: string, patch: Partial<EdgeTransferData>) => void;
   toggleEdgeTransfer: (edgeId: string, key: keyof EdgeTransferData) => void;
+  toggleEdgeTransferQuiet: (edgeId: string, key: keyof EdgeTransferData) => void;
   updateNodeName: (clientId: ClientNodeId, name: string) => void;
   updateNodePrompt: (clientId: ClientNodeId, prompt: string) => void;
   updateNodeSettings: (clientId: ClientNodeId, patch: Partial<NodeSettings>) => void;
@@ -695,6 +752,29 @@ function syncEffectiveNodeSettings(nodes: GraphNode[], edges: GraphEdge[]): Grap
       },
     };
   });
+}
+
+function applyEdgeTransferPatch(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  edgeId: string,
+  patch: Partial<EdgeTransferData>,
+): { graphNodes: GraphNode[]; graphEdges: GraphEdge[] } | null {
+  const edge = edges.find((e) => e.id === edgeId);
+  if (!edge) return null;
+  const nextEdges = edges.map((e) =>
+    e.id === edgeId
+      ? {
+          ...e,
+          data: normalizeEdgeTransferData({ ...e.data, ...patch }),
+        }
+      : e,
+  );
+  const nextNodes =
+    typeof patch.transferSettings === "boolean"
+      ? syncEffectiveNodeSettings(nodes, nextEdges)
+      : nodes;
+  return { graphNodes: nextNodes, graphEdges: nextEdges };
 }
 
 function wouldCreateCycle(
@@ -1253,13 +1333,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       return parentClientId;
     }
     const clientId = newClientNodeId();
-    const siblings = get().graphEdges.filter((e) => e.source === parentClientId).length;
     const settings = cloneNodeSettings(parent.data.settings);
     const name = nextNodeName(get().graphNodes);
+    const position = findNearbyFreeNodePosition(preferredChildPosition(parent), get().graphNodes);
     const node: GraphNode = {
       id: clientId,
       type: "imageNode",
-      position: { x: parent.position.x + 360, y: parent.position.y + siblings * 320 },
+      position,
       data: {
         clientId,
         serverNodeId: null,
@@ -1321,12 +1401,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!parent) return sourceClientId;
 
     const clientId = newClientNodeId();
-    const siblings = get().graphEdges.filter((e) => e.source === parentClientId).length;
     const name = nextNodeName(get().graphNodes);
+    const position = findNearbyFreeNodePosition(preferredChildPosition(parent), get().graphNodes);
     const node: GraphNode = {
       id: clientId,
       type: "imageNode",
-      position: { x: parent.position.x + 360, y: parent.position.y + siblings * 320 },
+      position,
       data: {
         clientId,
         serverNodeId: null,
@@ -1370,24 +1450,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   updateEdgeTransfer: (edgeId, patch) => {
-    const edges = get().graphEdges;
-    const edge = edges.find((e) => e.id === edgeId);
-    if (!edge) return;
-    const nextEdges = edges.map((e) =>
-      e.id === edgeId
-        ? {
-            ...e,
-            data: normalizeEdgeTransferData({ ...e.data, ...patch }),
-          }
-        : e,
-    );
-    const nextNodes =
-      typeof patch.transferSettings === "boolean"
-        ? syncEffectiveNodeSettings(get().graphNodes, nextEdges)
-        : get().graphNodes;
+    const next = applyEdgeTransferPatch(get().graphNodes, get().graphEdges, edgeId, patch);
+    if (!next) return;
     set({
-      graphNodes: nextNodes,
-      graphEdges: nextEdges,
+      graphNodes: next.graphNodes,
+      graphEdges: next.graphEdges,
       selectedEdgeId: edgeId,
       selectedNodeId: null,
     });
@@ -1399,6 +1466,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!edge) return;
     const current = normalizeEdgeTransferData(edge.data);
     get().updateEdgeTransfer(edgeId, { [key]: !current[key] });
+  },
+
+  toggleEdgeTransferQuiet: (edgeId, key) => {
+    const edge = get().graphEdges.find((e) => e.id === edgeId);
+    if (!edge) return;
+    const current = normalizeEdgeTransferData(edge.data);
+    const next = applyEdgeTransferPatch(get().graphNodes, get().graphEdges, edgeId, {
+      [key]: !current[key],
+    });
+    if (!next) return;
+    set({
+      graphNodes: next.graphNodes,
+      graphEdges: next.graphEdges,
+      selectedEdgeId: null,
+    });
+    get().scheduleGraphSave();
   },
 
   updateNodeSettings: (clientId, patch) => {
@@ -1722,10 +1805,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const clientId = newClientNodeId();
     const settings = cloneNodeSettings(parent.data.settings);
     const name = nextNodeName(get().graphNodes);
+    const safePosition = findNearbyFreeNodePosition(position, get().graphNodes);
     const node: GraphNode = {
       id: clientId,
       type: "imageNode",
-      position,
+      position: safePosition,
       data: {
         clientId,
         serverNodeId: null,
