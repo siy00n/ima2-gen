@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAppStore, type ImageNodeData, type ImageNodeStatus } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
 import { OptionGroup, type OptionItem } from "./OptionGroup";
+import { ImageLightbox } from "./ImageLightbox";
 import { deriveGraphMeta } from "../lib/graphMeta";
 import type { Format, Moderation, Quality, SizePreset } from "../types";
 import {
@@ -42,6 +43,7 @@ function statusTone(status: ImageNodeStatus) {
 
 export function NodeInspector() {
   const { t } = useI18n();
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const nodes = useAppStore((s) => s.graphNodes);
   const edges = useAppStore((s) => s.graphEdges);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
@@ -339,226 +341,250 @@ export function NodeInspector() {
     { label: resolvedSize },
     data.provider ? { label: data.provider } : null,
   ].filter((v): v is { label: string; tone?: string } => Boolean(v));
+  const lightboxTitle = data.name?.trim() || t("node.untitledName");
+  const lightboxMeta = [
+    data.quality ?? data.settings.quality,
+    data.size ?? resolvedSize,
+    data.format ?? data.settings.format,
+    data.provider,
+  ].filter((v): v is string => Boolean(v)).join(" · ");
 
   return (
-    <div className="node-inspector">
-      <div className="node-inspector__node-header">
-        <label className="node-inspector__name-field">
-          <span>{t("nodeInspector.nodeName")}</span>
-          <input
-            type="text"
-            value={data.name ?? ""}
-            onChange={(e) => updateNodeName(selected.id, e.target.value)}
-            placeholder={t("node.untitledName")}
+    <>
+      <div className="node-inspector">
+        <div className="node-inspector__node-header">
+          <label className="node-inspector__name-field">
+            <span>{t("nodeInspector.nodeName")}</span>
+            <input
+              type="text"
+              value={data.name ?? ""}
+              onChange={(e) => updateNodeName(selected.id, e.target.value)}
+              placeholder={t("node.untitledName")}
+            />
+          </label>
+          <div className="node-inspector__id-meta">
+            <span>{t("nodeInspector.clientId")}: {shortNodeId(selected.id)}</span>
+            <span>{t("nodeInspector.serverId")}: {shortNodeId(data.serverNodeId)}</span>
+            <span>{t("nodeInspector.level")}: L{selectedMeta.level}</span>
+          </div>
+        </div>
+        {imageSrc ? (
+          <button
+            type="button"
+            className="node-inspector__preview node-inspector__preview--button"
+            onClick={() => setLightboxOpen(true)}
+            aria-label={t("nodeInspector.openImagePreview")}
+            title={t("nodeInspector.openImagePreview")}
+          >
+            <img src={imageSrc} alt={t("node.nodeImageAlt")} />
+          </button>
+        ) : (
+          <div className="node-inspector__preview node-inspector__preview--empty">
+            <div className="node-inspector__placeholder">{t("node.noImage")}</div>
+          </div>
+        )}
+        <div className="node-inspector__pills" aria-label={t("nodeInspector.statusMeta")}>
+          {metaPills.map((pill) => (
+            <span
+              key={`${pill.label}-${pill.tone ?? "meta"}`}
+              className={`node-inspector__pill${pill.tone ? ` node-inspector__pill--${pill.tone}` : ""}`}
+            >
+              {pill.label}
+            </span>
+          ))}
+        </div>
+        <label className="node-inspector__prompt-block">
+          <span className="node-inspector__section-label">{t("nodeInspector.prompt")}</span>
+          <textarea
+            className="node-inspector__prompt"
+            value={data.prompt}
+            disabled={busy}
+            onChange={(e) => updateNodePrompt(selected.id, e.target.value)}
+            placeholder={data.parentServerNodeId ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
+            rows={5}
           />
         </label>
-        <div className="node-inspector__id-meta">
-          <span>{t("nodeInspector.clientId")}: {shortNodeId(selected.id)}</span>
-          <span>{t("nodeInspector.serverId")}: {shortNodeId(data.serverNodeId)}</span>
-          <span>{t("nodeInspector.level")}: L{selectedMeta.level}</span>
-        </div>
-      </div>
-      <div className={`node-inspector__preview${imageSrc ? "" : " node-inspector__preview--empty"}`}>
-        {imageSrc ? (
-          <img src={imageSrc} alt={t("node.nodeImageAlt")} />
-        ) : (
-          <div className="node-inspector__placeholder">{t("node.noImage")}</div>
-        )}
-      </div>
-      <div className="node-inspector__pills" aria-label={t("nodeInspector.statusMeta")}>
-        {metaPills.map((pill) => (
-          <span
-            key={`${pill.label}-${pill.tone ?? "meta"}`}
-            className={`node-inspector__pill${pill.tone ? ` node-inspector__pill--${pill.tone}` : ""}`}
-          >
-            {pill.label}
-          </span>
-        ))}
-      </div>
-      <label className="node-inspector__prompt-block">
-        <span className="node-inspector__section-label">{t("nodeInspector.prompt")}</span>
-        <textarea
-          className="node-inspector__prompt"
-          value={data.prompt}
-          disabled={busy}
-          onChange={(e) => updateNodePrompt(selected.id, e.target.value)}
-          placeholder={data.parentServerNodeId ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
-          rows={5}
-        />
-      </label>
-      {data.error ? <div className="node-inspector__error">{data.error}</div> : null}
-      {hasParent ? (
-        <div className="node-inspector__actions node-inspector__actions--parent">
-          <button
-            type="button"
-            className="node-inspector__button"
-            onClick={() => copyParentSettingsToNode(selected.id)}
-            disabled={busy}
-          >
-            {t("nodeInspector.copyParentSettings")}
-          </button>
-          <button
-            type="button"
-            className="node-inspector__button"
-            onClick={() => copyParentPromptToNode(selected.id)}
-            disabled={busy}
-          >
-            {t("nodeInspector.copyParentPrompt")}
-          </button>
-        </div>
-      ) : null}
-      <details className="node-inspector__settings" open>
-        <summary className="node-inspector__settings-summary">
-          <span>{t("nodeInspector.nodeSettings")}</span>
-          <small>{settingsSummary}</small>
-        </summary>
-        <div className="node-inspector__settings-body">
-          <OptionGroup<Quality>
-            title={t("quality.title")}
-            items={QUALITY_ITEMS}
-            value={data.settings.quality}
-            onChange={(quality) => updateNodeSettings(selected.id, { quality })}
-          />
-          <div className="option-group">
-            <div className="section-title">{t("size.title")}</div>
-            <OptionGroup<SizePreset>
-              title=""
-              items={sizeItems(SIZE_PRESETS_ROW1)}
-              value={data.settings.sizePreset}
-              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
-            />
-            <OptionGroup<SizePreset>
-              title=""
-              items={sizeItems(SIZE_PRESETS_ROW2)}
-              value={data.settings.sizePreset}
-              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
-            />
-            <OptionGroup<SizePreset>
-              title=""
-              items={sizeItems(SIZE_PRESETS_ROW3)}
-              value={data.settings.sizePreset}
-              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
-            />
-            <OptionGroup<SizePreset>
-              title=""
-              items={sizeItems(SIZE_PRESETS_ROW4)}
-              value={data.settings.sizePreset}
-              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
-            />
-            <OptionGroup<SizePreset>
-              title=""
-              items={sizeItems(getSizePresetsRow5())}
-              value={data.settings.sizePreset}
-              onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
-            />
-            {data.settings.sizePreset === "custom" ? (
-              <>
-                <div className="option-row">
-                  <input
-                    type="number"
-                    className="custom-size-input"
-                    min={1024}
-                    max={3824}
-                    step={16}
-                    value={data.settings.customW}
-                    onChange={(e) =>
-                      updateNodeSettings(selected.id, {
-                        customW: snap16(parseInt(e.target.value) || 1024),
-                      })
-                    }
-                    placeholder={t("size.width")}
-                  />
-                  <span className="node-inspector__size-separator">x</span>
-                  <input
-                    type="number"
-                    className="custom-size-input"
-                    min={1024}
-                    max={3824}
-                    step={16}
-                    value={data.settings.customH}
-                    onChange={(e) =>
-                      updateNodeSettings(selected.id, {
-                        customH: snap16(parseInt(e.target.value) || 1024),
-                      })
-                    }
-                    placeholder={t("size.height")}
-                  />
-                </div>
-                <div className="size-hint">{t("size.hint")}</div>
-              </>
-            ) : null}
+        {data.error ? <div className="node-inspector__error">{data.error}</div> : null}
+        {hasParent ? (
+          <div className="node-inspector__actions node-inspector__actions--parent">
+            <button
+              type="button"
+              className="node-inspector__button"
+              onClick={() => copyParentSettingsToNode(selected.id)}
+              disabled={busy}
+            >
+              {t("nodeInspector.copyParentSettings")}
+            </button>
+            <button
+              type="button"
+              className="node-inspector__button"
+              onClick={() => copyParentPromptToNode(selected.id)}
+              disabled={busy}
+            >
+              {t("nodeInspector.copyParentPrompt")}
+            </button>
           </div>
-          <OptionGroup<Format>
-            title={t("format.title")}
-            items={FORMAT_ITEMS}
-            value={data.settings.format}
-            onChange={(format) => updateNodeSettings(selected.id, { format })}
-          />
-          <OptionGroup<Moderation>
-            title={t("moderation.title")}
-            items={MOD_ITEMS}
-            value={data.settings.moderation}
-            onChange={(moderation) => updateNodeSettings(selected.id, { moderation })}
-          />
-        </div>
-      </details>
-      <div className="node-inspector__action-panel">
-        <button
-          type="button"
-          className="node-inspector__primary"
-          onClick={() => void generateNode(selected.id)}
-          disabled={!canGenerate}
-        >
-          {generateLabel}
-        </button>
-        <div className="node-inspector__action-title">{t("nodeInspector.workflowActions")}</div>
-        <div className="node-inspector__actions">
+        ) : null}
+        <details className="node-inspector__settings" open>
+          <summary className="node-inspector__settings-summary">
+            <span>{t("nodeInspector.nodeSettings")}</span>
+            <small>{settingsSummary}</small>
+          </summary>
+          <div className="node-inspector__settings-body">
+            <OptionGroup<Quality>
+              title={t("quality.title")}
+              items={QUALITY_ITEMS}
+              value={data.settings.quality}
+              onChange={(quality) => updateNodeSettings(selected.id, { quality })}
+            />
+            <div className="option-group">
+              <div className="section-title">{t("size.title")}</div>
+              <OptionGroup<SizePreset>
+                title=""
+                items={sizeItems(SIZE_PRESETS_ROW1)}
+                value={data.settings.sizePreset}
+                onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+              />
+              <OptionGroup<SizePreset>
+                title=""
+                items={sizeItems(SIZE_PRESETS_ROW2)}
+                value={data.settings.sizePreset}
+                onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+              />
+              <OptionGroup<SizePreset>
+                title=""
+                items={sizeItems(SIZE_PRESETS_ROW3)}
+                value={data.settings.sizePreset}
+                onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+              />
+              <OptionGroup<SizePreset>
+                title=""
+                items={sizeItems(SIZE_PRESETS_ROW4)}
+                value={data.settings.sizePreset}
+                onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+              />
+              <OptionGroup<SizePreset>
+                title=""
+                items={sizeItems(getSizePresetsRow5())}
+                value={data.settings.sizePreset}
+                onChange={(sizePreset) => updateNodeSettings(selected.id, { sizePreset })}
+              />
+              {data.settings.sizePreset === "custom" ? (
+                <>
+                  <div className="option-row">
+                    <input
+                      type="number"
+                      className="custom-size-input"
+                      min={1024}
+                      max={3824}
+                      step={16}
+                      value={data.settings.customW}
+                      onChange={(e) =>
+                        updateNodeSettings(selected.id, {
+                          customW: snap16(parseInt(e.target.value) || 1024),
+                        })
+                      }
+                      placeholder={t("size.width")}
+                    />
+                    <span className="node-inspector__size-separator">x</span>
+                    <input
+                      type="number"
+                      className="custom-size-input"
+                      min={1024}
+                      max={3824}
+                      step={16}
+                      value={data.settings.customH}
+                      onChange={(e) =>
+                        updateNodeSettings(selected.id, {
+                          customH: snap16(parseInt(e.target.value) || 1024),
+                        })
+                      }
+                      placeholder={t("size.height")}
+                    />
+                  </div>
+                  <div className="size-hint">{t("size.hint")}</div>
+                </>
+              ) : null}
+            </div>
+            <OptionGroup<Format>
+              title={t("format.title")}
+              items={FORMAT_ITEMS}
+              value={data.settings.format}
+              onChange={(format) => updateNodeSettings(selected.id, { format })}
+            />
+            <OptionGroup<Moderation>
+              title={t("moderation.title")}
+              items={MOD_ITEMS}
+              value={data.settings.moderation}
+              onChange={(moderation) => updateNodeSettings(selected.id, { moderation })}
+            />
+          </div>
+        </details>
+        <div className="node-inspector__action-panel">
           <button
             type="button"
-            className="node-inspector__button"
-            onClick={() => void regenerateBranch(selected.id)}
-            disabled={!canRegenerateBranch}
+            className="node-inspector__primary"
+            onClick={() => void generateNode(selected.id)}
+            disabled={!canGenerate}
           >
-            {t("node.regenerateBranch")}
+            {generateLabel}
           </button>
-          <button type="button" className="node-inspector__button" onClick={() => addChildNode(selected.id)} disabled={!canBranch}>
-            {t("node.addChild")}
-          </button>
-          <button type="button" className="node-inspector__button" onClick={() => duplicateBranchRoot(selected.id)}>
-            {t("node.duplicateBranch")}
-          </button>
+          <div className="node-inspector__action-title">{t("nodeInspector.workflowActions")}</div>
+          <div className="node-inspector__actions">
+            <button
+              type="button"
+              className="node-inspector__button"
+              onClick={() => void regenerateBranch(selected.id)}
+              disabled={!canRegenerateBranch}
+            >
+              {t("node.regenerateBranch")}
+            </button>
+            <button type="button" className="node-inspector__button" onClick={() => addChildNode(selected.id)} disabled={!canBranch}>
+              {t("node.addChild")}
+            </button>
+            <button type="button" className="node-inspector__button" onClick={() => duplicateBranchRoot(selected.id)}>
+              {t("node.duplicateBranch")}
+            </button>
+            <button
+              type="button"
+              className="node-inspector__button"
+              onClick={() => detachNodeFromParent(selected.id)}
+              disabled={!hasParent}
+            >
+              {t("nodeInspector.detachConnection")}
+            </button>
+          </div>
+          <div className="node-inspector__action-title">{t("nodeInspector.exportActions")}</div>
+          <div className="node-inspector__actions">
+            <button type="button" className="node-inspector__button" onClick={download} disabled={!imageSrc}>
+              {t("result.download")}
+            </button>
+            <button type="button" className="node-inspector__button" onClick={() => void copyImage()} disabled={!imageSrc}>
+              {t("result.copyImage")}
+            </button>
+            <button type="button" className="node-inspector__button" onClick={() => void copyPrompt()} disabled={!data.prompt}>
+              {t("result.copyPrompt")}
+            </button>
+          </div>
           <button
             type="button"
-            className="node-inspector__button"
-            onClick={() => detachNodeFromParent(selected.id)}
-            disabled={!hasParent}
+            className="node-inspector__danger node-inspector__danger--wide"
+            onClick={() => {
+              deleteNode(selected.id);
+              selectNode(null);
+            }}
           >
-            {t("nodeInspector.detachConnection")}
+            {t("common.delete")}
           </button>
         </div>
-        <div className="node-inspector__action-title">{t("nodeInspector.exportActions")}</div>
-        <div className="node-inspector__actions">
-          <button type="button" className="node-inspector__button" onClick={download} disabled={!imageSrc}>
-            {t("result.download")}
-          </button>
-          <button type="button" className="node-inspector__button" onClick={() => void copyImage()} disabled={!imageSrc}>
-            {t("result.copyImage")}
-          </button>
-          <button type="button" className="node-inspector__button" onClick={() => void copyPrompt()} disabled={!data.prompt}>
-            {t("result.copyPrompt")}
-          </button>
-        </div>
-        <button
-          type="button"
-          className="node-inspector__danger node-inspector__danger--wide"
-          onClick={() => {
-            deleteNode(selected.id);
-            selectNode(null);
-          }}
-        >
-          {t("common.delete")}
-        </button>
       </div>
-    </div>
+      <ImageLightbox
+        open={lightboxOpen && !!imageSrc}
+        imageSrc={imageSrc}
+        title={lightboxTitle}
+        meta={lightboxMeta}
+        onClose={() => setLightboxOpen(false)}
+      />
+    </>
   );
 }

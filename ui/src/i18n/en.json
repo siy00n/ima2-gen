@@ -269,6 +269,7 @@
     "statusError": "Error",
     "nodeName": "Node name",
     "prompt": "Prompt",
+    "openImagePreview": "Open image preview",
     "clientId": "Client ID",
     "serverId": "Server ID",
     "level": "Level",
@@ -303,6 +304,12 @@
     "settingsOff": "SET OFF",
     "contextTitle": "Toggle prompt and context transfer",
     "settingsTitle": "Toggle parent settings transfer"
+  },
+  "lightbox": {
+    "close": "Close preview",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetZoom": "Reset zoom"
   },
   "apiDisabled": {
     "title": "{provider} unavailable",
