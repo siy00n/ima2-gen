@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
 
@@ -91,6 +91,11 @@ export function ImageLightbox({ open, imageSrc, title, meta, onClose }: Props) {
     zoomBy(event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP);
   };
 
+  const handleStageClick = (event: MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (event.target === event.currentTarget) onClose();
+  };
+
   const handlePointerDown = (event: PointerEvent<HTMLImageElement>) => {
     if (scale <= 1) return;
     event.preventDefault();
@@ -137,7 +142,7 @@ export function ImageLightbox({ open, imageSrc, title, meta, onClose }: Props) {
           ×
         </button>
       </div>
-      <div className="image-lightbox__stage" onClick={(event) => event.stopPropagation()} onWheel={handleWheel}>
+      <div className="image-lightbox__stage" onClick={handleStageClick} onWheel={handleWheel}>
         <img
           src={imageSrc}
           alt={title ?? t("node.nodeImageAlt")}
