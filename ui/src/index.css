@@ -2181,6 +2181,18 @@ button.workflow-edge-badge__chip {
   color: #dce2ea;
 }
 
+.workflow-edge-badge__chip--image.is-on {
+  border-color: rgba(94, 234, 212, 0.58);
+  background: rgba(94, 234, 212, 0.14);
+  color: #aaf5e9;
+}
+
+.workflow-edge-badge__chip--image:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  color: #858b94;
+}
+
 .workflow-edge-badge__chip--context.is-on {
   border-color: rgba(56, 189, 248, 0.58);
   background: rgba(56, 189, 248, 0.14);
@@ -2192,7 +2204,7 @@ button.workflow-edge-badge__chip {
   color: #ffd37c;
 }
 
-.workflow-edge-badge__chip:not(.is-on):not(.workflow-edge-badge__chip--image) {
+.workflow-edge-badge__chip:not(.is-on) {
   color: #8c9099;
 }
 

@@ -284,8 +284,10 @@
   },
   "edgeBadge": {
     "image": "IMG",
+    "context": "맥락",
     "contextOn": "맥락 ON",
     "contextOff": "맥락 OFF",
+    "settings": "설정",
     "settingsOn": "설정 ON",
     "settingsOff": "설정 OFF",
     "contextTitle": "프롬프트와 맥락 전달 토글",

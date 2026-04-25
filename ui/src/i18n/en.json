@@ -284,8 +284,10 @@
   },
   "edgeBadge": {
     "image": "IMG",
+    "context": "CTX",
     "contextOn": "CTX ON",
     "contextOff": "CTX OFF",
+    "settings": "SET",
     "settingsOn": "SET ON",
     "settingsOff": "SET OFF",
     "contextTitle": "Toggle prompt and context transfer",

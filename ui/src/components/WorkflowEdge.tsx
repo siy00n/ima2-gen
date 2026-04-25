@@ -112,16 +112,22 @@ function WorkflowEdgeImpl({
           role="button"
           tabIndex={0}
         >
-          <span className="workflow-edge-badge__chip workflow-edge-badge__chip--image">
+          <button
+            type="button"
+            className={`workflow-edge-badge__chip workflow-edge-badge__chip--image${edgeData.transferAncestorImages ? " is-on" : ""}`}
+            onClick={(event) => toggle("transferAncestorImages", event)}
+            disabled={!edgeData.transferContext}
+            title={t("nodeInspector.transferAncestorImages")}
+          >
             {t("edgeBadge.image")}
-          </span>
+          </button>
           <button
             type="button"
             className={`workflow-edge-badge__chip workflow-edge-badge__chip--context${edgeData.transferContext ? " is-on" : ""}`}
             onClick={(event) => toggle("transferContext", event)}
             title={t("edgeBadge.contextTitle")}
           >
-            {t(edgeData.transferContext ? "edgeBadge.contextOn" : "edgeBadge.contextOff")}
+            {t("edgeBadge.context")}
           </button>
           <button
             type="button"
@@ -129,7 +135,7 @@ function WorkflowEdgeImpl({
             onClick={(event) => toggle("transferSettings", event)}
             title={t("edgeBadge.settingsTitle")}
           >
-            {t(edgeData.transferSettings ? "edgeBadge.settingsOn" : "edgeBadge.settingsOff")}
+            {t("edgeBadge.settings")}
           </button>
         </div>
         {popoverOpen && !isMobile ? (
