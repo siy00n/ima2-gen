@@ -26,8 +26,12 @@
   --edge-context: #38bdf8;
   --edge-settings: #f5b84b;
   --edge-combined: #a78bfa;
-  --edge-ancestor: #5eead4;
-  --edge-ancestor-settings: #a3e635;
+  --edge-text: #60a5fa;
+  --edge-text-settings: #f472b6;
+  --edge-ancestor: #2dd4bf;
+  --edge-ancestor-context: #06b6d4;
+  --edge-ancestor-settings: #d1d84f;
+  --edge-ancestor-both: #a3e635;
   --edge-off: #686f7b;
   --node-tree-color: #a78bfa;
   --minimap-viewport: rgba(255, 255, 255, 0.09);
@@ -1920,12 +1924,28 @@ body {
   border-color: rgba(167, 139, 250, 0.44);
 }
 
+.node-inspector__edge-state[data-state="text"] {
+  border-color: rgba(96, 165, 250, 0.42);
+}
+
+.node-inspector__edge-state[data-state="text-settings"] {
+  border-color: rgba(244, 114, 182, 0.55);
+}
+
 .node-inspector__edge-state[data-state="ancestor"] {
-  border-color: rgba(94, 234, 212, 0.52);
+  border-color: rgba(45, 212, 191, 0.52);
+}
+
+.node-inspector__edge-state[data-state="ancestor-context"] {
+  border-color: rgba(6, 182, 212, 0.58);
 }
 
 .node-inspector__edge-state[data-state="ancestor-settings"] {
-  border-color: rgba(163, 230, 53, 0.62);
+  border-color: rgba(209, 216, 79, 0.62);
+}
+
+.node-inspector__edge-state[data-state="ancestor-both"] {
+  border-color: rgba(163, 230, 53, 0.68);
 }
 
 .node-inspector__edge-chip {
@@ -1951,14 +1971,21 @@ body {
   color: #dce2ea;
 }
 
-.node-inspector__edge-chip--image.is-on {
-  border-color: rgba(94, 234, 212, 0.58);
-  background: rgba(94, 234, 212, 0.14);
-  color: #aaf5e9;
+.node-inspector__edge-chip--image[data-image-transfer="parent"] {
+  border-color: rgba(154, 161, 173, 0.58);
+  background: rgba(154, 161, 173, 0.14);
+  color: #e5e7eb;
 }
 
-.node-inspector__edge-chip--image.is-disabled {
-  opacity: 0.52;
+.node-inspector__edge-chip--image[data-image-transfer="ancestor"] {
+  border-color: rgba(163, 230, 53, 0.62);
+  background: rgba(163, 230, 53, 0.15);
+  color: #e7ff9b;
+}
+
+.node-inspector__edge-chip--image[data-image-transfer="off"] {
+  border-color: rgba(104, 111, 123, 0.34);
+  background: rgba(255, 255, 255, 0.025);
   color: #858b94;
 }
 
@@ -2046,6 +2073,34 @@ body {
   height: 24px;
   flex-shrink: 0;
   accent-color: #7c6cff;
+}
+
+.node-inspector__toggle-row--stacked {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.node-inspector__segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.node-inspector__segmented button {
+  min-height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.node-inspector__segmented button.is-selected {
+  border-color: rgba(124, 108, 255, 0.58);
+  background: rgba(124, 108, 255, 0.16);
+  color: var(--text);
 }
 
 .node-inspector__actions button,
@@ -2472,16 +2527,29 @@ body {
   stroke-dasharray: 4 3;
 }
 
+.workflow-minimap__edge[data-state="none"],
+.workflow-minimap__edge[data-state="text"],
+.workflow-minimap__edge[data-state="text-settings"] {
+  stroke-dasharray: 2 3;
+}
+
 .workflow-minimap__edge[data-state="both"] {
   stroke-width: 2.25;
 }
 
-.workflow-minimap__edge[data-state="ancestor"] {
+.workflow-minimap__edge[data-state="ancestor"],
+.workflow-minimap__edge[data-state="ancestor-context"],
+.workflow-minimap__edge[data-state="ancestor-settings"],
+.workflow-minimap__edge[data-state="ancestor-both"] {
   stroke-width: 2.35;
   opacity: 1;
 }
 
 .workflow-minimap__edge[data-state="ancestor-settings"] {
+  stroke-dasharray: 4 2;
+}
+
+.workflow-minimap__edge[data-state="ancestor-both"] {
   stroke-width: 2.55;
   opacity: 1;
 }
@@ -2525,7 +2593,12 @@ body {
   stroke: var(--text-dim, #888) !important;
   stroke-width: 1.8 !important;
 }
-.workflow-edge__path--image { stroke: var(--edge-off) !important; }
+.workflow-edge__path--none {
+  stroke: var(--edge-off) !important;
+  stroke-dasharray: 2 7;
+  opacity: 0.72;
+}
+.workflow-edge__path--image { stroke: var(--edge-image) !important; }
 .workflow-edge__path--context {
   stroke: var(--edge-context) !important;
 }
@@ -2537,19 +2610,43 @@ body {
   stroke: var(--edge-combined) !important;
   stroke-width: 2.2 !important;
 }
+.workflow-edge__path--text {
+  stroke: var(--edge-text) !important;
+  stroke-dasharray: 5 4;
+}
+.workflow-edge__path--text-settings {
+  stroke: var(--edge-text-settings) !important;
+  stroke-width: 2.25 !important;
+  stroke-dasharray: 6 4;
+}
 .workflow-edge__path--ancestor {
   stroke: var(--edge-ancestor) !important;
+  stroke-width: 2.35 !important;
+  filter:
+    drop-shadow(0 0 4px rgba(45, 212, 191, 0.68))
+    drop-shadow(0 0 12px rgba(45, 212, 191, 0.24));
+}
+.workflow-edge__path--ancestor-context {
+  stroke: var(--edge-ancestor-context) !important;
   stroke-width: 2.55 !important;
   filter:
-    drop-shadow(0 0 4px rgba(94, 234, 212, 0.72))
-    drop-shadow(0 0 12px rgba(94, 234, 212, 0.28));
+    drop-shadow(0 0 4px rgba(6, 182, 212, 0.72))
+    drop-shadow(0 0 12px rgba(6, 182, 212, 0.28));
 }
 .workflow-edge__path--ancestor-settings {
   stroke: var(--edge-ancestor-settings) !important;
-  stroke-width: 2.85 !important;
+  stroke-width: 2.65 !important;
+  stroke-dasharray: 7 3;
   filter:
-    drop-shadow(0 0 4px rgba(163, 230, 53, 0.72))
-    drop-shadow(0 0 13px rgba(20, 184, 166, 0.3));
+    drop-shadow(0 0 4px rgba(209, 216, 79, 0.72))
+    drop-shadow(0 0 13px rgba(209, 216, 79, 0.24));
+}
+.workflow-edge__path--ancestor-both {
+  stroke: var(--edge-ancestor-both) !important;
+  stroke-width: 2.95 !important;
+  filter:
+    drop-shadow(0 0 5px rgba(163, 230, 53, 0.82))
+    drop-shadow(0 0 16px rgba(20, 184, 166, 0.38));
 }
 
 .workflow-edge__path--active,
@@ -2559,15 +2656,19 @@ body {
 }
 
 .workflow-edge__path--ancestor.workflow-edge__path--active,
-.react-flow__edge:hover .workflow-edge__path--ancestor {
+.react-flow__edge:hover .workflow-edge__path--ancestor,
+.workflow-edge__path--ancestor-context.workflow-edge__path--active,
+.react-flow__edge:hover .workflow-edge__path--ancestor-context {
   filter:
-    drop-shadow(0 0 5px rgba(94, 234, 212, 0.8))
-    drop-shadow(0 0 14px rgba(94, 234, 212, 0.32));
+    drop-shadow(0 0 5px rgba(45, 212, 191, 0.8))
+    drop-shadow(0 0 14px rgba(45, 212, 191, 0.32));
   stroke-width: 2.75 !important;
 }
 
 .workflow-edge__path--ancestor-settings.workflow-edge__path--active,
-.react-flow__edge:hover .workflow-edge__path--ancestor-settings {
+.react-flow__edge:hover .workflow-edge__path--ancestor-settings,
+.workflow-edge__path--ancestor-both.workflow-edge__path--active,
+.react-flow__edge:hover .workflow-edge__path--ancestor-both {
   filter:
     drop-shadow(0 0 5px rgba(163, 230, 53, 0.86))
     drop-shadow(0 0 15px rgba(20, 184, 166, 0.38));
@@ -2602,12 +2703,17 @@ body {
   opacity: 1;
   border-color: rgba(124, 108, 255, 0.65);
 }
-.workflow-edge-badge[data-state="image"] { border-color: rgba(154, 161, 173, 0.34); }
+.workflow-edge-badge[data-state="none"] { border-color: rgba(104, 111, 123, 0.26); }
+.workflow-edge-badge[data-state="image"] { border-color: rgba(154, 161, 173, 0.42); }
 .workflow-edge-badge[data-state="context"] { border-color: rgba(56, 189, 248, 0.58); }
 .workflow-edge-badge[data-state="settings"] { border-color: rgba(245, 184, 75, 0.55); }
 .workflow-edge-badge[data-state="both"] { border-color: rgba(167, 139, 250, 0.68); }
-.workflow-edge-badge[data-state="ancestor"] { border-color: rgba(94, 234, 212, 0.72); }
-.workflow-edge-badge[data-state="ancestor-settings"] { border-color: rgba(163, 230, 53, 0.76); }
+.workflow-edge-badge[data-state="text"] { border-color: rgba(96, 165, 250, 0.52); }
+.workflow-edge-badge[data-state="text-settings"] { border-color: rgba(244, 114, 182, 0.68); }
+.workflow-edge-badge[data-state="ancestor"] { border-color: rgba(45, 212, 191, 0.66); }
+.workflow-edge-badge[data-state="ancestor-context"] { border-color: rgba(6, 182, 212, 0.72); }
+.workflow-edge-badge[data-state="ancestor-settings"] { border-color: rgba(209, 216, 79, 0.72); }
+.workflow-edge-badge[data-state="ancestor-both"] { border-color: rgba(163, 230, 53, 0.8); }
 
 .workflow-edge-badge__chip {
   min-height: 20px;
@@ -2636,15 +2742,21 @@ button.workflow-edge-badge__chip {
   color: #dce2ea;
 }
 
-.workflow-edge-badge__chip--image.is-on {
-  border-color: rgba(94, 234, 212, 0.58);
-  background: rgba(94, 234, 212, 0.14);
-  color: #aaf5e9;
+.workflow-edge-badge__chip--image[data-image-transfer="parent"] {
+  border-color: rgba(154, 161, 173, 0.62);
+  background: rgba(154, 161, 173, 0.14);
+  color: #e5e7eb;
 }
 
-.workflow-edge-badge__chip--image:disabled {
-  cursor: not-allowed;
-  opacity: 0.52;
+.workflow-edge-badge__chip--image[data-image-transfer="ancestor"] {
+  border-color: rgba(163, 230, 53, 0.64);
+  background: rgba(163, 230, 53, 0.15);
+  color: #e7ff9b;
+}
+
+.workflow-edge-badge__chip--image[data-image-transfer="off"] {
+  border-color: rgba(104, 111, 123, 0.34);
+  background: rgba(255, 255, 255, 0.025);
   color: #858b94;
 }
 
@@ -2726,6 +2838,38 @@ button.workflow-edge-badge__chip {
 .workflow-edge-popover__toggle input:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.workflow-edge-popover__field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+}
+
+.workflow-edge-popover__segmented {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.workflow-edge-popover__segmented button {
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.workflow-edge-popover__segmented button.is-selected {
+  border-color: rgba(124, 108, 255, 0.58);
+  background: rgba(124, 108, 255, 0.16);
+  color: var(--text);
 }
 
 .workflow-edge-popover__footer {

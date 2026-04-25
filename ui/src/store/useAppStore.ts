@@ -168,16 +168,19 @@ export type NodeSettings = {
   moderation: Moderation;
 };
 
+export type ImageTransferMode = "off" | "parent" | "ancestor";
+
 export type EdgeTransferData = {
   transferContext: boolean;
   transferSettings: boolean;
-  transferAncestorImages: boolean;
+  imageTransfer: ImageTransferMode;
+  transferAncestorImages?: boolean;
 };
 
 const DEFAULT_EDGE_TRANSFER: EdgeTransferData = {
   transferContext: true,
   transferSettings: true,
-  transferAncestorImages: false,
+  imageTransfer: "parent",
 };
 
 const FALLBACK_NODE_SETTINGS: NodeSettings = {
@@ -226,23 +229,71 @@ function sameNodeSettings(a: NodeSettings, b: NodeSettings): boolean {
   );
 }
 
-function normalizeEdgeTransferData(raw: unknown): EdgeTransferData {
+function isImageTransferMode(value: unknown): value is ImageTransferMode {
+  return value === "off" || value === "parent" || value === "ancestor";
+}
+
+export function normalizeEdgeTransferData(raw: unknown): EdgeTransferData {
   const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const transferContext =
     typeof obj.transferContext === "boolean"
       ? obj.transferContext
       : DEFAULT_EDGE_TRANSFER.transferContext;
+  const legacyAncestorImages = obj.transferAncestorImages;
+  const imageTransfer = isImageTransferMode(obj.imageTransfer)
+    ? obj.imageTransfer
+    : typeof legacyAncestorImages === "boolean"
+      ? legacyAncestorImages
+        ? "ancestor"
+        : "parent"
+      : DEFAULT_EDGE_TRANSFER.imageTransfer;
   return {
     transferContext,
     transferSettings:
       typeof obj.transferSettings === "boolean"
         ? obj.transferSettings
         : DEFAULT_EDGE_TRANSFER.transferSettings,
-    transferAncestorImages:
-      transferContext && typeof obj.transferAncestorImages === "boolean"
-        ? obj.transferAncestorImages
-        : false,
+    imageTransfer,
   };
+}
+
+export type EdgeVisualState =
+  | "none"
+  | "image"
+  | "context"
+  | "settings"
+  | "both"
+  | "text"
+  | "text-settings"
+  | "ancestor"
+  | "ancestor-context"
+  | "ancestor-settings"
+  | "ancestor-both";
+
+export function getEdgeVisualState(raw: unknown): EdgeVisualState {
+  const data = normalizeEdgeTransferData(raw);
+  if (data.imageTransfer === "ancestor") {
+    if (data.transferContext && data.transferSettings) return "ancestor-both";
+    if (data.transferContext) return "ancestor-context";
+    if (data.transferSettings) return "ancestor-settings";
+    return "ancestor";
+  }
+  if (data.imageTransfer === "off") {
+    if (data.transferContext && data.transferSettings) return "text-settings";
+    if (data.transferContext) return "text";
+    if (data.transferSettings) return "settings";
+    return "none";
+  }
+  if (data.transferContext && data.transferSettings) return "both";
+  if (data.transferContext) return "context";
+  if (data.transferSettings) return "settings";
+  return "image";
+}
+
+export function nextImageTransferMode(mode: ImageTransferMode): ImageTransferMode {
+  if (mode === "parent") return "ancestor";
+  if (mode === "ancestor") return "off";
+  return "parent";
 }
 
 function createGraphEdge(
@@ -623,8 +674,10 @@ type AppState = {
   addChildNodeAt: (parentClientId: ClientNodeId, position: { x: number; y: number }) => ClientNodeId;
   connectNodes: (sourceClientId: ClientNodeId, targetClientId: ClientNodeId) => void;
   updateEdgeTransfer: (edgeId: string, patch: Partial<EdgeTransferData>) => void;
-  toggleEdgeTransfer: (edgeId: string, key: keyof EdgeTransferData) => void;
-  toggleEdgeTransferQuiet: (edgeId: string, key: keyof EdgeTransferData) => void;
+  setEdgeImageTransfer: (edgeId: string, mode: ImageTransferMode) => void;
+  cycleEdgeImageTransferQuiet: (edgeId: string) => void;
+  toggleEdgeTransfer: (edgeId: string, key: "transferContext" | "transferSettings") => void;
+  toggleEdgeTransferQuiet: (edgeId: string, key: "transferContext" | "transferSettings") => void;
   updateNodeName: (clientId: ClientNodeId, name: string) => void;
   updateNodePrompt: (clientId: ClientNodeId, prompt: string) => void;
   updateNodeSettings: (clientId: ClientNodeId, patch: Partial<NodeSettings>) => void;
@@ -717,8 +770,15 @@ function buildEffectivePrompt(
     .filter((line): line is string => Boolean(line));
 
   if (contextLines.length === 0) return displayPrompt;
+  const incomingData = normalizeEdgeTransferData(findIncomingEdgeFor(edges, clientId)?.data);
+  const imageGuidance =
+    incomingData.imageTransfer === "off"
+      ? "No parent image is attached for this step."
+      : incomingData.imageTransfer === "ancestor"
+        ? "Use the attached parent and ancestor images as visual source material."
+        : "Use the attached parent image as the visual source.";
   return [
-    "Previous workflow context. Use this text as continuity guidance, and use the attached parent image as the visual source.",
+    `Previous workflow context. Use this text as continuity guidance. ${imageGuidance}`,
     ...contextLines,
     "",
     "Current node instruction:",
@@ -726,27 +786,46 @@ function buildEffectivePrompt(
   ].join("\n");
 }
 
-function collectAncestorImageNodeIds(
+function resolveNodeImageInputs(
   nodes: GraphNode[],
   edges: GraphEdge[],
   clientId: ClientNodeId,
-): string[] {
+): {
+  parentNode: GraphNode | null;
+  parentServerNodeId: string | null;
+  ancestorNodeIds: string[];
+  imageTransfer: ImageTransferMode;
+} {
   const incoming = findIncomingEdgeFor(edges, clientId);
   const incomingData = incoming ? normalizeEdgeTransferData(incoming.data) : null;
-  if (!incoming || !incomingData?.transferContext || !incomingData.transferAncestorImages) return [];
+  const parentNode = incoming ? nodes.find((n) => n.id === incoming.source) ?? null : null;
+  const imageTransfer = parentNode && incomingData ? incomingData.imageTransfer : "off";
+  const parentServerNodeId =
+    imageTransfer === "off" ? null : parentNode?.data.serverNodeId ?? null;
+  if (!parentNode || imageTransfer !== "ancestor") {
+    return { parentNode, parentServerNodeId, ancestorNodeIds: [], imageTransfer };
+  }
 
   const ancestorIds: string[] = [];
-  let currentId = incoming.source as ClientNodeId;
+  const seen = new Set<ClientNodeId>();
+  let currentId = parentNode.id as ClientNodeId;
   while (true) {
+    if (seen.has(currentId)) break;
+    seen.add(currentId);
     const edge = findIncomingEdgeFor(edges, currentId);
-    if (!edge || !normalizeEdgeTransferData(edge.data).transferContext) break;
+    if (!edge || normalizeEdgeTransferData(edge.data).imageTransfer === "off") break;
     const parent = nodes.find((n) => n.id === edge.source);
     if (!parent) break;
     if (parent.data.serverNodeId) ancestorIds.push(parent.data.serverNodeId);
     currentId = parent.id as ClientNodeId;
   }
 
-  return ancestorIds.reverse().slice(-3);
+  return {
+    parentNode,
+    parentServerNodeId,
+    ancestorNodeIds: ancestorIds.reverse().slice(-3),
+    imageTransfer,
+  };
 }
 
 function resolveEffectiveNodeSettings(
@@ -1510,6 +1589,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().scheduleGraphSave();
   },
 
+  setEdgeImageTransfer: (edgeId, mode) => {
+    const next = applyEdgeTransferPatch(get().graphNodes, get().graphEdges, edgeId, {
+      imageTransfer: mode,
+    });
+    if (!next) return;
+    set({
+      graphNodes: next.graphNodes,
+      graphEdges: next.graphEdges,
+      selectedEdgeId: edgeId,
+      selectedNodeId: null,
+    });
+    get().scheduleGraphSave();
+  },
+
+  cycleEdgeImageTransferQuiet: (edgeId) => {
+    const edge = get().graphEdges.find((e) => e.id === edgeId);
+    if (!edge) return;
+    const current = normalizeEdgeTransferData(edge.data);
+    const next = applyEdgeTransferPatch(get().graphNodes, get().graphEdges, edgeId, {
+      imageTransfer: nextImageTransferMode(current.imageTransfer),
+    });
+    if (!next) return;
+    set({
+      graphNodes: next.graphNodes,
+      graphEdges: next.graphEdges,
+      selectedEdgeId: null,
+    });
+    get().scheduleGraphSave();
+  },
+
   toggleEdgeTransfer: (edgeId, key) => {
     const edge = get().graphEdges.find((e) => e.id === edgeId);
     if (!edge) return;
@@ -1646,14 +1755,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     const displayPrompt = node.data.prompt;
     const effectivePrompt = buildEffectivePrompt(graphNodes, graphEdges, targetClientId);
     const nodeSettings = resolveEffectiveNodeSettings(graphNodes, graphEdges, targetClientId);
-    const parentNode = findParentNodeFor(graphNodes, graphEdges, targetClientId);
-    const parentServerNodeId = parentNode?.data.serverNodeId ?? null;
-    const ancestorNodeIds = collectAncestorImageNodeIds(graphNodes, graphEdges, targetClientId);
+    const { parentNode, parentServerNodeId, ancestorNodeIds, imageTransfer } = resolveNodeImageInputs(
+      graphNodes,
+      graphEdges,
+      targetClientId,
+    );
     if (!displayPrompt.trim()) {
       get().showToast(t("toast.promptRequired"), true);
       return false;
     }
-    if (parentNode && !parentServerNodeId) {
+    if (parentNode && imageTransfer !== "off" && !parentServerNodeId) {
       get().showToast(t("toast.nodeParentRequired"), true);
       return false;
     }

@@ -1,5 +1,12 @@
 import { useMemo, useState } from "react";
-import { useAppStore, type ImageNodeData, type ImageNodeStatus } from "../store/useAppStore";
+import {
+  getEdgeVisualState,
+  normalizeEdgeTransferData,
+  useAppStore,
+  type ImageNodeData,
+  type ImageNodeStatus,
+  type ImageTransferMode,
+} from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
 import { OptionGroup, type OptionItem } from "./OptionGroup";
@@ -41,6 +48,14 @@ function statusTone(status: ImageNodeStatus) {
   return "empty";
 }
 
+const IMAGE_TRANSFER_OPTIONS: ImageTransferMode[] = ["off", "parent", "ancestor"];
+
+function imageTransferLabelKey(mode: ImageTransferMode) {
+  if (mode === "ancestor") return "edgeBadge.imageAncestor";
+  if (mode === "off") return "edgeBadge.imageOff";
+  return "edgeBadge.imageParent";
+}
+
 export function NodeInspector() {
   const { t } = useI18n();
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -56,6 +71,7 @@ export function NodeInspector() {
   const updateNodePrompt = useAppStore((s) => s.updateNodePrompt);
   const updateNodeSettings = useAppStore((s) => s.updateNodeSettings);
   const updateEdgeTransfer = useAppStore((s) => s.updateEdgeTransfer);
+  const setEdgeImageTransfer = useAppStore((s) => s.setEdgeImageTransfer);
   const copyParentPromptToNode = useAppStore((s) => s.copyParentPromptToNode);
   const copyParentSettingsToNode = useAppStore((s) => s.copyParentSettingsToNode);
   const detachNodeFromParent = useAppStore((s) => s.detachNodeFromParent);
@@ -85,41 +101,24 @@ export function NodeInspector() {
   };
 
   if (selectedEdge && edgeParent && edgeChild) {
-    const transferContext = selectedEdge.data?.transferContext ?? true;
-    const edgeData = {
-      transferContext,
-      transferSettings: selectedEdge.data?.transferSettings ?? true,
-      transferAncestorImages: transferContext
-        ? (selectedEdge.data?.transferAncestorImages ?? false)
-        : false,
-    };
-    const edgeState =
-      edgeData.transferContext && edgeData.transferAncestorImages
-        ? edgeData.transferSettings
-          ? "ancestor-settings"
-          : "ancestor"
-        : edgeData.transferContext && edgeData.transferSettings
-          ? "both"
-        : edgeData.transferContext
-          ? "context"
-          : edgeData.transferSettings
-            ? "settings"
-            : "image";
+    const edgeData = normalizeEdgeTransferData(selectedEdge.data);
+    const edgeState = getEdgeVisualState(edgeData);
     return (
       <div className="node-inspector node-inspector--edge">
         <div className="section-title">{t("nodeInspector.connectionTitle")}</div>
         <div className="node-inspector__edge-state" data-state={edgeState}>
           <span
-            className={`node-inspector__edge-chip node-inspector__edge-chip--image${edgeData.transferAncestorImages ? " is-on" : ""}${edgeData.transferContext ? "" : " is-disabled"}`}
-            title={t("nodeInspector.transferAncestorImages")}
+            className={`node-inspector__edge-chip node-inspector__edge-chip--image${edgeData.imageTransfer !== "off" ? " is-on" : ""}`}
+            data-image-transfer={edgeData.imageTransfer}
+            title={t("edgeBadge.imageTitle")}
           >
-            {t("edgeBadge.image")}
+            {t(imageTransferLabelKey(edgeData.imageTransfer))}
           </span>
           <span className={`node-inspector__edge-chip node-inspector__edge-chip--context${edgeData.transferContext ? " is-on" : ""}`}>
-            {t(edgeData.transferContext ? "edgeBadge.contextOn" : "edgeBadge.contextOff")}
+            {t("edgeBadge.context")}
           </span>
           <span className={`node-inspector__edge-chip node-inspector__edge-chip--settings${edgeData.transferSettings ? " is-on" : ""}`}>
-            {t(edgeData.transferSettings ? "edgeBadge.settingsOn" : "edgeBadge.settingsOff")}
+            {t("edgeBadge.settings")}
           </span>
         </div>
         <div className="node-inspector__connection">
@@ -153,26 +152,24 @@ export function NodeInspector() {
               }
             />
           </label>
-          <label className="node-inspector__toggle-row">
+          <div className="node-inspector__toggle-row node-inspector__toggle-row--stacked">
             <span>
-              {t("nodeInspector.transferAncestorImages")}
-              <small>
-                {t(
-                  edgeData.transferAncestorImages
-                    ? "nodeInspector.transferAncestorImagesOn"
-                    : "nodeInspector.transferAncestorImagesOff",
-                )}
-              </small>
+              {t("nodeInspector.imageTransfer")}
+              <small>{t(`nodeInspector.imageTransfer${edgeData.imageTransfer[0].toUpperCase()}${edgeData.imageTransfer.slice(1)}`)}</small>
             </span>
-            <input
-              type="checkbox"
-              checked={edgeData.transferAncestorImages}
-              disabled={!edgeData.transferContext}
-              onChange={(event) =>
-                updateEdgeTransfer(selectedEdge.id, { transferAncestorImages: event.target.checked })
-              }
-            />
-          </label>
+            <div className="node-inspector__segmented" role="group" aria-label={t("nodeInspector.imageTransfer")}>
+              {IMAGE_TRANSFER_OPTIONS.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={edgeData.imageTransfer === mode ? "is-selected" : ""}
+                  onClick={() => setEdgeImageTransfer(selectedEdge.id, mode)}
+                >
+                  {t(imageTransferLabelKey(mode))}
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="node-inspector__toggle-row">
             <span>
               {t("nodeInspector.transferSettings")}

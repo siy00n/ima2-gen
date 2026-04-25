@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
 import { Panel, useReactFlow, useStore, useViewport } from "@xyflow/react";
-import type { GraphEdge, GraphNode } from "../store/useAppStore";
+import { getEdgeVisualState, type GraphEdge, type GraphNode, type EdgeVisualState } from "../store/useAppStore";
 import type { GraphMetaMap } from "../lib/graphMeta";
 
 type WorkflowMiniMapProps = {
@@ -25,23 +25,17 @@ const MAP_PADDING = 14;
 const FALLBACK_NODE_WIDTH = 282;
 const FALLBACK_NODE_HEIGHT = 240;
 
-function edgeState(edge: GraphEdge): "image" | "context" | "settings" | "both" | "ancestor" | "ancestor-settings" {
-  const transferContext = edge.data?.transferContext ?? true;
-  const transferSettings = edge.data?.transferSettings ?? true;
-  const transferAncestorImages = transferContext && (edge.data?.transferAncestorImages ?? false);
-  if (transferAncestorImages) return transferSettings ? "ancestor-settings" : "ancestor";
-  if (transferContext && transferSettings) return "both";
-  if (transferContext) return "context";
-  if (transferSettings) return "settings";
-  return "image";
-}
-
-function edgeColor(state: ReturnType<typeof edgeState>) {
+function edgeColor(state: EdgeVisualState) {
+  if (state === "ancestor-both") return "var(--edge-ancestor-both)";
+  if (state === "ancestor-context") return "var(--edge-ancestor-context)";
   if (state === "ancestor-settings") return "var(--edge-ancestor-settings)";
   if (state === "ancestor") return "var(--edge-ancestor)";
+  if (state === "text-settings") return "var(--edge-text-settings)";
+  if (state === "text") return "var(--edge-text)";
   if (state === "both") return "var(--edge-combined)";
   if (state === "context") return "var(--edge-context)";
   if (state === "settings") return "var(--edge-settings)";
+  if (state === "image") return "var(--edge-image)";
   return "var(--edge-off)";
 }
 
@@ -182,7 +176,7 @@ export function WorkflowMiniMap({ nodes, edges, graphMeta }: WorkflowMiniMapProp
             const source = layout.nodeById.get(edge.source);
             const target = layout.nodeById.get(edge.target);
             if (!source || !target) return null;
-            const state = edgeState(edge);
+            const state = getEdgeVisualState(edge.data);
             return (
               <line
                 key={edge.id}

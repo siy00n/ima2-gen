@@ -6,20 +6,21 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import {
+  getEdgeVisualState,
+  normalizeEdgeTransferData,
+  type ImageTransferMode,
   useAppStore,
-  type EdgeTransferData,
   type GraphEdge,
 } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
 
-function normalizeEdgeData(data: EdgeTransferData | undefined): EdgeTransferData {
-  const transferContext = data?.transferContext ?? true;
-  return {
-    transferContext,
-    transferSettings: data?.transferSettings ?? true,
-    transferAncestorImages: transferContext ? (data?.transferAncestorImages ?? false) : false,
-  };
+const IMAGE_TRANSFER_OPTIONS: ImageTransferMode[] = ["off", "parent", "ancestor"];
+
+function imageTransferLabelKey(mode: ImageTransferMode) {
+  if (mode === "ancestor") return "edgeBadge.imageAncestor";
+  if (mode === "off") return "edgeBadge.imageOff";
+  return "edgeBadge.imageParent";
 }
 
 function WorkflowEdgeImpl({
@@ -42,23 +43,14 @@ function WorkflowEdgeImpl({
   const selectedEdgeId = useAppStore((s) => s.selectedEdgeId);
   const selectEdge = useAppStore((s) => s.selectEdge);
   const updateEdgeTransfer = useAppStore((s) => s.updateEdgeTransfer);
+  const setEdgeImageTransfer = useAppStore((s) => s.setEdgeImageTransfer);
+  const cycleEdgeImageTransferQuiet = useAppStore((s) => s.cycleEdgeImageTransferQuiet);
   const toggleEdgeTransferQuiet = useAppStore((s) => s.toggleEdgeTransferQuiet);
   const detachSelectedEdge = useAppStore((s) => s.detachSelectedEdge);
-  const edgeData = normalizeEdgeData(data);
+  const edgeData = normalizeEdgeTransferData(data);
   const popoverOpen = selectedEdgeId === id;
   const active = selected || popoverOpen;
-  const edgeState =
-    edgeData.transferContext && edgeData.transferAncestorImages
-      ? edgeData.transferSettings
-        ? "ancestor-settings"
-        : "ancestor"
-      : edgeData.transferContext && edgeData.transferSettings
-      ? "both"
-      : edgeData.transferContext
-        ? "context"
-        : edgeData.transferSettings
-          ? "settings"
-          : "image";
+  const edgeState = getEdgeVisualState(edgeData);
   const parent = nodes.find((n) => n.id === source);
   const child = nodes.find((n) => n.id === target);
   const shortNodeId = (value: string | null | undefined) =>
@@ -79,10 +71,19 @@ function WorkflowEdgeImpl({
     targetPosition,
   });
 
-  const toggle = (key: keyof EdgeTransferData, event: React.MouseEvent<HTMLButtonElement>) => {
+  const toggle = (
+    key: "transferContext" | "transferSettings",
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     toggleEdgeTransferQuiet(id, key);
+  };
+
+  const cycleImageTransfer = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    cycleEdgeImageTransferQuiet(id);
   };
 
   const select = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -118,12 +119,12 @@ function WorkflowEdgeImpl({
         >
           <button
             type="button"
-            className={`workflow-edge-badge__chip workflow-edge-badge__chip--image${edgeData.transferAncestorImages ? " is-on" : ""}`}
-            onClick={(event) => toggle("transferAncestorImages", event)}
-            disabled={!edgeData.transferContext}
-            title={t("nodeInspector.transferAncestorImages")}
+            className={`workflow-edge-badge__chip workflow-edge-badge__chip--image${edgeData.imageTransfer !== "off" ? " is-on" : ""}`}
+            data-image-transfer={edgeData.imageTransfer}
+            onClick={cycleImageTransfer}
+            title={t("edgeBadge.imageTitle")}
           >
-            {t("edgeBadge.image")}
+            {t(imageTransferLabelKey(edgeData.imageTransfer))}
           </button>
           <button
             type="button"
@@ -165,17 +166,21 @@ function WorkflowEdgeImpl({
                 }
               />
             </label>
-            <label className="workflow-edge-popover__toggle">
-              <span>{t("nodeInspector.transferAncestorImages")}</span>
-              <input
-                type="checkbox"
-                checked={edgeData.transferAncestorImages}
-                disabled={!edgeData.transferContext}
-                onChange={(event) =>
-                  updateEdgeTransfer(id, { transferAncestorImages: event.target.checked })
-                }
-              />
-            </label>
+            <div className="workflow-edge-popover__field">
+              <span>{t("nodeInspector.imageTransfer")}</span>
+              <div className="workflow-edge-popover__segmented" role="group" aria-label={t("nodeInspector.imageTransfer")}>
+                {IMAGE_TRANSFER_OPTIONS.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={edgeData.imageTransfer === mode ? "is-selected" : ""}
+                    onClick={() => setEdgeImageTransfer(id, mode)}
+                  >
+                    {t(imageTransferLabelKey(mode))}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="workflow-edge-popover__toggle">
               <span>{t("nodeInspector.transferSettings")}</span>
               <input
