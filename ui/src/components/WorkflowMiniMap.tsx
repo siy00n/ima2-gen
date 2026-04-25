@@ -25,9 +25,11 @@ const MAP_PADDING = 14;
 const FALLBACK_NODE_WIDTH = 282;
 const FALLBACK_NODE_HEIGHT = 240;
 
-function edgeState(edge: GraphEdge): "image" | "context" | "settings" | "both" {
+function edgeState(edge: GraphEdge): "image" | "context" | "settings" | "both" | "ancestor" {
   const transferContext = edge.data?.transferContext ?? true;
   const transferSettings = edge.data?.transferSettings ?? true;
+  const transferAncestorImages = transferContext && (edge.data?.transferAncestorImages ?? false);
+  if (transferAncestorImages) return "ancestor";
   if (transferContext && transferSettings) return "both";
   if (transferContext) return "context";
   if (transferSettings) return "settings";
@@ -35,6 +37,7 @@ function edgeState(edge: GraphEdge): "image" | "context" | "settings" | "both" {
 }
 
 function edgeColor(state: ReturnType<typeof edgeState>) {
+  if (state === "ancestor") return "var(--edge-ancestor)";
   if (state === "both") return "var(--edge-combined)";
   if (state === "context") return "var(--edge-context)";
   if (state === "settings") return "var(--edge-settings)";

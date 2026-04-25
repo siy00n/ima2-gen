@@ -48,7 +48,9 @@ function WorkflowEdgeImpl({
   const popoverOpen = selectedEdgeId === id;
   const active = selected || popoverOpen;
   const edgeState =
-    edgeData.transferContext && edgeData.transferSettings
+    edgeData.transferContext && edgeData.transferAncestorImages
+      ? "ancestor"
+      : edgeData.transferContext && edgeData.transferSettings
       ? "both"
       : edgeData.transferContext
         ? "context"
