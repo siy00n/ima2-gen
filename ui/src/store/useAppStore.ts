@@ -353,6 +353,25 @@ export type ImageNodeData = {
 export type GraphNode = FlowNode<ImageNodeData>;
 export type GraphEdge = FlowEdge<EdgeTransferData>;
 
+function normalizeGraphParentPointers(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const incomingByTarget = new Map(edges.map((edge) => [edge.target, edge]));
+
+  return nodes.map((node) => {
+    const incoming = incomingByTarget.get(node.id);
+    const parent = incoming ? nodeById.get(incoming.source) : null;
+    const nextParentServerNodeId = parent?.data.serverNodeId ?? null;
+    if (node.data.parentServerNodeId === nextParentServerNodeId) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        parentServerNodeId: nextParentServerNodeId,
+      },
+    };
+  });
+}
+
 function mapSessionToGraph(session: SessionFull): {
   graphNodes: GraphNode[];
   graphEdges: GraphEdge[];
@@ -406,8 +425,9 @@ function mapSessionToGraph(session: SessionFull): {
     type: "workflowEdge",
     data: normalizeEdgeTransferData(e.data),
   }));
+  const normalizedNodes = normalizeGraphParentPointers(graphNodes, graphEdges);
   return {
-    graphNodes: syncEffectiveNodeSettings(graphNodes, graphEdges),
+    graphNodes: syncEffectiveNodeSettings(normalizedNodes, graphEdges),
     graphEdges,
     graphVersion: session.graphVersion,
   };
@@ -933,12 +953,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().scheduleGraphSave();
   },
   setGraphEdges: (graphEdges) => {
+    const nextEdges = graphEdges.map((e) => ({
+      ...e,
+      type: "workflowEdge",
+      data: normalizeEdgeTransferData(e.data),
+    }));
     set({
-      graphEdges: graphEdges.map((e) => ({
-        ...e,
-        type: "workflowEdge",
-        data: normalizeEdgeTransferData(e.data),
-      })),
+      graphNodes: normalizeGraphParentPointers(get().graphNodes, nextEdges),
+      graphEdges: nextEdges,
     });
     get().scheduleGraphSave();
   },
@@ -1230,7 +1252,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       data: {
         clientId,
         serverNodeId: null,
-        parentServerNodeId: source.data.parentServerNodeId,
+        parentServerNodeId: parent.data.serverNodeId,
         name,
         prompt: source.data.prompt,
         imageUrl: null,
@@ -1415,9 +1437,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const effectivePrompt = buildEffectivePrompt(graphNodes, graphEdges, targetClientId);
     const nodeSettings = resolveEffectiveNodeSettings(graphNodes, graphEdges, targetClientId);
     const parentNode = findParentNodeFor(graphNodes, graphEdges, targetClientId);
-    const parentServerNodeId = parentNode?.data.serverNodeId ?? node.data.parentServerNodeId;
+    const parentServerNodeId = parentNode?.data.serverNodeId ?? null;
     if (!displayPrompt.trim()) {
       get().showToast(t("toast.promptRequired"), true);
+      return;
+    }
+    if (parentNode && !parentServerNodeId) {
+      get().showToast(t("toast.nodeParentRequired"), true);
       return;
     }
     const s = get();
@@ -1477,9 +1503,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         requestId: flightId,
         sessionId: requestSessionId,
         clientNodeId: targetClientId,
-        ...(s.referenceImages.length && !parentServerNodeId
-          ? { references: s.referenceImages.map((d) => d.replace(/^data:[^;]+;base64,/, "")) }
-          : {}),
       });
       if (get().activeSessionId === requestSessionId) {
         set({
@@ -1579,9 +1602,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const doomed = get().graphNodes.find((n) => n.id === clientId);
     const reqId = doomed?.data?.pendingRequestId;
     if (reqId) void cancelInflight(reqId);
+    const nextEdges = get().graphEdges.filter((e) => e.source !== clientId && e.target !== clientId);
+    const nextNodes = get().graphNodes.filter((n) => n.id !== clientId);
     set({
-      graphNodes: get().graphNodes.filter((n) => n.id !== clientId),
-      graphEdges: get().graphEdges.filter((e) => e.source !== clientId && e.target !== clientId),
+      graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
+      graphEdges: nextEdges,
       selectedNodeId: get().selectedNodeId === clientId ? null : get().selectedNodeId,
       selectedEdgeId: null,
     });
@@ -1596,9 +1621,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         void cancelInflight(n.data.pendingRequestId);
       }
     }
+    const nextEdges = get().graphEdges.filter((e) => !set_.has(e.source) && !set_.has(e.target));
+    const nextNodes = get().graphNodes.filter((n) => !set_.has(n.id));
     set({
-      graphNodes: get().graphNodes.filter((n) => !set_.has(n.id)),
-      graphEdges: get().graphEdges.filter((e) => !set_.has(e.source) && !set_.has(e.target)),
+      graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
+      graphEdges: nextEdges,
       selectedNodeId: selectedNodeId && set_.has(selectedNodeId) ? null : selectedNodeId,
       selectedEdgeId: null,
     });
