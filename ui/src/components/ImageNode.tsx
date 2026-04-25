@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, type CSSProperties } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useAppStore, type ImageNodeData, type GraphNode } from "../store/useAppStore";
 import { useI18n } from "../i18n";
@@ -34,10 +34,9 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
 
   const isBusy = d.status === "pending" || d.status === "reconciling";
   const canBranch = d.status === "ready" && !!d.serverNodeId;
-  const shortId = (d.serverNodeId ?? id).replace(/^n_/, "").slice(0, 5);
   const graphLevel = d.graphLevel ?? 0;
-  const graphIsolated = d.graphIsolated === true;
-  const promptSummary = d.prompt.trim() || t("node.promptPlaceholder");
+  const graphTreeColor = d.graphTreeColor ?? "#a78bfa";
+  const nodeName = d.name?.trim() || t("node.untitledName");
   const settingsMeta = [
     d.provider ?? "OAuth",
     d.settings?.sizePreset === "custom"
@@ -82,14 +81,14 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
 
   return (
     <div
-      className={`image-node image-node--${d.status}${graphIsolated ? " image-node--isolated" : ""}${selected ? " image-node--selected" : ""}`}
+      className={`image-node image-node--${d.status}${selected ? " image-node--selected" : ""}`}
+      style={{ "--node-tree-color": graphTreeColor } as CSSProperties}
     >
       <Handle type="target" position={Position.Left} className="image-node__handle" />
       <div className="image-node__header">
         <div className="image-node__title">
-          <span className="image-node__id">{shortId}</span>
           <span className="image-node__level">L{graphLevel}</span>
-          <span className="image-node__name">{promptSummary}</span>
+          <span className="image-node__name">{nodeName}</span>
         </div>
         <div className="image-node__header-actions nodrag">
           <span className={`image-node__status-pill image-node__status-pill--${d.status}`}>

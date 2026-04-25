@@ -299,6 +299,18 @@ function resolveNodeSize(settings: NodeSettings): string {
     : settings.sizePreset;
 }
 
+function nextNodeName(nodes: GraphNode[]): string {
+  const used = new Set(
+    nodes
+      .map((node) => node.data.name?.trim())
+      .filter((name): name is string => Boolean(name)),
+  );
+  for (let index = 1; ; index += 1) {
+    const name = `Node ${index}`;
+    if (!used.has(name)) return name;
+  }
+}
+
 export type ImageNodeStatus =
   | "empty"
   | "pending"
@@ -312,6 +324,7 @@ export type ImageNodeData = {
   clientId: ClientNodeId;
   serverNodeId: string | null;
   parentServerNodeId: string | null;
+  name?: string;
   prompt: string;
   imageUrl: string | null;
   status: ImageNodeStatus;
@@ -332,6 +345,9 @@ export type ImageNodeData = {
   createdAt?: number;
   graphLevel?: number;
   graphIsolated?: boolean;
+  graphTreeRootId?: string;
+  graphTreeIndex?: number;
+  graphTreeColor?: string;
 };
 
 export type GraphNode = FlowNode<ImageNodeData>;
@@ -355,6 +371,7 @@ function mapSessionToGraph(session: SessionFull): {
       clientId: n.id as ClientNodeId,
       serverNodeId: (d.serverNodeId ?? null) as string | null,
       parentServerNodeId: (d.parentServerNodeId ?? null) as string | null,
+      name: typeof d.name === "string" ? d.name : undefined,
       prompt: typeof d.prompt === "string" ? d.prompt : "",
       imageUrl,
       status: (d.status ?? (imageUrl ? "ready" : "empty")) as ImageNodeStatus,
@@ -468,6 +485,7 @@ type AppState = {
   connectNodes: (sourceClientId: ClientNodeId, targetClientId: ClientNodeId) => void;
   updateEdgeTransfer: (edgeId: string, patch: Partial<EdgeTransferData>) => void;
   toggleEdgeTransfer: (edgeId: string, key: keyof EdgeTransferData) => void;
+  updateNodeName: (clientId: ClientNodeId, name: string) => void;
   updateNodePrompt: (clientId: ClientNodeId, prompt: string) => void;
   updateNodeSettings: (clientId: ClientNodeId, patch: Partial<NodeSettings>) => void;
   copyParentPromptToNode: (clientId: ClientNodeId) => void;
@@ -1104,22 +1122,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     const depth = 0;
     const siblings = get().graphNodes.filter((n) => !n.data.parentServerNodeId).length;
     const settings = currentNodeSettings(get());
+    const name = nextNodeName(get().graphNodes);
     const node: GraphNode = {
       id: clientId,
       type: "imageNode",
       position: initialPos(depth, siblings),
-        data: {
-          clientId,
-          serverNodeId: null,
-          parentServerNodeId: null,
-          prompt: "",
-          imageUrl: null,
-          status: "empty",
-          pendingRequestId: null,
-          pendingPhase: null,
-          settings,
-        },
-      };
+      data: {
+        clientId,
+        serverNodeId: null,
+        parentServerNodeId: null,
+        name,
+        prompt: "",
+        imageUrl: null,
+        status: "empty",
+        pendingRequestId: null,
+        pendingPhase: null,
+        settings,
+      },
+    };
     set({ graphNodes: [...get().graphNodes, node], selectedNodeId: clientId, selectedEdgeId: null });
     get().scheduleGraphSave();
     return clientId;
@@ -1135,22 +1155,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     const clientId = newClientNodeId();
     const siblings = get().graphEdges.filter((e) => e.source === parentClientId).length;
     const settings = cloneNodeSettings(parent.data.settings);
+    const name = nextNodeName(get().graphNodes);
     const node: GraphNode = {
       id: clientId,
       type: "imageNode",
       position: { x: parent.position.x + 360, y: parent.position.y + siblings * 320 },
-        data: {
-          clientId,
-          serverNodeId: null,
-          parentServerNodeId: parent.data.serverNodeId,
-          prompt: "",
-          imageUrl: null,
-          status: "empty",
-          pendingRequestId: null,
-          pendingPhase: null,
-          settings,
-        },
-      };
+      data: {
+        clientId,
+        serverNodeId: null,
+        parentServerNodeId: parent.data.serverNodeId,
+        name,
+        prompt: "",
+        imageUrl: null,
+        status: "empty",
+        pendingRequestId: null,
+        pendingPhase: null,
+        settings,
+      },
+    };
     const edge = createGraphEdge(parentClientId, clientId);
     set({
       graphNodes: [...get().graphNodes, node],
@@ -1171,6 +1193,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const clientId = newClientNodeId();
       const depth = 0;
       const siblings = get().graphNodes.filter((n) => !n.data.parentServerNodeId).length;
+      const name = nextNodeName(get().graphNodes);
       const node: GraphNode = {
         id: clientId,
         type: "imageNode",
@@ -1179,6 +1202,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           clientId,
           serverNodeId: null,
           parentServerNodeId: null,
+          name,
           prompt: source.data.prompt,
           imageUrl: null,
           status: "empty",
@@ -1198,6 +1222,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const clientId = newClientNodeId();
     const siblings = get().graphEdges.filter((e) => e.source === parentClientId).length;
+    const name = nextNodeName(get().graphNodes);
     const node: GraphNode = {
       id: clientId,
       type: "imageNode",
@@ -1206,6 +1231,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         clientId,
         serverNodeId: null,
         parentServerNodeId: source.data.parentServerNodeId,
+        name,
         prompt: source.data.prompt,
         imageUrl: null,
         status: "empty",
@@ -1223,6 +1249,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
     get().scheduleGraphSave();
     return clientId;
+  },
+
+  updateNodeName: (clientId, name) => {
+    set({
+      graphNodes: get().graphNodes.map((n) =>
+        n.id === clientId ? { ...n, data: { ...n.data, name } } : n,
+      ),
+    });
+    get().scheduleGraphSave();
   },
 
   updateNodePrompt: (clientId, prompt) => {
@@ -1343,6 +1378,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!source) return sourceClientId;
     const clientId = newClientNodeId();
     const rootSiblings = get().graphNodes.filter((n) => !n.data.parentServerNodeId).length;
+    const name = nextNodeName(get().graphNodes);
     const node: GraphNode = {
       id: clientId,
       type: "imageNode",
@@ -1351,6 +1387,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         clientId,
         serverNodeId: null,
         parentServerNodeId: null,
+        name,
         prompt: source.data.prompt,
         imageUrl: null,
         status: "empty",
@@ -1577,6 +1614,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     const clientId = newClientNodeId();
     const settings = cloneNodeSettings(parent.data.settings);
+    const name = nextNodeName(get().graphNodes);
     const node: GraphNode = {
       id: clientId,
       type: "imageNode",
@@ -1585,6 +1623,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         clientId,
         serverNodeId: null,
         parentServerNodeId: parent.data.serverNodeId,
+        name,
         prompt: "",
         imageUrl: null,
         status: "empty",
@@ -1700,6 +1739,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
     const clientId = newClientNodeId();
+    const name = nextNodeName(get().graphNodes);
     const currentSettings = currentNodeSettings(get());
     try {
       const res = await postNodeImport({
@@ -1718,6 +1758,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           clientId,
           serverNodeId: res.nodeId,
           parentServerNodeId: null,
+          name,
           prompt: res.prompt,
           imageUrl: res.url,
           status: "ready",
@@ -1987,10 +2028,16 @@ let saveGraphPromise: Promise<void> | null = null;
 // makes reloaded graphs look like aborted work and trips reconcileGraphPending.
 // This function is payload-only: the in-memory `graphNodes` is NOT touched.
 function sanitizeForSave(d: ImageNodeData): Record<string, unknown> {
+  const persisted = { ...(d as unknown as Record<string, unknown>) };
+  delete persisted.graphLevel;
+  delete persisted.graphIsolated;
+  delete persisted.graphTreeRootId;
+  delete persisted.graphTreeIndex;
+  delete persisted.graphTreeColor;
   const shouldSanitize = d.status === "pending" || d.status === "reconciling";
-  if (!shouldSanitize) return d as unknown as Record<string, unknown>;
+  if (!shouldSanitize) return persisted;
   return {
-    ...(d as unknown as Record<string, unknown>),
+    ...persisted,
     status: "empty",
     pendingRequestId: null,
     pendingPhase: null,

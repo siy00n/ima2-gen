@@ -44,13 +44,22 @@ function NodeCanvasInner() {
   const displayNodes = useMemo(
     () =>
       nodes.map((node) => {
-        const meta = graphMeta.get(node.id) ?? { level: 0, isolated: true };
+        const meta = graphMeta.get(node.id) ?? {
+          level: 0,
+          isolated: true,
+          treeRootId: node.id,
+          treeIndex: 0,
+          treeColor: "#a78bfa",
+        };
         return {
           ...node,
           data: {
             ...node.data,
             graphLevel: meta.level,
             graphIsolated: meta.isolated,
+            graphTreeRootId: meta.treeRootId,
+            graphTreeIndex: meta.treeIndex,
+            graphTreeColor: meta.treeColor,
           },
         };
       }),

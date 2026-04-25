@@ -1,4 +1,4 @@
-import { useMemo, useState, type PointerEvent, type WheelEvent } from "react";
+import { useMemo, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
 import { Panel, useReactFlow, useStore, useViewport } from "@xyflow/react";
 import type { GraphEdge, GraphNode } from "../store/useAppStore";
 import type { GraphMetaMap } from "../lib/graphMeta";
@@ -195,7 +195,13 @@ export function WorkflowMiniMap({ nodes, edges, graphMeta }: WorkflowMiniMapProp
         </g>
         <g className="workflow-minimap__nodes">
           {layout.miniNodes.map((miniNode) => {
-            const meta = graphMeta.get(miniNode.node.id) ?? { level: 0, isolated: true };
+            const meta = graphMeta.get(miniNode.node.id) ?? {
+              level: 0,
+              isolated: true,
+              treeRootId: miniNode.node.id,
+              treeIndex: 0,
+              treeColor: "#a78bfa",
+            };
             const width = Math.max(8, miniNode.width * layout.scale);
             const height = Math.max(6, miniNode.height * layout.scale);
             const x = layout.toMiniX(miniNode.x);
@@ -203,7 +209,8 @@ export function WorkflowMiniMap({ nodes, edges, graphMeta }: WorkflowMiniMapProp
             return (
               <g
                 key={miniNode.node.id}
-                className={`workflow-minimap__node${meta.isolated ? " workflow-minimap__node--isolated" : ""}`}
+                className="workflow-minimap__node"
+                style={{ "--node-tree-color": meta.treeColor } as CSSProperties}
               >
                 <rect x={x} y={y} width={width} height={height} rx="3" />
                 {width >= 24 && height >= 14 ? (

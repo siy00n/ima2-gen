@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { useAppStore, type ImageNodeData } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
 import { OptionGroup, type OptionItem } from "./OptionGroup";
+import { deriveGraphMeta } from "../lib/graphMeta";
 import type { Format, Moderation, Quality, SizePreset } from "../types";
 import {
   SIZE_PRESETS_ROW1,
@@ -40,6 +42,7 @@ export function NodeInspector() {
   const addRootNode = useAppStore((s) => s.addRootNode);
   const addChildNode = useAppStore((s) => s.addChildNode);
   const duplicateBranchRoot = useAppStore((s) => s.duplicateBranchRoot);
+  const updateNodeName = useAppStore((s) => s.updateNodeName);
   const updateNodePrompt = useAppStore((s) => s.updateNodePrompt);
   const updateNodeSettings = useAppStore((s) => s.updateNodeSettings);
   const updateEdgeTransfer = useAppStore((s) => s.updateEdgeTransfer);
@@ -59,6 +62,12 @@ export function NodeInspector() {
   const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : null;
   const edgeParent = selectedEdge ? nodes.find((n) => n.id === selectedEdge.source) : null;
   const edgeChild = selectedEdge ? nodes.find((n) => n.id === selectedEdge.target) : null;
+  const graphMeta = useMemo(() => deriveGraphMeta(nodes, edges), [nodes, edges]);
+  const shortNodeId = (value: string | null | undefined) =>
+    value ? value.replace(/^n_/, "").slice(0, 8) : "-";
+  const nodeLabel = (node: { data: ImageNodeData; id: string }) =>
+    node.data.name?.trim() ||
+    (node.data.serverNodeId ? shortNodeId(node.data.serverNodeId) : shortNodeId(node.id));
 
   const importCurrent = () => {
     void importCurrentImageAsNode();
@@ -94,11 +103,11 @@ export function NodeInspector() {
         <div className="node-inspector__connection">
           <button type="button" onClick={() => selectNode(edgeParent.id)}>
             {t("nodeInspector.parentNode")}
-            <span>{edgeParent.data.prompt || edgeParent.data.serverNodeId || edgeParent.id}</span>
+            <span>{nodeLabel(edgeParent)}</span>
           </button>
           <button type="button" onClick={() => selectNode(edgeChild.id)}>
             {t("nodeInspector.childNode")}
-            <span>{edgeChild.data.prompt || edgeChild.data.serverNodeId || edgeChild.id}</span>
+            <span>{nodeLabel(edgeChild)}</span>
           </button>
         </div>
         <p className="node-inspector__notice">{t("nodeInspector.connectionNotice")}</p>
@@ -194,6 +203,13 @@ export function NodeInspector() {
   const imageSrc = data.imageUrl ?? null;
   const parent = selected ? nodes.find((n) => edges.some((e) => e.source === n.id && e.target === selected.id)) : null;
   const hasParent = !!parent;
+  const selectedMeta = graphMeta.get(selected.id) ?? {
+    level: 0,
+    isolated: true,
+    treeRootId: selected.id,
+    treeIndex: 0,
+    treeColor: "#a78bfa",
+  };
 
   const QUALITY_ITEMS = [
     { value: "low" as const, label: t("quality.lowLabel"), sub: t("quality.lowSub") },
@@ -261,6 +277,22 @@ export function NodeInspector() {
   return (
     <div className="node-inspector">
       <div className="section-title">{t("nodeInspector.title")}</div>
+      <div className="node-inspector__node-header">
+        <label className="node-inspector__name-field">
+          <span>{t("nodeInspector.nodeName")}</span>
+          <input
+            type="text"
+            value={data.name ?? ""}
+            onChange={(e) => updateNodeName(selected.id, e.target.value)}
+            placeholder={t("node.untitledName")}
+          />
+        </label>
+        <div className="node-inspector__id-meta">
+          <span>{t("nodeInspector.clientId")}: {shortNodeId(selected.id)}</span>
+          <span>{t("nodeInspector.serverId")}: {shortNodeId(data.serverNodeId)}</span>
+          <span>{t("nodeInspector.level")}: L{selectedMeta.level}</span>
+        </div>
+      </div>
       <div className="node-inspector__preview">
         {imageSrc ? (
           <img src={imageSrc} alt={t("node.nodeImageAlt")} />

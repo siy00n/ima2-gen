@@ -54,8 +54,14 @@ function WorkflowEdgeImpl({
           : "image";
   const parent = nodes.find((n) => n.id === source);
   const child = nodes.find((n) => n.id === target);
-  const parentLabel = parent?.data.prompt.trim() || parent?.data.serverNodeId?.slice(0, 8) || source;
-  const childLabel = child?.data.prompt.trim() || child?.data.serverNodeId?.slice(0, 8) || target;
+  const shortNodeId = (value: string | null | undefined) =>
+    value ? value.replace(/^n_/, "").slice(0, 8) : "-";
+  const parentLabel =
+    parent?.data.name?.trim() ||
+    (parent?.data.serverNodeId ? shortNodeId(parent.data.serverNodeId) : shortNodeId(source));
+  const childLabel =
+    child?.data.name?.trim() ||
+    (child?.data.serverNodeId ? shortNodeId(child.data.serverNodeId) : shortNodeId(target));
 
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
