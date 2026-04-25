@@ -27,6 +27,7 @@
   --edge-settings: #f5b84b;
   --edge-combined: #a78bfa;
   --edge-ancestor: #5eead4;
+  --edge-ancestor-settings: #c084fc;
   --edge-off: #686f7b;
   --node-tree-color: #a78bfa;
   --minimap-viewport: rgba(255, 255, 255, 0.09);
@@ -2069,6 +2070,11 @@ body {
   opacity: 1;
 }
 
+.workflow-minimap__edge[data-state="ancestor-settings"] {
+  stroke-width: 2.55;
+  opacity: 1;
+}
+
 .workflow-minimap__node rect {
   fill: color-mix(in srgb, var(--node-tree-color, #a78bfa) 58%, #10131a);
   stroke: color-mix(in srgb, var(--node-tree-color, #a78bfa) 86%, #ffffff 14%);
@@ -2127,6 +2133,13 @@ body {
     drop-shadow(0 0 4px rgba(94, 234, 212, 0.72))
     drop-shadow(0 0 12px rgba(94, 234, 212, 0.28));
 }
+.workflow-edge__path--ancestor-settings {
+  stroke: var(--edge-ancestor-settings) !important;
+  stroke-width: 2.65 !important;
+  filter:
+    drop-shadow(0 0 4px rgba(192, 132, 252, 0.78))
+    drop-shadow(0 0 13px rgba(94, 234, 212, 0.25));
+}
 
 .workflow-edge__path--active,
 .react-flow__edge:hover .workflow-edge__path {
@@ -2140,6 +2153,14 @@ body {
     drop-shadow(0 0 5px rgba(94, 234, 212, 0.8))
     drop-shadow(0 0 14px rgba(94, 234, 212, 0.32));
   stroke-width: 2.75 !important;
+}
+
+.workflow-edge__path--ancestor-settings.workflow-edge__path--active,
+.react-flow__edge:hover .workflow-edge__path--ancestor-settings {
+  filter:
+    drop-shadow(0 0 5px rgba(192, 132, 252, 0.84))
+    drop-shadow(0 0 15px rgba(94, 234, 212, 0.34));
+  stroke-width: 2.85 !important;
 }
 
 .workflow-edge-badge {
@@ -2175,6 +2196,7 @@ body {
 .workflow-edge-badge[data-state="settings"] { border-color: rgba(245, 184, 75, 0.55); }
 .workflow-edge-badge[data-state="both"] { border-color: rgba(167, 139, 250, 0.68); }
 .workflow-edge-badge[data-state="ancestor"] { border-color: rgba(94, 234, 212, 0.72); }
+.workflow-edge-badge[data-state="ancestor-settings"] { border-color: rgba(192, 132, 252, 0.74); }
 
 .workflow-edge-badge__chip {
   min-height: 20px;

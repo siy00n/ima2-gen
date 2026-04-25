@@ -49,7 +49,9 @@ function WorkflowEdgeImpl({
   const active = selected || popoverOpen;
   const edgeState =
     edgeData.transferContext && edgeData.transferAncestorImages
-      ? "ancestor"
+      ? edgeData.transferSettings
+        ? "ancestor-settings"
+        : "ancestor"
       : edgeData.transferContext && edgeData.transferSettings
       ? "both"
       : edgeData.transferContext
