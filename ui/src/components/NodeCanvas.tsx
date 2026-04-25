@@ -29,6 +29,8 @@ function NodeCanvasInner() {
   const connectNodes = useAppStore((s) => s.connectNodes);
   const deleteNodes = useAppStore((s) => s.deleteNodes);
   const selectNode = useAppStore((s) => s.selectNode);
+  const selectEdge = useAppStore((s) => s.selectEdge);
+  const detachNodeFromParent = useAppStore((s) => s.detachNodeFromParent);
   const sessionLoading = useAppStore((s) => s.sessionLoading);
 
   const { screenToFlowPosition } = useReactFlow();
@@ -73,6 +75,12 @@ function NodeCanvasInner() {
     (deleted: GraphNode[]) => deleteNodes(deleted.map((n) => n.id)),
     [deleteNodes],
   );
+  const onEdgesDelete = useCallback(
+    (deleted: GraphEdge[]) => {
+      for (const edge of deleted) detachNodeFromParent(edge.target);
+    },
+    [detachNodeFromParent],
+  );
 
   return (
     <main className="node-canvas" ref={wrapperRef}>
@@ -91,7 +99,9 @@ function NodeCanvasInner() {
             onConnect={onConnect}
             onConnectEnd={onConnectEnd}
             onNodesDelete={onNodesDelete}
+            onEdgesDelete={onEdgesDelete}
             onNodeClick={(_, node) => selectNode(node.id)}
+            onEdgeClick={(_, edge) => selectEdge(edge.id)}
             onPaneClick={() => selectNode(null)}
             nodeTypes={nodeTypes}
             fitView

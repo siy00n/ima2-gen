@@ -1510,6 +1510,70 @@ body {
   gap: 6px;
 }
 
+.node-inspector__actions--parent {
+  padding-bottom: 2px;
+}
+
+.node-inspector__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.node-inspector__settings .option-group {
+  margin: 0;
+}
+
+.node-inspector__settings .option-row {
+  gap: 4px;
+}
+
+.node-inspector__settings .option-btn {
+  min-height: 34px;
+  padding: 6px 7px;
+  font-size: 10px;
+}
+
+.node-inspector__size-separator {
+  align-self: center;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.node-inspector__connection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.node-inspector__connection button {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.node-inspector__connection span {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .node-inspector__actions button,
 .node-inspector__button,
 .node-inspector__primary,
@@ -1538,7 +1602,8 @@ body {
 
 .node-inspector__actions button:disabled,
 .node-inspector__button:disabled,
-.node-inspector__primary:disabled {
+.node-inspector__primary:disabled,
+.node-inspector__danger:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

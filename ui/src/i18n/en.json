@@ -31,6 +31,8 @@
     "forkStarted": "Prompt imported. Edit and generate again.",
     "nodeParentRequired": "Generate the parent image before branching from it.",
     "nodeTargetMustBeEmpty": "Connect only to an empty node.",
+    "nodeTargetBusy": "Wait for that node to finish before reconnecting it.",
+    "nodeCycleRejected": "That connection would create a loop.",
     "nodeImportNeedsFile": "Only saved history images can be imported into Node mode.",
     "nodeImported": "Imported into Node mode",
     "nodeImportFailed": "Failed to import into Node mode."
@@ -235,7 +237,7 @@
   },
   "sidebar": {
     "appName": "Image Generator",
-    "nodeModeHint": "In node mode, click a node to edit its prompt and generate. Settings on the right panel (quality/size) apply to every new result."
+    "nodeModeHint": "In node mode, click a node to edit its prompt, settings, and branches."
   },
   "nodeCanvas": {
     "loading": "Loading session...",
@@ -248,7 +250,15 @@
     "noSelection": "Select a node to inspect it, edit its prompt, and create branches.",
     "importCurrent": "Import current image",
     "createVariation": "Create variation",
-    "statusValue": "{value}"
+    "statusValue": "{value}",
+    "nodeSettings": "Node settings",
+    "copyParentSettings": "Load parent settings",
+    "copyParentPrompt": "Load parent prompt",
+    "detachConnection": "Detach",
+    "connectionTitle": "Selected connection",
+    "parentNode": "Parent",
+    "childNode": "Child",
+    "addSiblingChild": "Add child here"
   },
   "apiDisabled": {
     "title": "{provider} unavailable",

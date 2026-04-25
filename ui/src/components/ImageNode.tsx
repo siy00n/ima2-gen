@@ -70,9 +70,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
 
   return (
     <div className={`image-node image-node--${d.status}${selected ? " image-node--selected" : ""}`}>
-      {d.parentServerNodeId ? (
-        <Handle type="target" position={Position.Left} className="image-node__handle" />
-      ) : null}
+      <Handle type="target" position={Position.Left} className="image-node__handle" />
       <div className="image-node__preview">
         {d.imageUrl && d.status !== "asset-missing" ? (
           <img src={d.imageUrl} alt={t("node.nodeImageAlt")} />
