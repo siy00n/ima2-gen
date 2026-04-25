@@ -173,6 +173,7 @@ export function restoreHistoryItem(filename: string, trashId: string): Promise<{
 export type NodeGenerateRequest = {
   parentNodeId: string | null;
   ancestorNodeIds?: string[];
+  visualContext?: NodeVisualContextItem[];
   prompt: string;
   displayPrompt?: string;
   effectivePrompt?: string;
@@ -185,6 +186,15 @@ export type NodeGenerateRequest = {
   requestId?: string;
   sessionId?: string | null;
   clientNodeId?: string | null;
+};
+
+export type NodeVisualContextItem = {
+  relation: "ancestor" | "parent";
+  nodeId: string;
+  clientNodeId?: string | null;
+  name?: string | null;
+  currentPrompt?: string | null;
+  generatedPrompt?: string | null;
 };
 
 export type NodeGenerateResponse = {

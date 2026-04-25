@@ -25,6 +25,7 @@ import {
   deleteSession as apiDeleteSession,
   saveSessionGraph,
   type HistoryItem,
+  type NodeVisualContextItem,
   type SessionSummary,
   type SessionFull,
 } from "../lib/api";
@@ -739,10 +740,48 @@ function findIncomingEdgeFor(edges: GraphEdge[], clientId: ClientNodeId): GraphE
   return edges.find((e) => e.target === clientId) ?? null;
 }
 
+function shortVisualNodeId(value: string | null | undefined): string {
+  return value ? value.replace(/^n_/, "").slice(0, 8) : "-";
+}
+
+function nodeVisualContextItem(
+  node: GraphNode,
+  relation: NodeVisualContextItem["relation"],
+): NodeVisualContextItem | null {
+  if (!node.data.serverNodeId) return null;
+  const name = node.data.name?.trim() || null;
+  const currentPrompt = node.data.prompt.trim() || null;
+  return {
+    relation,
+    nodeId: node.data.serverNodeId,
+    clientNodeId: node.id,
+    name,
+    currentPrompt,
+  };
+}
+
+function visualContextPromptLines(visualContext: NodeVisualContextItem[]): string[] {
+  if (visualContext.length === 0) return [];
+  return [
+    "Attached visual references:",
+    ...visualContext.map((item, index) => {
+      const relation =
+        item.relation === "parent"
+          ? "direct parent, primary visual source"
+          : "ancestor continuity reference";
+      const label = item.name?.trim() || shortVisualNodeId(item.nodeId);
+      const prompt = item.currentPrompt?.trim() || "(no current prompt)";
+      return `${index + 1}. ${relation}: ${label} (${shortVisualNodeId(item.nodeId)}). Current prompt: ${prompt}`;
+    }),
+    "",
+  ];
+}
+
 function buildEffectivePrompt(
   nodes: GraphNode[],
   edges: GraphEdge[],
   clientId: ClientNodeId,
+  visualContext: NodeVisualContextItem[] = [],
 ): string {
   const node = nodes.find((n) => n.id === clientId);
   const displayPrompt = node?.data.prompt.trim() ?? "";
@@ -769,7 +808,7 @@ function buildEffectivePrompt(
     })
     .filter((line): line is string => Boolean(line));
 
-  if (contextLines.length === 0) return displayPrompt;
+  if (contextLines.length === 0 && visualContext.length === 0) return displayPrompt;
   const incomingData = normalizeEdgeTransferData(findIncomingEdgeFor(edges, clientId)?.data);
   const imageGuidance =
     incomingData.imageTransfer === "off"
@@ -779,6 +818,7 @@ function buildEffectivePrompt(
         : "Use the attached parent image as the visual source.";
   return [
     `Previous workflow context. Use this text as continuity guidance. ${imageGuidance}`,
+    ...visualContextPromptLines(visualContext),
     ...contextLines,
     "",
     "Current node instruction:",
@@ -794,6 +834,7 @@ function resolveNodeImageInputs(
   parentNode: GraphNode | null;
   parentServerNodeId: string | null;
   ancestorNodeIds: string[];
+  visualContext: NodeVisualContextItem[];
   imageTransfer: ImageTransferMode;
 } {
   const incoming = findIncomingEdgeFor(edges, clientId);
@@ -803,10 +844,20 @@ function resolveNodeImageInputs(
   const parentServerNodeId =
     imageTransfer === "off" ? null : parentNode?.data.serverNodeId ?? null;
   if (!parentNode || imageTransfer !== "ancestor") {
-    return { parentNode, parentServerNodeId, ancestorNodeIds: [], imageTransfer };
+    const parentContext =
+      parentNode && imageTransfer === "parent"
+        ? nodeVisualContextItem(parentNode, "parent")
+        : null;
+    return {
+      parentNode,
+      parentServerNodeId,
+      ancestorNodeIds: [],
+      visualContext: parentContext ? [parentContext] : [],
+      imageTransfer,
+    };
   }
 
-  const ancestorIds: string[] = [];
+  const ancestorNodes: GraphNode[] = [];
   const seen = new Set<ClientNodeId>();
   let currentId = parentNode.id as ClientNodeId;
   while (true) {
@@ -816,14 +867,22 @@ function resolveNodeImageInputs(
     if (!edge || normalizeEdgeTransferData(edge.data).imageTransfer === "off") break;
     const parent = nodes.find((n) => n.id === edge.source);
     if (!parent) break;
-    if (parent.data.serverNodeId) ancestorIds.push(parent.data.serverNodeId);
+    if (parent.data.serverNodeId) ancestorNodes.push(parent);
     currentId = parent.id as ClientNodeId;
   }
+
+  const orderedAncestors = ancestorNodes.reverse().slice(-3);
+  const ancestorContext = orderedAncestors
+    .map((ancestor) => nodeVisualContextItem(ancestor, "ancestor"))
+    .filter((item): item is NodeVisualContextItem => Boolean(item));
+  const parentContext = nodeVisualContextItem(parentNode, "parent");
+  const visualContext = parentContext ? [...ancestorContext, parentContext] : ancestorContext;
 
   return {
     parentNode,
     parentServerNodeId,
-    ancestorNodeIds: ancestorIds.reverse().slice(-3),
+    ancestorNodeIds: ancestorContext.map((item) => item.nodeId),
+    visualContext,
     imageTransfer,
   };
 }
@@ -1753,12 +1812,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!node) return false;
     const hadGeneratedImage = !!node.data.serverNodeId || !!node.data.imageUrl;
     const displayPrompt = node.data.prompt;
-    const effectivePrompt = buildEffectivePrompt(graphNodes, graphEdges, targetClientId);
     const nodeSettings = resolveEffectiveNodeSettings(graphNodes, graphEdges, targetClientId);
-    const { parentNode, parentServerNodeId, ancestorNodeIds, imageTransfer } = resolveNodeImageInputs(
+    const {
+      parentNode,
+      parentServerNodeId,
+      ancestorNodeIds,
+      visualContext,
+      imageTransfer,
+    } = resolveNodeImageInputs(graphNodes, graphEdges, targetClientId);
+    const effectivePrompt = buildEffectivePrompt(
       graphNodes,
       graphEdges,
       targetClientId,
+      visualContext,
     );
     if (!displayPrompt.trim()) {
       get().showToast(t("toast.promptRequired"), true);
@@ -1818,6 +1884,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const res = await postNodeGenerate({
         parentNodeId: parentServerNodeId,
         ancestorNodeIds,
+        visualContext,
         prompt: effectivePrompt,
         displayPrompt,
         effectivePrompt,
