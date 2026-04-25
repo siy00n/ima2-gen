@@ -3,7 +3,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   applyNodeChanges,
   applyEdgeChanges,
   useReactFlow,
@@ -17,6 +16,8 @@ import "@xyflow/react/dist/style.css";
 import { useAppStore, type GraphNode, type GraphEdge } from "../store/useAppStore";
 import { ImageNode } from "./ImageNode";
 import { WorkflowEdge } from "./WorkflowEdge";
+import { WorkflowMiniMap } from "./WorkflowMiniMap";
+import { deriveGraphMeta } from "../lib/graphMeta";
 import { useI18n } from "../i18n";
 
 function NodeCanvasInner() {
@@ -39,6 +40,22 @@ function NodeCanvasInner() {
 
   const nodeTypes = useMemo(() => ({ imageNode: ImageNode }), []);
   const edgeTypes = useMemo(() => ({ workflowEdge: WorkflowEdge }), []);
+  const graphMeta = useMemo(() => deriveGraphMeta(nodes, edges), [nodes, edges]);
+  const displayNodes = useMemo(
+    () =>
+      nodes.map((node) => {
+        const meta = graphMeta.get(node.id) ?? { level: 0, isolated: true };
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            graphLevel: meta.level,
+            graphIsolated: meta.isolated,
+          },
+        };
+      }),
+    [nodes, graphMeta],
+  );
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) =>
@@ -102,7 +119,7 @@ function NodeCanvasInner() {
       ) : (
         <>
           <ReactFlow
-            nodes={nodes}
+            nodes={displayNodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
@@ -121,14 +138,7 @@ function NodeCanvasInner() {
           >
             <Background gap={24} color="#2a2a2a" />
             <Controls className="node-canvas__controls" />
-            <MiniMap
-              pannable
-              zoomable
-              maskColor="rgba(10, 10, 10, 0.7)"
-              nodeColor="#4a9eff"
-              nodeStrokeColor="#1a1a1a"
-              style={{ background: "#141414", border: "1px solid #2a2a2a" }}
-            />
+            <WorkflowMiniMap nodes={displayNodes} edges={edges} graphMeta={graphMeta} />
           </ReactFlow>
           <button
             type="button"

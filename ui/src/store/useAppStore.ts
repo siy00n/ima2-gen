@@ -330,6 +330,8 @@ export type ImageNodeData = {
   settings: NodeSettings;
   usage?: GenerateItem["usage"];
   createdAt?: number;
+  graphLevel?: number;
+  graphIsolated?: boolean;
 };
 
 export type GraphNode = FlowNode<ImageNodeData>;

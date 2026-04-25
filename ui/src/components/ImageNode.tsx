@@ -35,6 +35,8 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   const isBusy = d.status === "pending" || d.status === "reconciling";
   const canBranch = d.status === "ready" && !!d.serverNodeId;
   const shortId = (d.serverNodeId ?? id).replace(/^n_/, "").slice(0, 5);
+  const graphLevel = d.graphLevel ?? 0;
+  const graphIsolated = d.graphIsolated === true;
   const promptSummary = d.prompt.trim() || t("node.promptPlaceholder");
   const settingsMeta = [
     d.provider ?? "OAuth",
@@ -79,11 +81,14 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   const statusLabel = computeStatusLabel();
 
   return (
-    <div className={`image-node image-node--${d.status}${selected ? " image-node--selected" : ""}`}>
+    <div
+      className={`image-node image-node--${d.status}${graphIsolated ? " image-node--isolated" : ""}${selected ? " image-node--selected" : ""}`}
+    >
       <Handle type="target" position={Position.Left} className="image-node__handle" />
       <div className="image-node__header">
         <div className="image-node__title">
           <span className="image-node__id">{shortId}</span>
+          <span className="image-node__level">L{graphLevel}</span>
           <span className="image-node__name">{promptSummary}</span>
         </div>
         <div className="image-node__header-actions nodrag">
