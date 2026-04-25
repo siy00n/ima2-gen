@@ -877,7 +877,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedNodeId: null,
   selectedEdgeId: null,
   selectNode: (selectedNodeId) => set({ selectedNodeId, selectedEdgeId: null }),
-  selectEdge: (selectedEdgeId) => set({ selectedEdgeId, selectedNodeId: null }),
+  selectEdge: (selectedEdgeId) =>
+    set((s) => ({
+      selectedEdgeId,
+      selectedNodeId: null,
+      rightPanelOpen: selectedEdgeId ? true : s.rightPanelOpen,
+    })),
   setGraphNodes: (graphNodes) => {
     set({ graphNodes });
     get().scheduleGraphSave();

@@ -34,6 +34,16 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
 
   const isBusy = d.status === "pending" || d.status === "reconciling";
   const canBranch = d.status === "ready" && !!d.serverNodeId;
+  const shortId = (d.serverNodeId ?? id).replace(/^n_/, "").slice(0, 5);
+  const promptSummary = d.prompt.trim() || t("node.promptPlaceholder");
+  const settingsMeta = [
+    d.provider ?? "OAuth",
+    d.settings?.sizePreset === "custom"
+      ? `${d.settings.customW}x${d.settings.customH}`
+      : (d.size ?? d.settings?.sizePreset),
+    d.settings?.quality ?? d.quality,
+    d.settings?.format ?? d.format,
+  ].filter((v): v is string => Boolean(v));
 
   const computeStatusLabel = (): string => {
     switch (d.status) {
@@ -71,11 +81,23 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   return (
     <div className={`image-node image-node--${d.status}${selected ? " image-node--selected" : ""}`}>
       <Handle type="target" position={Position.Left} className="image-node__handle" />
+      <div className="image-node__header">
+        <div className="image-node__title">
+          <span className="image-node__id">{shortId}</span>
+          <span className="image-node__name">{promptSummary}</span>
+        </div>
+        <div className="image-node__header-actions nodrag">
+          <span className={`image-node__status-pill image-node__status-pill--${d.status}`}>
+            {statusLabel}
+          </span>
+          <span className="image-node__menu">...</span>
+        </div>
+      </div>
       <div className="image-node__preview">
         {d.imageUrl && d.status !== "asset-missing" ? (
           <img src={d.imageUrl} alt={t("node.nodeImageAlt")} />
-        ) : isBusy ? (
-          <div className="image-node__skeleton" />
+        ) : isBusy || d.status === "error" ? (
+          <div className="image-node__skeleton">{statusLabel}</div>
         ) : d.status === "asset-missing" ? (
           <div className="image-node__placeholder">{t("node.noAsset")}</div>
         ) : d.status === "stale" ? (
@@ -84,34 +106,39 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
           <div className="image-node__placeholder">{t("node.noImage")}</div>
         )}
       </div>
-      <textarea
-        className="image-node__prompt nodrag"
-        value={d.prompt}
-        onChange={onPromptChange}
-        onKeyDown={(e) => e.stopPropagation()}
-        placeholder={d.parentServerNodeId ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
-        rows={2}
-        disabled={isBusy}
-      />
-      <div className="image-node__footer">
-        <span className="image-node__status">{statusLabel}</span>
+      <div className="image-node__body">
+        <textarea
+          className="image-node__prompt nodrag"
+          value={d.prompt}
+          onChange={onPromptChange}
+          onKeyDown={(e) => e.stopPropagation()}
+          placeholder={d.parentServerNodeId ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
+          rows={1}
+          disabled={isBusy}
+        />
+        <div className="image-node__meta">
+          {settingsMeta.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
         <div className="image-node__actions nodrag">
-          <button type="button" onClick={onGenerate} disabled={isBusy}>
+          <button type="button" className="image-node__primary" onClick={onGenerate} disabled={isBusy}>
             {d.status === "ready" ? t("node.regenerate") : t("node.generate")}
           </button>
-          {d.status === "ready" ? (
-            <>
-              <button type="button" onClick={onBranch} disabled={!canBranch}>{t("node.addChild")}</button>
-              <button
-                type="button"
-                onClick={onDuplicateBranch}
-                title={t("node.duplicateBranchTitle")}
-              >
-                {t("node.duplicateBranch")}
-              </button>
-            </>
-          ) : null}
-          <button type="button" onClick={onDelete} className="image-node__del" title={t("node.deleteTitle")}>×</button>
+          <button type="button" onClick={onBranch} disabled={!canBranch} title={t("node.addChild")}>
+            +
+          </button>
+          <button
+            type="button"
+            onClick={onDuplicateBranch}
+            disabled={!canBranch}
+            title={t("node.duplicateBranchTitle")}
+          >
+            D
+          </button>
+          <button type="button" onClick={onDelete} className="image-node__del" title={t("node.deleteTitle")}>
+            ×
+          </button>
         </div>
       </div>
       {d.status === "ready" && d.serverNodeId ? (

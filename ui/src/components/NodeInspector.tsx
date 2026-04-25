@@ -69,9 +69,28 @@ export function NodeInspector() {
       transferContext: selectedEdge.data?.transferContext ?? true,
       transferSettings: selectedEdge.data?.transferSettings ?? true,
     };
+    const edgeState =
+      edgeData.transferContext && edgeData.transferSettings
+        ? "both"
+        : edgeData.transferContext
+          ? "context"
+          : edgeData.transferSettings
+            ? "settings"
+            : "image";
     return (
       <div className="node-inspector node-inspector--edge">
         <div className="section-title">{t("nodeInspector.connectionTitle")}</div>
+        <div className="node-inspector__edge-state" data-state={edgeState}>
+          <span className="node-inspector__edge-chip node-inspector__edge-chip--image">
+            {t("edgeBadge.image")}
+          </span>
+          <span className={`node-inspector__edge-chip${edgeData.transferContext ? " is-on" : ""}`}>
+            {t(edgeData.transferContext ? "edgeBadge.contextOn" : "edgeBadge.contextOff")}
+          </span>
+          <span className={`node-inspector__edge-chip${edgeData.transferSettings ? " is-on" : ""}`}>
+            {t(edgeData.transferSettings ? "edgeBadge.settingsOn" : "edgeBadge.settingsOff")}
+          </span>
+        </div>
         <div className="node-inspector__connection">
           <button type="button" onClick={() => selectNode(edgeParent.id)}>
             {t("nodeInspector.parentNode")}

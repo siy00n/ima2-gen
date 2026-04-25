@@ -255,7 +255,7 @@
     "copyParentSettings": "Load parent settings",
     "copyParentPrompt": "Load parent prompt",
     "detachConnection": "Detach",
-    "connectionTitle": "Selected connection",
+    "connectionTitle": "Connection settings",
     "parentNode": "Parent",
     "childNode": "Child",
     "addSiblingChild": "Add child here",
@@ -269,10 +269,10 @@
   },
   "edgeBadge": {
     "image": "IMG",
-    "contextOn": "Context ON",
-    "contextOff": "Context OFF",
-    "settingsOn": "Settings ON",
-    "settingsOff": "Settings OFF",
+    "contextOn": "CTX ON",
+    "contextOff": "CTX OFF",
+    "settingsOn": "SET ON",
+    "settingsOff": "SET OFF",
     "contextTitle": "Toggle prompt and context transfer",
     "settingsTitle": "Toggle parent settings transfer"
   },
