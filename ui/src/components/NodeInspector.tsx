@@ -261,7 +261,7 @@ export function NodeInspector() {
 
   const generateLabel =
     data.status === "ready"
-      ? t("nodeInspector.createVariation")
+      ? t("node.regenerate")
       : data.status === "error" || data.status === "stale" || data.status === "asset-missing"
         ? t("node.retry")
         : t("node.generate");

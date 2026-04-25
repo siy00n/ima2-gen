@@ -1426,13 +1426,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async generateNode(clientId) {
-    const requestedNode = get().graphNodes.find((n) => n.id === clientId);
-    const targetClientId =
-      requestedNode?.data.status === "ready" ? get().addSiblingNode(clientId) : clientId;
+    const targetClientId = clientId;
     const graphNodes = get().graphNodes;
     const graphEdges = get().graphEdges;
     const node = graphNodes.find((n) => n.id === targetClientId);
     if (!node) return;
+    const hadGeneratedImage = !!node.data.serverNodeId || !!node.data.imageUrl;
     const displayPrompt = node.data.prompt;
     const effectivePrompt = buildEffectivePrompt(graphNodes, graphEdges, targetClientId);
     const nodeSettings = resolveEffectiveNodeSettings(graphNodes, graphEdges, targetClientId);
@@ -1505,33 +1504,35 @@ export const useAppStore = create<AppState>((set, get) => ({
         clientNodeId: targetClientId,
       });
       if (get().activeSessionId === requestSessionId) {
+        const nextNodes = get().graphNodes.map((n) =>
+          n.id === targetClientId
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  serverNodeId: res.nodeId,
+                  imageUrl: res.url,
+                  status: "ready" as const,
+                  pendingRequestId: null,
+                  pendingPhase: null,
+                  pendingStartedAt: null,
+                  elapsed: res.elapsed,
+                  webSearchCalls: res.webSearchCalls,
+                  filename: res.filename,
+                  provider: res.provider,
+                  quality: nodeSettings.quality,
+                  size,
+                  format: nodeSettings.format,
+                  moderation: res.moderation ?? nodeSettings.moderation,
+                  usage: res.usage,
+                  createdAt: Date.now(),
+                  error: undefined,
+                },
+              }
+            : n,
+        );
         set({
-          graphNodes: get().graphNodes.map((n) =>
-            n.id === targetClientId
-              ? {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    serverNodeId: res.nodeId,
-                    imageUrl: res.url,
-                    status: "ready",
-                    pendingRequestId: null,
-                    pendingPhase: null,
-                    pendingStartedAt: null,
-                    elapsed: res.elapsed,
-                    webSearchCalls: res.webSearchCalls,
-                    filename: res.filename,
-                    provider: res.provider,
-                    quality: nodeSettings.quality,
-                    size,
-                    format: nodeSettings.format,
-                    moderation: res.moderation ?? nodeSettings.moderation,
-                    usage: res.usage,
-                    createdAt: Date.now(),
-                  },
-                }
-              : n,
-          ),
+          graphNodes: normalizeGraphParentPointers(nextNodes, get().graphEdges),
           selectedNodeId: targetClientId,
         });
         get().addHistoryItem({
@@ -1567,7 +1568,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                   ...n,
                   data: {
                     ...n.data,
-                    status: "error",
+                    status: hadGeneratedImage ? ("ready" as const) : ("error" as const),
                     pendingRequestId: null,
                     pendingPhase: null,
                     pendingStartedAt: null,
