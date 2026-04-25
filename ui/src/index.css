@@ -1763,6 +1763,14 @@ body {
   border-color: rgba(167, 139, 250, 0.44);
 }
 
+.node-inspector__edge-state[data-state="ancestor"] {
+  border-color: rgba(94, 234, 212, 0.52);
+}
+
+.node-inspector__edge-state[data-state="ancestor-settings"] {
+  border-color: rgba(192, 132, 252, 0.58);
+}
+
 .node-inspector__edge-chip {
   min-height: 22px;
   display: inline-flex;
@@ -1784,6 +1792,17 @@ body {
 .node-inspector__edge-chip--image {
   border-color: rgba(154, 161, 173, 0.38);
   color: #dce2ea;
+}
+
+.node-inspector__edge-chip--image.is-on {
+  border-color: rgba(94, 234, 212, 0.58);
+  background: rgba(94, 234, 212, 0.14);
+  color: #aaf5e9;
+}
+
+.node-inspector__edge-chip--image.is-disabled {
+  opacity: 0.52;
+  color: #858b94;
 }
 
 .node-inspector__edge-chip--context.is-on {

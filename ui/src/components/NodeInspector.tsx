@@ -92,8 +92,12 @@ export function NodeInspector() {
         : false,
     };
     const edgeState =
-      edgeData.transferContext && edgeData.transferSettings
-        ? "both"
+      edgeData.transferContext && edgeData.transferAncestorImages
+        ? edgeData.transferSettings
+          ? "ancestor-settings"
+          : "ancestor"
+        : edgeData.transferContext && edgeData.transferSettings
+          ? "both"
         : edgeData.transferContext
           ? "context"
           : edgeData.transferSettings
@@ -103,7 +107,10 @@ export function NodeInspector() {
       <div className="node-inspector node-inspector--edge">
         <div className="section-title">{t("nodeInspector.connectionTitle")}</div>
         <div className="node-inspector__edge-state" data-state={edgeState}>
-          <span className="node-inspector__edge-chip node-inspector__edge-chip--image">
+          <span
+            className={`node-inspector__edge-chip node-inspector__edge-chip--image${edgeData.transferAncestorImages ? " is-on" : ""}${edgeData.transferContext ? "" : " is-disabled"}`}
+            title={t("nodeInspector.transferAncestorImages")}
+          >
             {t("edgeBadge.image")}
           </span>
           <span className={`node-inspector__edge-chip node-inspector__edge-chip--context${edgeData.transferContext ? " is-on" : ""}`}>
