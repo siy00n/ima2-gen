@@ -598,7 +598,7 @@ app.post("/api/generate", async (req, res) => {
 });
 
 // ── OAuth edit: send image as input to Responses API ──
-async function editViaOAuth(prompt, imageB64, quality, size, moderation = "low", imageMime = "image/png") {
+async function editViaOAuth(prompt, imageB64, quality, size, moderation = "low", imageMime = "image/png", requestId = null) {
   const res = await fetch(`${OAUTH_URL}/v1/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
@@ -619,6 +619,8 @@ async function editViaOAuth(prompt, imageB64, quality, size, moderation = "low",
       stream: true,
     }),
   });
+
+  if (requestId) setJobPhase(requestId, "streaming");
 
   if (!res.ok) {
     const text = await res.text();
@@ -654,6 +656,7 @@ async function editViaOAuth(prompt, imageB64, quality, size, moderation = "low",
         if (data.type === "response.output_item.done" && data.item?.type === "image_generation_call" && data.item.result) {
           resultB64 = data.item.result;
           console.log("[oauth-edit] got image, b64 length:", resultB64.length);
+          if (requestId) setJobPhase(requestId, "decoding");
         }
         if (data.type === "response.completed") usage = data.response?.usage || null;
         if (data.type === "error") throw new Error(data.error?.message || JSON.stringify(data));
@@ -811,7 +814,7 @@ app.post("/api/node/generate", async (req, res) => {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const r = parentImage
-          ? await editViaOAuth(effectivePrompt, parentImage.b64, quality, size, moderation, parentImage.mime)
+          ? await editViaOAuth(effectivePrompt, parentImage.b64, quality, size, moderation, parentImage.mime, requestId)
           : await generateViaOAuth(effectivePrompt, quality, size, moderation, refB64s, requestId);
         if (r.b64) {
           b64 = r.b64;

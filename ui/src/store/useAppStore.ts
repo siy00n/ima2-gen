@@ -24,6 +24,7 @@ import {
   renameSession as apiRenameSession,
   deleteSession as apiDeleteSession,
   saveSessionGraph,
+  type HistoryItem,
   type SessionSummary,
   type SessionFull,
 } from "../lib/api";
@@ -370,6 +371,60 @@ function normalizeGraphParentPointers(nodes: GraphNode[], edges: GraphEdge[]): G
       },
     };
   });
+}
+
+function findNodeHistoryResult(
+  items: HistoryItem[],
+  sessionId: string,
+  node: GraphNode,
+): HistoryItem | null {
+  const startedAt = node.data.pendingStartedAt ?? 0;
+  if (!startedAt) return null;
+  return (
+    items.find(
+      (item) =>
+        (item.sessionId ?? null) === sessionId &&
+        (item.clientNodeId ?? null) === node.id &&
+        (item.createdAt ?? 0) >= startedAt &&
+        !!item.nodeId &&
+        !!item.url,
+    ) ?? null
+  );
+}
+
+function applyNodeHistoryResult(node: GraphNode, item: HistoryItem): GraphNode {
+  const importedSize = parseSizeSetting(item.size);
+  return {
+    ...node,
+    data: {
+      ...node.data,
+      serverNodeId: item.nodeId ?? node.data.serverNodeId,
+      imageUrl: item.url,
+      status: "ready" as const,
+      pendingRequestId: null,
+      pendingPhase: null,
+      pendingStartedAt: null,
+      filename: item.filename,
+      provider: item.provider,
+      quality: item.quality ?? node.data.quality,
+      size: item.size ?? node.data.size,
+      format: item.format ?? node.data.format,
+      moderation: item.moderation ?? node.data.moderation,
+      settings: normalizeNodeSettings(
+        {
+          quality: item.quality,
+          sizePreset: importedSize?.sizePreset,
+          customW: importedSize?.customW,
+          customH: importedSize?.customH,
+          format: item.format,
+          moderation: item.moderation,
+        },
+        node.data.settings,
+      ),
+      createdAt: item.createdAt,
+      error: undefined,
+    },
+  };
 }
 
 function mapSessionToGraph(session: SessionFull): {
@@ -1031,6 +1086,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       const byId = new Map(jobs.map((j) => [j.requestId, j.phase] as const));
       const now = Date.now();
       const GRACE_MS = 10_000;
+      const needsHistoryCheck = pendingNodes.some((n) => {
+        const reqId = n.data.pendingRequestId;
+        const startedAt = n.data.pendingStartedAt ?? 0;
+        return !!reqId && !byId.has(reqId) && (!startedAt || now - startedAt >= GRACE_MS);
+      });
+      let historyItems: HistoryItem[] = [];
+      if (needsHistoryCheck) {
+        try {
+          const res = await getHistory({ sessionId: sid, limit: HISTORY_LIMIT });
+          historyItems = res.items;
+        } catch {
+          historyItems = [];
+        }
+      }
+      let shouldSave = false;
       const next = get().graphNodes.map((n) => {
         const reqId = n.data?.pendingRequestId;
         if (!reqId) return n;
@@ -1051,8 +1121,15 @@ export const useAppStore = create<AppState>((set, get) => ({
             data: { ...n.data, status: "reconciling" as const },
           };
         }
-        // Image may have landed, or job was lost.
-        const hasAsset = !!n.data.imageUrl || !!n.data.serverNodeId;
+        const recovered = findNodeHistoryResult(historyItems, sid, n);
+        if (recovered) {
+          shouldSave = true;
+          return applyNodeHistoryResult(n, recovered);
+        }
+
+        // The old image may still be visible, but this request did not produce
+        // a confirmed new result. Do not show Done for an unresolved regenerate.
+        shouldSave = true;
         return {
           ...n,
           data: {
@@ -1060,14 +1137,15 @@ export const useAppStore = create<AppState>((set, get) => ({
             pendingRequestId: null,
             pendingPhase: null,
             pendingStartedAt: null,
-            status: hasAsset ? ("ready" as const) : ("stale" as const),
-            error: hasAsset ? undefined : t("session.assetAbortedError"),
+            status: "stale" as const,
+            error: t("session.assetAbortedError"),
           },
         };
       });
       set({ graphNodes: next });
+      if (shouldSave) scheduleGraphSaveImpl(get, set);
     }
-    // Always attempt orphan recovery: covers A-sanitized empty nodes and
+    // Always attempt orphan recovery: covers older saved graphs and
     // cross-session completions that never landed in this graph.
     await recoverGraphNodesFromHistory(get, set).catch(() => {});
   },
@@ -1486,6 +1564,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       inFlight: nextInFlight,
     });
     get().startInFlightPolling();
+    get().scheduleGraphSave();
 
     let graphMutated = true; // pending set above already mutated the graph if same-session
 
@@ -1568,7 +1647,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                   ...n,
                   data: {
                     ...n.data,
-                    status: hadGeneratedImage ? ("ready" as const) : ("error" as const),
+                    status: hadGeneratedImage ? ("stale" as const) : ("error" as const),
                     pendingRequestId: null,
                     pendingPhase: null,
                     pendingStartedAt: null,
@@ -2052,8 +2131,8 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveGraphPromise: Promise<void> | null = null;
 
 // Sanitize a node's data for PUT /api/sessions/:id/graph payload.
-// pending / reconciling states are *transient* — persisting them to disk
-// makes reloaded graphs look like aborted work and trips reconcileGraphPending.
+// Pending/reconciling is intentionally persisted so reload/session-switch
+// recovery can match the active request against inflight jobs or history.
 // This function is payload-only: the in-memory `graphNodes` is NOT touched.
 function sanitizeForSave(d: ImageNodeData): Record<string, unknown> {
   const persisted = { ...(d as unknown as Record<string, unknown>) };
@@ -2062,20 +2141,11 @@ function sanitizeForSave(d: ImageNodeData): Record<string, unknown> {
   delete persisted.graphTreeRootId;
   delete persisted.graphTreeIndex;
   delete persisted.graphTreeColor;
-  const shouldSanitize = d.status === "pending" || d.status === "reconciling";
-  if (!shouldSanitize) return persisted;
-  return {
-    ...persisted,
-    status: "empty",
-    pendingRequestId: null,
-    pendingPhase: null,
-    pendingStartedAt: null,
-    error: undefined,
-  };
+  return persisted;
 }
 
 // Recover nodes whose asset lives on disk (via /api/history) but whose
-// client-side state was lost (A sanitize, reload, HMR, conflict reload).
+// client-side asset pointer was lost (older save, reload, HMR, conflict reload).
 // Candidate = node with neither imageUrl nor serverNodeId. The matching key
 // is (sessionId, clientNodeId); when pendingStartedAt is known we require
 // createdAt >= pendingStartedAt to avoid picking an older retry's asset.
@@ -2154,7 +2224,7 @@ async function reloadSessionAfterConflict(
   });
   get().showToast(t("toast.sessionReloadedElsewhere"), true);
   // After a server-driven reload, try to restore any nodes that lost their
-  // client-side asset pointer (A sanitize leaves them as empty).
+  // client-side asset pointer.
   await recoverGraphNodesFromHistory(get, set).catch(() => {});
 }
 
