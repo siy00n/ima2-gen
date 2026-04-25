@@ -167,6 +167,16 @@ export type NodeSettings = {
   moderation: Moderation;
 };
 
+export type EdgeTransferData = {
+  transferContext: boolean;
+  transferSettings: boolean;
+};
+
+const DEFAULT_EDGE_TRANSFER: EdgeTransferData = {
+  transferContext: true,
+  transferSettings: true,
+};
+
 const FALLBACK_NODE_SETTINGS: NodeSettings = {
   quality: "low",
   sizePreset: "1024x1024",
@@ -200,6 +210,34 @@ function parseSizeSetting(size: unknown): Pick<NodeSettings, "sizePreset" | "cus
 
 function cloneNodeSettings(settings: NodeSettings): NodeSettings {
   return { ...settings };
+}
+
+function normalizeEdgeTransferData(raw: unknown): EdgeTransferData {
+  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    transferContext:
+      typeof obj.transferContext === "boolean"
+        ? obj.transferContext
+        : DEFAULT_EDGE_TRANSFER.transferContext,
+    transferSettings:
+      typeof obj.transferSettings === "boolean"
+        ? obj.transferSettings
+        : DEFAULT_EDGE_TRANSFER.transferSettings,
+  };
+}
+
+function createGraphEdge(
+  source: ClientNodeId,
+  target: ClientNodeId,
+  data: Partial<EdgeTransferData> = DEFAULT_EDGE_TRANSFER,
+): GraphEdge {
+  return {
+    id: `${source}->${target}`,
+    source,
+    target,
+    type: "workflowEdge",
+    data: normalizeEdgeTransferData(data),
+  };
 }
 
 function currentNodeSettings(s: AppState): NodeSettings {
@@ -284,7 +322,7 @@ export type ImageNodeData = {
 };
 
 export type GraphNode = FlowNode<ImageNodeData>;
-export type GraphEdge = FlowEdge;
+export type GraphEdge = FlowEdge<EdgeTransferData>;
 
 function mapSessionToGraph(session: SessionFull): {
   graphNodes: GraphNode[];
@@ -335,6 +373,8 @@ function mapSessionToGraph(session: SessionFull): {
     id: e.id,
     source: e.source,
     target: e.target,
+    type: "workflowEdge",
+    data: normalizeEdgeTransferData(e.data),
   }));
   return {
     graphNodes,
@@ -413,6 +453,8 @@ type AppState = {
   duplicateBranchRoot: (sourceClientId: ClientNodeId) => ClientNodeId;
   addChildNodeAt: (parentClientId: ClientNodeId, position: { x: number; y: number }) => ClientNodeId;
   connectNodes: (sourceClientId: ClientNodeId, targetClientId: ClientNodeId) => void;
+  updateEdgeTransfer: (edgeId: string, patch: Partial<EdgeTransferData>) => void;
+  toggleEdgeTransfer: (edgeId: string, key: keyof EdgeTransferData) => void;
   updateNodePrompt: (clientId: ClientNodeId, prompt: string) => void;
   updateNodeSettings: (clientId: ClientNodeId, patch: Partial<NodeSettings>) => void;
   copyParentPromptToNode: (clientId: ClientNodeId) => void;
@@ -466,6 +508,73 @@ function findParentNodeFor(
   const incoming = edges.find((e) => e.target === clientId);
   if (!incoming) return null;
   return nodes.find((n) => n.id === incoming.source) ?? null;
+}
+
+function findIncomingEdgeFor(edges: GraphEdge[], clientId: ClientNodeId): GraphEdge | null {
+  return edges.find((e) => e.target === clientId) ?? null;
+}
+
+function buildEffectivePrompt(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  clientId: ClientNodeId,
+): string {
+  const node = nodes.find((n) => n.id === clientId);
+  const displayPrompt = node?.data.prompt.trim() ?? "";
+  if (!node) return displayPrompt;
+
+  const contextNodes: GraphNode[] = [];
+  let currentId = clientId;
+  while (true) {
+    const edge = findIncomingEdgeFor(edges, currentId);
+    if (!edge || !normalizeEdgeTransferData(edge.data).transferContext) break;
+    const parent = nodes.find((n) => n.id === edge.source);
+    if (!parent) break;
+    contextNodes.push(parent);
+    currentId = parent.id as ClientNodeId;
+  }
+
+  const contextLines = contextNodes
+    .reverse()
+    .map((n, index) => {
+      const prompt = n.data.prompt.trim();
+      if (!prompt) return null;
+      const label = n.data.serverNodeId?.slice(0, 8) ?? n.id;
+      return `${index + 1}. ${label}: ${prompt}`;
+    })
+    .filter((line): line is string => Boolean(line));
+
+  if (contextLines.length === 0) return displayPrompt;
+  return [
+    "Previous workflow context. Use this text as continuity guidance, and use the attached parent image as the visual source.",
+    ...contextLines,
+    "",
+    "Current node instruction:",
+    displayPrompt,
+  ].join("\n");
+}
+
+function resolveEffectiveNodeSettings(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  clientId: ClientNodeId,
+): NodeSettings {
+  let current = nodes.find((n) => n.id === clientId);
+  if (!current) return cloneNodeSettings(FALLBACK_NODE_SETTINGS);
+  let settings = cloneNodeSettings(current.data.settings);
+  let currentId = clientId;
+
+  while (true) {
+    const edge = findIncomingEdgeFor(edges, currentId);
+    if (!edge || !normalizeEdgeTransferData(edge.data).transferSettings) break;
+    const parent = nodes.find((n) => n.id === edge.source);
+    if (!parent) break;
+    settings = cloneNodeSettings(parent.data.settings);
+    current = parent;
+    currentId = current.id as ClientNodeId;
+  }
+
+  return settings;
 }
 
 function wouldCreateCycle(
@@ -774,7 +883,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().scheduleGraphSave();
   },
   setGraphEdges: (graphEdges) => {
-    set({ graphEdges });
+    set({
+      graphEdges: graphEdges.map((e) => ({
+        ...e,
+        type: "workflowEdge",
+        data: normalizeEdgeTransferData(e.data),
+      })),
+    });
     get().scheduleGraphSave();
   },
 
@@ -1004,11 +1119,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           settings,
         },
       };
-    const edge: GraphEdge = {
-      id: `${parentClientId}->${clientId}`,
-      source: parentClientId,
-      target: clientId,
-    };
+    const edge = createGraphEdge(parentClientId, clientId);
     set({
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
@@ -1071,11 +1182,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         settings: cloneNodeSettings(source.data.settings),
       },
     };
-    const edge: GraphEdge = {
-      id: `${parentClientId}->${clientId}`,
-      source: parentClientId,
-      target: clientId,
-    };
+    const edge = createGraphEdge(parentClientId, clientId, incomingEdge.data);
     set({
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
@@ -1093,6 +1200,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     });
     get().scheduleGraphSave();
+  },
+
+  updateEdgeTransfer: (edgeId, patch) => {
+    set({
+      graphEdges: get().graphEdges.map((e) =>
+        e.id === edgeId
+          ? {
+              ...e,
+              data: normalizeEdgeTransferData({ ...e.data, ...patch }),
+            }
+          : e,
+      ),
+      selectedEdgeId: edgeId,
+      selectedNodeId: null,
+    });
+    get().scheduleGraphSave();
+  },
+
+  toggleEdgeTransfer: (edgeId, key) => {
+    const edge = get().graphEdges.find((e) => e.id === edgeId);
+    if (!edge) return;
+    const current = normalizeEdgeTransferData(edge.data);
+    get().updateEdgeTransfer(edgeId, { [key]: !current[key] });
   },
 
   updateNodeSettings: (clientId, patch) => {
@@ -1179,13 +1309,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     const requestedNode = get().graphNodes.find((n) => n.id === clientId);
     const targetClientId =
       requestedNode?.data.status === "ready" ? get().addSiblingNode(clientId) : clientId;
-    const node = get().graphNodes.find((n) => n.id === targetClientId);
+    const graphNodes = get().graphNodes;
+    const graphEdges = get().graphEdges;
+    const node = graphNodes.find((n) => n.id === targetClientId);
     if (!node) return;
-    const { prompt } = node.data;
-    const nodeSettings = cloneNodeSettings(node.data.settings);
-    const parentNode = findParentNodeFor(get().graphNodes, get().graphEdges, targetClientId);
+    const displayPrompt = node.data.prompt;
+    const effectivePrompt = buildEffectivePrompt(graphNodes, graphEdges, targetClientId);
+    const nodeSettings = resolveEffectiveNodeSettings(graphNodes, graphEdges, targetClientId);
+    const parentNode = findParentNodeFor(graphNodes, graphEdges, targetClientId);
     const parentServerNodeId = parentNode?.data.serverNodeId ?? node.data.parentServerNodeId;
-    if (!prompt.trim()) {
+    if (!displayPrompt.trim()) {
       get().showToast(t("toast.promptRequired"), true);
       return;
     }
@@ -1202,7 +1335,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...s.inFlight,
       {
         id: flightId,
-        prompt,
+        prompt: displayPrompt,
         startedAt,
         kind: "node",
         sessionId: requestSessionId,
@@ -1236,7 +1369,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const res = await postNodeGenerate({
         parentNodeId: parentServerNodeId,
-        prompt,
+        prompt: effectivePrompt,
+        displayPrompt,
+        effectivePrompt,
         quality: nodeSettings.quality,
         size,
         format: nodeSettings.format,
@@ -1270,7 +1405,6 @@ export const useAppStore = create<AppState>((set, get) => ({
                     size,
                     format: nodeSettings.format,
                     moderation: res.moderation ?? nodeSettings.moderation,
-                    settings: nodeSettings,
                     usage: res.usage,
                     createdAt: Date.now(),
                   },
@@ -1283,7 +1417,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           image: res.url,
           url: res.url,
           filename: res.filename,
-          prompt,
+          prompt: displayPrompt,
           provider: res.provider,
           quality: nodeSettings.quality,
           size,
@@ -1398,11 +1532,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         settings,
       },
     };
-    const edge: GraphEdge = {
-      id: `${parentClientId}->${clientId}`,
-      source: parentClientId,
-      target: clientId,
-    };
+    const edge = createGraphEdge(parentClientId, clientId);
     set({
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
@@ -1446,14 +1576,14 @@ export const useAppStore = create<AppState>((set, get) => ({
             ...target.data,
             parentServerNodeId: source.data.serverNodeId,
           };
-    const edgeId = `${sourceClientId}->${targetClientId}`;
+    const edge = createGraphEdge(sourceClientId, targetClientId);
     set({
       graphNodes: get().graphNodes.map((n) =>
         n.id === targetClientId ? { ...n, data: nextTargetData } : n,
       ),
       graphEdges: [
         ...get().graphEdges.filter((e) => e.target !== targetClientId),
-        { id: edgeId, source: sourceClientId, target: targetClientId },
+        edge,
       ],
       selectedNodeId: targetClientId,
       selectedEdgeId: null,
@@ -1903,7 +2033,7 @@ function doSave(
     id: e.id,
     source: e.source,
     target: e.target,
-    data: {},
+    data: normalizeEdgeTransferData(e.data),
   }));
   return saveSessionGraph(id, graphVersion, nodes, edges)
     .then((res) => {
@@ -1967,7 +2097,7 @@ export function flushGraphSaveBeacon(get: () => AppState): void {
     id: e.id,
     source: e.source,
     target: e.target,
-    data: {},
+    data: normalizeEdgeTransferData(e.data),
   }));
   const url = `/api/sessions/${encodeURIComponent(s.activeSessionId)}/graph`;
   const body = JSON.stringify({ nodes, edges });

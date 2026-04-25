@@ -258,7 +258,23 @@
     "connectionTitle": "선택한 연결",
     "parentNode": "부모",
     "childNode": "자식",
-    "addSiblingChild": "여기에 자식 추가"
+    "addSiblingChild": "여기에 자식 추가",
+    "connectionNotice": "부모 노드의 이미지는 항상 자식 노드로 전달됩니다.",
+    "transferContext": "프롬프트와 맥락 전체 전달",
+    "transferContextOn": "ON: 부모 이미지, 프롬프트, 이전 맥락을 함께 전달합니다.",
+    "transferContextOff": "OFF: 부모 이미지만 전달합니다.",
+    "transferSettings": "부모 노드 설정값 전달",
+    "transferSettingsOn": "ON: 품질, 크기, 포맷 등 생성 설정값을 전달합니다.",
+    "transferSettingsOff": "OFF: 자식 노드의 독립 설정을 사용합니다."
+  },
+  "edgeBadge": {
+    "image": "IMG",
+    "contextOn": "맥락 ON",
+    "contextOff": "맥락 OFF",
+    "settingsOn": "설정 ON",
+    "settingsOff": "설정 OFF",
+    "contextTitle": "프롬프트와 맥락 전달 토글",
+    "settingsTitle": "부모 설정값 전달 토글"
   },
   "apiDisabled": {
     "title": "{provider} 사용 불가",

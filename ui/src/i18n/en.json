@@ -258,7 +258,23 @@
     "connectionTitle": "Selected connection",
     "parentNode": "Parent",
     "childNode": "Child",
-    "addSiblingChild": "Add child here"
+    "addSiblingChild": "Add child here",
+    "connectionNotice": "The parent node image is always passed to the child.",
+    "transferContext": "Pass full prompt and context",
+    "transferContextOn": "ON: pass parent image, prompt, and previous context.",
+    "transferContextOff": "OFF: pass only the parent image.",
+    "transferSettings": "Pass parent node settings",
+    "transferSettingsOn": "ON: pass generation settings such as quality, size, and format.",
+    "transferSettingsOff": "OFF: use the child node's independent settings."
+  },
+  "edgeBadge": {
+    "image": "IMG",
+    "contextOn": "Context ON",
+    "contextOff": "Context OFF",
+    "settingsOn": "Settings ON",
+    "settingsOff": "Settings OFF",
+    "contextTitle": "Toggle prompt and context transfer",
+    "settingsTitle": "Toggle parent settings transfer"
   },
   "apiDisabled": {
     "title": "{provider} unavailable",

@@ -173,6 +173,8 @@ export function restoreHistoryItem(filename: string, trashId: string): Promise<{
 export type NodeGenerateRequest = {
   parentNodeId: string | null;
   prompt: string;
+  displayPrompt?: string;
+  effectivePrompt?: string;
   quality: string;
   size: string;
   format: string;

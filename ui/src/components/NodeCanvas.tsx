@@ -16,6 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useAppStore, type GraphNode, type GraphEdge } from "../store/useAppStore";
 import { ImageNode } from "./ImageNode";
+import { WorkflowEdge } from "./WorkflowEdge";
 import { useI18n } from "../i18n";
 
 function NodeCanvasInner() {
@@ -37,6 +38,7 @@ function NodeCanvasInner() {
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const nodeTypes = useMemo(() => ({ imageNode: ImageNode }), []);
+  const edgeTypes = useMemo(() => ({ workflowEdge: WorkflowEdge }), []);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) =>
@@ -104,6 +106,7 @@ function NodeCanvasInner() {
             onEdgeClick={(_, edge) => selectEdge(edge.id)}
             onPaneClick={() => selectNode(null)}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             fitView
             deleteKeyCode={["Delete", "Backspace"]}
             proOptions={{ hideAttribution: true }}

@@ -727,10 +727,12 @@ app.post("/api/node/generate", async (req, res) => {
   const sessionId = typeof body.sessionId === "string" ? body.sessionId : null;
   const clientNodeId =
     typeof body.clientNodeId === "string" ? body.clientNodeId : null;
+  const jobPrompt =
+    typeof body.displayPrompt === "string" ? body.displayPrompt : body.prompt;
   startJob({
     requestId,
     kind: "node",
-    prompt: body.prompt,
+    prompt: jobPrompt,
     meta: {
       kind: "node",
       sessionId,
@@ -749,6 +751,14 @@ app.post("/api/node/generate", async (req, res) => {
       externalSrc = null,
     } = body;
     const { provider = "oauth" } = body;
+    const displayPrompt =
+      typeof body.displayPrompt === "string" && body.displayPrompt.trim()
+        ? body.displayPrompt
+        : prompt;
+    const effectivePrompt =
+      typeof body.effectivePrompt === "string" && body.effectivePrompt.trim()
+        ? body.effectivePrompt
+        : prompt;
 
     if (provider === "api") {
       return res.status(403).json({
@@ -801,8 +811,8 @@ app.post("/api/node/generate", async (req, res) => {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const r = parentB64
-          ? await editViaOAuth(prompt, parentB64, quality, size, moderation)
-          : await generateViaOAuth(prompt, quality, size, moderation, refB64s, requestId);
+          ? await editViaOAuth(effectivePrompt, parentB64, quality, size, moderation)
+          : await generateViaOAuth(effectivePrompt, quality, size, moderation, refB64s, requestId);
         if (r.b64) {
           b64 = r.b64;
           usage = r.usage;
@@ -832,7 +842,9 @@ app.post("/api/node/generate", async (req, res) => {
       parentNodeId,
       sessionId,
       clientNodeId,
-      prompt,
+      prompt: displayPrompt,
+      displayPrompt,
+      effectivePrompt,
       options: { quality, size, format, moderation },
       createdAt: Date.now(),
       createdAtIso: new Date().toISOString(),

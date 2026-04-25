@@ -42,6 +42,7 @@ export function NodeInspector() {
   const duplicateBranchRoot = useAppStore((s) => s.duplicateBranchRoot);
   const updateNodePrompt = useAppStore((s) => s.updateNodePrompt);
   const updateNodeSettings = useAppStore((s) => s.updateNodeSettings);
+  const updateEdgeTransfer = useAppStore((s) => s.updateEdgeTransfer);
   const copyParentPromptToNode = useAppStore((s) => s.copyParentPromptToNode);
   const copyParentSettingsToNode = useAppStore((s) => s.copyParentSettingsToNode);
   const detachNodeFromParent = useAppStore((s) => s.detachNodeFromParent);
@@ -64,6 +65,10 @@ export function NodeInspector() {
   };
 
   if (selectedEdge && edgeParent && edgeChild) {
+    const edgeData = {
+      transferContext: selectedEdge.data?.transferContext ?? true,
+      transferSettings: selectedEdge.data?.transferSettings ?? true,
+    };
     return (
       <div className="node-inspector node-inspector--edge">
         <div className="section-title">{t("nodeInspector.connectionTitle")}</div>
@@ -77,23 +82,48 @@ export function NodeInspector() {
             <span>{edgeChild.data.prompt || edgeChild.data.serverNodeId || edgeChild.id}</span>
           </button>
         </div>
+        <p className="node-inspector__notice">{t("nodeInspector.connectionNotice")}</p>
+        <div className="node-inspector__toggles">
+          <label className="node-inspector__toggle-row">
+            <span>
+              {t("nodeInspector.transferContext")}
+              <small>
+                {t(
+                  edgeData.transferContext
+                    ? "nodeInspector.transferContextOn"
+                    : "nodeInspector.transferContextOff",
+                )}
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={edgeData.transferContext}
+              onChange={(event) =>
+                updateEdgeTransfer(selectedEdge.id, { transferContext: event.target.checked })
+              }
+            />
+          </label>
+          <label className="node-inspector__toggle-row">
+            <span>
+              {t("nodeInspector.transferSettings")}
+              <small>
+                {t(
+                  edgeData.transferSettings
+                    ? "nodeInspector.transferSettingsOn"
+                    : "nodeInspector.transferSettingsOff",
+                )}
+              </small>
+            </span>
+            <input
+              type="checkbox"
+              checked={edgeData.transferSettings}
+              onChange={(event) =>
+                updateEdgeTransfer(selectedEdge.id, { transferSettings: event.target.checked })
+              }
+            />
+          </label>
+        </div>
         <div className="node-inspector__actions">
-          <button
-            type="button"
-            className="node-inspector__button"
-            onClick={() => copyParentSettingsToNode(edgeChild.id)}
-            disabled={isBusy(edgeChild.data)}
-          >
-            {t("nodeInspector.copyParentSettings")}
-          </button>
-          <button
-            type="button"
-            className="node-inspector__button"
-            onClick={() => copyParentPromptToNode(edgeChild.id)}
-            disabled={isBusy(edgeChild.data)}
-          >
-            {t("nodeInspector.copyParentPrompt")}
-          </button>
           <button
             type="button"
             className="node-inspector__button"
