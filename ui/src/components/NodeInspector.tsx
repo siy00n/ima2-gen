@@ -3,9 +3,11 @@ import {
   getEdgeVisualState,
   normalizeEdgeTransferData,
   useAppStore,
+  ANCESTOR_IMAGE_COUNT_OPTIONS,
   type ImageNodeData,
   type ImageNodeStatus,
   type ImageTransferMode,
+  type AncestorImageCount,
 } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
@@ -166,6 +168,37 @@ export function NodeInspector() {
                   onClick={() => setEdgeImageTransfer(selectedEdge.id, mode)}
                 >
                   {t(imageTransferLabelKey(mode))}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="node-inspector__toggle-row node-inspector__toggle-row--stacked">
+            <span>
+              {t("nodeInspector.maxAncestorImages")}
+              <small>
+                {edgeData.imageTransfer === "ancestor"
+                  ? t("nodeInspector.maxAncestorImagesHelp")
+                  : t("nodeInspector.maxAncestorImagesDisabled")}
+              </small>
+            </span>
+            <div
+              className="node-inspector__segmented node-inspector__segmented--ancestor-count"
+              role="group"
+              aria-label={t("nodeInspector.maxAncestorImages")}
+            >
+              {ANCESTOR_IMAGE_COUNT_OPTIONS.map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  disabled={edgeData.imageTransfer !== "ancestor"}
+                  className={edgeData.maxAncestorImages === count ? "is-selected" : ""}
+                  onClick={() =>
+                    updateEdgeTransfer(selectedEdge.id, {
+                      maxAncestorImages: count as AncestorImageCount,
+                    })
+                  }
+                >
+                  {count}
                 </button>
               ))}
             </div>

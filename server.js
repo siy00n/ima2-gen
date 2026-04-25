@@ -71,6 +71,8 @@ app.use("/generated", express.static(join(__dirname, "generated"), {
 const MAX_REF_B64_BYTES = 7 * 1024 * 1024; // ~5.2MB binary after base64 decode
 const BASE64_RE = /^[A-Za-z0-9+/]+=*$/;
 const VALID_MODERATION = new Set(["auto", "low"]);
+const MAX_NODE_ANCESTOR_IMAGES = 8;
+const MAX_NODE_VISUAL_CONTEXT_ITEMS = MAX_NODE_ANCESTOR_IMAGES + 1;
 function validateAndNormalizeRefs(references) {
   if (!Array.isArray(references)) return { error: "references must be an array" };
   if (references.length > 5) return { error: "references may not exceed 5 items" };
@@ -104,8 +106,8 @@ function optionalString(value) {
 
 function normalizeVisualContext(raw) {
   if (raw == null) return { items: [] };
-  if (!Array.isArray(raw) || raw.length > 4) {
-    return { error: "visualContext must be an array of up to 4 items" };
+  if (!Array.isArray(raw) || raw.length > MAX_NODE_VISUAL_CONTEXT_ITEMS) {
+    return { error: `visualContext must be an array of up to ${MAX_NODE_VISUAL_CONTEXT_ITEMS} items` };
   }
 
   const items = [];
@@ -906,9 +908,16 @@ app.post("/api/node/generate", async (req, res) => {
         parentNodeId,
       });
     }
-    if (!Array.isArray(ancestorNodeIds) || ancestorNodeIds.length > 3 || ancestorNodeIds.some((id) => typeof id !== "string")) {
+    if (
+      !Array.isArray(ancestorNodeIds) ||
+      ancestorNodeIds.length > MAX_NODE_ANCESTOR_IMAGES ||
+      ancestorNodeIds.some((id) => typeof id !== "string")
+    ) {
       return res.status(400).json({
-        error: { code: "INVALID_ANCESTORS", message: "ancestorNodeIds must be an array of up to 3 node ids" },
+        error: {
+          code: "INVALID_ANCESTORS",
+          message: `ancestorNodeIds must be an array of up to ${MAX_NODE_ANCESTOR_IMAGES} node ids`,
+        },
         parentNodeId,
       });
     }
@@ -950,7 +959,7 @@ app.post("/api/node/generate", async (req, res) => {
       ancestorImages = await Promise.all(
         ancestorNodeIds
           .filter((nodeId) => nodeId !== parentNodeId)
-          .slice(0, 3)
+          .slice(0, MAX_NODE_ANCESTOR_IMAGES)
           .map(async (nodeId) => ({
             ...(await loadNodeImage(__dirname, nodeId)),
             visualContext: await resolveNodeVisualContext(

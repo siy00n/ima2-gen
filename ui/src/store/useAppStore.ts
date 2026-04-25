@@ -171,10 +171,14 @@ export type NodeSettings = {
 
 export type ImageTransferMode = "off" | "parent" | "ancestor";
 
+export const ANCESTOR_IMAGE_COUNT_OPTIONS = [1, 3, 5, 8] as const;
+export type AncestorImageCount = (typeof ANCESTOR_IMAGE_COUNT_OPTIONS)[number];
+
 export type EdgeTransferData = {
   transferContext: boolean;
   transferSettings: boolean;
   imageTransfer: ImageTransferMode;
+  maxAncestorImages: AncestorImageCount;
   transferAncestorImages?: boolean;
 };
 
@@ -182,6 +186,7 @@ const DEFAULT_EDGE_TRANSFER: EdgeTransferData = {
   transferContext: true,
   transferSettings: true,
   imageTransfer: "parent",
+  maxAncestorImages: 3,
 };
 
 const FALLBACK_NODE_SETTINGS: NodeSettings = {
@@ -234,6 +239,13 @@ function isImageTransferMode(value: unknown): value is ImageTransferMode {
   return value === "off" || value === "parent" || value === "ancestor";
 }
 
+function isAncestorImageCount(value: unknown): value is AncestorImageCount {
+  return (
+    typeof value === "number" &&
+    ANCESTOR_IMAGE_COUNT_OPTIONS.includes(value as AncestorImageCount)
+  );
+}
+
 export function normalizeEdgeTransferData(raw: unknown): EdgeTransferData {
   const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const transferContext =
@@ -255,6 +267,9 @@ export function normalizeEdgeTransferData(raw: unknown): EdgeTransferData {
         ? obj.transferSettings
         : DEFAULT_EDGE_TRANSFER.transferSettings,
     imageTransfer,
+    maxAncestorImages: isAncestorImageCount(obj.maxAncestorImages)
+      ? obj.maxAncestorImages
+      : DEFAULT_EDGE_TRANSFER.maxAncestorImages,
   };
 }
 
@@ -871,7 +886,9 @@ function resolveNodeImageInputs(
     currentId = parent.id as ClientNodeId;
   }
 
-  const orderedAncestors = ancestorNodes.reverse().slice(-3);
+  const maxAncestorImages =
+    incomingData?.maxAncestorImages ?? DEFAULT_EDGE_TRANSFER.maxAncestorImages;
+  const orderedAncestors = ancestorNodes.reverse().slice(-maxAncestorImages);
   const ancestorContext = orderedAncestors
     .map((ancestor) => nodeVisualContextItem(ancestor, "ancestor"))
     .filter((item): item is NodeVisualContextItem => Boolean(item));
