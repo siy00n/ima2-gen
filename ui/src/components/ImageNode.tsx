@@ -14,6 +14,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   const d = data as ImageNodeData;
   const updateNodePrompt = useAppStore((s) => s.updateNodePrompt);
   const generateNode = useAppStore((s) => s.generateNode);
+  const cancelNodeGeneration = useAppStore((s) => s.cancelNodeGeneration);
   const addChildNode = useAppStore((s) => s.addChildNode);
   const duplicateBranchRoot = useAppStore((s) => s.duplicateBranchRoot);
   const deleteNode = useAppStore((s) => s.deleteNode);
@@ -30,8 +31,12 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   );
 
   const onGenerate = useCallback(() => {
+    if (d.status === "pending" || d.status === "reconciling") {
+      void cancelNodeGeneration(id);
+      return;
+    }
     void generateNode(id);
-  }, [id, generateNode]);
+  }, [id, d.status, generateNode, cancelNodeGeneration]);
 
   const onBranch = useCallback(() => {
     if (!canUseNodeAsBranchParent(d)) return;
@@ -96,8 +101,10 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
           ? t("node.readyWithSearch", {
               elapsed: d.elapsed ?? "?",
               searches: d.webSearchCalls,
-            })
+          })
           : t("node.ready", { elapsed: d.elapsed ?? "?" });
+      case "canceled":
+        return t("node.canceled");
       case "stale":
         return d.error
           ? t("node.staleWithError", { error: d.error })
@@ -178,8 +185,17 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
             aria-hidden="true"
             tabIndex={-1}
           />
-          <button type="button" className="image-node__primary" onClick={onGenerate} disabled={isBusy}>
-            {d.status === "ready" ? t("node.regenerate") : t("node.generate")}
+          <button
+            type="button"
+            className={isBusy ? "image-node__cancel" : "image-node__primary"}
+            onClick={onGenerate}
+            disabled={isBusy ? !d.pendingRequestId : false}
+          >
+            {isBusy
+              ? t("node.cancel")
+              : d.status === "ready"
+                ? t("node.regenerate")
+                : t("node.generate")}
           </button>
           {canAttachImage ? (
             <button

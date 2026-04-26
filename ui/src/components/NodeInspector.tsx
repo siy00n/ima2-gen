@@ -53,7 +53,7 @@ function statusTone(status: ImageNodeStatus) {
   if (status === "ready") return "ready";
   if (status === "pending" || status === "reconciling") return "busy";
   if (status === "error" || status === "asset-missing") return "error";
-  if (status === "stale") return "stale";
+  if (status === "stale" || status === "canceled") return "stale";
   return "empty";
 }
 
@@ -96,6 +96,9 @@ export function NodeInspector() {
   const addChildFromSelectedEdge = useAppStore((s) => s.addChildFromSelectedEdge);
   const generateNode = useAppStore((s) => s.generateNode);
   const regenerateBranch = useAppStore((s) => s.regenerateBranch);
+  const cancelNodeGeneration = useAppStore((s) => s.cancelNodeGeneration);
+  const cancelBranchGeneration = useAppStore((s) => s.cancelBranchGeneration);
+  const branchGenerationRootId = useAppStore((s) => s.branchGenerationRootId);
   const deleteNode = useAppStore((s) => s.deleteNode);
   const attachImageToNode = useAppStore((s) => s.attachImageToNode);
   const importCurrentImageAsNode = useAppStore((s) => s.importCurrentImageAsNode);
@@ -324,6 +327,7 @@ export function NodeInspector() {
   const canGenerate = !busy && data.prompt.trim().length > 0;
   const hasChildren = edges.some((edge) => edge.source === selected.id);
   const canRegenerateBranch = canGenerate && data.status === "ready" && !!data.serverNodeId && hasChildren;
+  const isBranchGenerating = branchGenerationRootId === selected.id;
   const imageSrc = data.imageUrl ?? null;
   const parent = selected ? nodes.find((n) => edges.some((e) => e.source === n.id && e.target === selected.id)) : null;
   const hasParent = !!parent;
@@ -396,9 +400,14 @@ export function NodeInspector() {
   };
 
   const generateLabel =
-    data.status === "ready"
+    busy
+      ? t("node.cancel")
+      : data.status === "ready"
       ? t("node.regenerate")
-      : data.status === "error" || data.status === "stale" || data.status === "asset-missing"
+      : data.status === "error" ||
+          data.status === "stale" ||
+          data.status === "canceled" ||
+          data.status === "asset-missing"
         ? t("node.retry")
         : t("node.generate");
 
@@ -421,11 +430,13 @@ export function NodeInspector() {
           ? t("nodeInspector.statusSyncing")
           : data.status === "stale"
             ? t("nodeInspector.statusStale")
-            : data.status === "asset-missing"
-              ? t("nodeInspector.statusMissing")
-              : data.status === "error"
-                ? t("nodeInspector.statusError")
-                : t("nodeInspector.statusEmpty");
+            : data.status === "canceled"
+              ? t("nodeInspector.statusCanceled")
+              : data.status === "asset-missing"
+                ? t("nodeInspector.statusMissing")
+                : data.status === "error"
+                  ? t("nodeInspector.statusError")
+                  : t("nodeInspector.statusEmpty");
   const metaPills = [
     { label: statusLabel, tone: statusTone(data.status) },
     data.elapsed != null ? { label: `${data.elapsed}s` } : null,
@@ -680,9 +691,11 @@ export function NodeInspector() {
         <div className="node-inspector__action-panel">
           <button
             type="button"
-            className="node-inspector__primary"
-            onClick={() => void generateNode(selected.id)}
-            disabled={!canGenerate}
+            className={busy ? "node-inspector__danger" : "node-inspector__primary"}
+            onClick={() =>
+              busy ? void cancelNodeGeneration(selected.id) : void generateNode(selected.id)
+            }
+            disabled={busy ? !data.pendingRequestId : !canGenerate}
           >
             {generateLabel}
           </button>
@@ -734,10 +747,14 @@ export function NodeInspector() {
             <button
               type="button"
               className="node-inspector__button"
-              onClick={() => void regenerateBranch(selected.id)}
-              disabled={!canRegenerateBranch}
+              onClick={() =>
+                isBranchGenerating
+                  ? void cancelBranchGeneration(selected.id)
+                  : void regenerateBranch(selected.id)
+              }
+              disabled={isBranchGenerating ? false : !canRegenerateBranch}
             >
-              {t("node.regenerateBranch")}
+              {isBranchGenerating ? t("node.cancelBranch") : t("node.regenerateBranch")}
             </button>
             <button type="button" className="node-inspector__button" onClick={() => addChildNode(selected.id)} disabled={!canBranch}>
               {t("node.addChild")}

@@ -32,6 +32,7 @@ describe("Server: /api/health + advertisement", () => {
   let childStderr = "";
   let oauthServer;
   let lastOAuthPayload = null;
+  let slowOAuthClosed = false;
 
   before(async () => {
     oauthServer = createServer((req, res) => {
@@ -42,6 +43,15 @@ describe("Server: /api/health + advertisement", () => {
         });
         req.on("end", () => {
           lastOAuthPayload = JSON.parse(body);
+          if (body.includes("slow abort test")) {
+            slowOAuthClosed = false;
+            res.on("close", () => {
+              slowOAuthClosed = true;
+            });
+            res.writeHead(200, { "Content-Type": "text/event-stream" });
+            res.write("data: {\"type\":\"response.created\"}\n\n");
+            return;
+          }
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({
             output: [{ type: "image_generation_call", result: "aGVsbG8=" }],
@@ -149,6 +159,56 @@ describe("Server: /api/health + advertisement", () => {
     assert.strictEqual(lastOAuthPayload.model, "gpt-5.5");
     assert.strictEqual(lastOAuthPayload.tools[1].type, "image_generation");
     assert.strictEqual(lastOAuthPayload.tools[1].moderation, "auto");
+  });
+
+  it("aborts a running node generation through /api/inflight", async () => {
+    const requestId = `node_abort_${Date.now()}`;
+    const generatePromise = fetch(`http://localhost:${PORT}/api/node/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId,
+        sessionId: "session-abort",
+        clientNodeId: "client-abort",
+        prompt: "slow abort test",
+        displayPrompt: "slow abort test",
+        effectivePrompt: "slow abort test",
+        parentNodeId: null,
+        quality: "low",
+        size: "1024x1024",
+        format: "png",
+        moderation: "low",
+        provider: "oauth",
+      }),
+    });
+
+    let sawJob = false;
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const inflight = await fetch(
+        `http://localhost:${PORT}/api/inflight?kind=node&sessionId=session-abort`,
+      );
+      const body = await inflight.json();
+      if (body.jobs.some((job) => job.requestId === requestId)) {
+        sawJob = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.strictEqual(sawJob, true, "node job should be visible before cancel");
+
+    const cancelRes = await fetch(`http://localhost:${PORT}/api/inflight/${requestId}`, {
+      method: "DELETE",
+    });
+    assert.strictEqual(cancelRes.status, 204);
+
+    const res = await generatePromise;
+    assert.strictEqual(res.status, 499);
+    const body = await res.json();
+    assert.strictEqual(body.error.code, "NODE_GEN_CANCELED");
+
+    await new Promise((r) => setTimeout(r, 50));
+    assert.strictEqual(slowOAuthClosed, true);
   });
 
   // Windows: child.kill(anything) = forceful termination per Node docs

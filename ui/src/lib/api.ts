@@ -100,6 +100,7 @@ export type HistoryItem = {
   nodeId?: string | null;
   parentNodeId?: string | null;
   clientNodeId?: string | null;
+  requestId?: string | null;
   kind?: string | null;
 };
 

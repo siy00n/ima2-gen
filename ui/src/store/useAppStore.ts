@@ -400,6 +400,7 @@ export type ImageNodeStatus =
   | "pending"
   | "reconciling"
   | "ready"
+  | "canceled"
   | "stale"
   | "asset-missing"
   | "error";
@@ -496,7 +497,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 type NodePosition = { x: number; y: number };
-type GenerateNodeOptions = { selectOnComplete?: boolean };
+type GenerateNodeOptions = { selectOnComplete?: boolean; branchRootId?: ClientNodeId };
 
 export type NodeGenerateDeliveryIssue = {
   code: "missing-prompt" | "missing-parent-image";
@@ -597,14 +598,17 @@ function findNodeHistoryResult(
   items: HistoryItem[],
   sessionId: string,
   node: GraphNode,
+  canceledRequestIds: string[] = [],
 ): HistoryItem | null {
   const startedAt = node.data.pendingStartedAt ?? 0;
   if (!startedAt) return null;
+  const canceled = new Set(canceledRequestIds);
   return (
     items.find(
       (item) =>
         (item.sessionId ?? null) === sessionId &&
         (item.clientNodeId ?? null) === node.id &&
+        !canceled.has(item.requestId ?? "") &&
         (item.createdAt ?? 0) >= startedAt &&
         !!item.nodeId &&
         !!item.url,
@@ -771,6 +775,9 @@ type AppState = {
   graphUndoFuture: GraphSnapshot[];
   canUndoGraph: boolean;
   canRedoGraph: boolean;
+  canceledRequestIds: string[];
+  branchGenerationRootId: ClientNodeId | null;
+  branchGenerationRequestIds: string[];
   selectedNodeId: ClientNodeId | null;
   selectedEdgeId: string | null;
   selectNode: (clientId: ClientNodeId | null) => void;
@@ -802,6 +809,8 @@ type AppState = {
   addChildFromSelectedEdge: () => ClientNodeId | null;
   generateNode: (clientId: ClientNodeId, options?: GenerateNodeOptions) => Promise<boolean>;
   regenerateBranch: (clientId: ClientNodeId) => Promise<void>;
+  cancelNodeGeneration: (clientId: ClientNodeId) => Promise<void>;
+  cancelBranchGeneration: (rootId: ClientNodeId) => Promise<void>;
   deleteNode: (clientId: ClientNodeId) => void;
   deleteNodes: (clientIds: ClientNodeId[]) => void;
   attachImageToNode: (clientId: ClientNodeId, file: File) => Promise<void>;
@@ -878,6 +887,30 @@ function takeGraphSnapshot(s: Pick<AppState, "graphNodes" | "graphEdges" | "sele
 
 function hasPendingGraphNodes(nodes: GraphNode[]): boolean {
   return nodes.some((node) => node.data.status === "pending" || node.data.status === "reconciling");
+}
+
+function isNodeGeneratingStatus(status: ImageNodeStatus): boolean {
+  return status === "pending" || status === "reconciling";
+}
+
+function addUniqueRequestIds(existing: string[], ids: string[]): string[] {
+  const merged = [...existing];
+  for (const id of ids) {
+    if (id && !merged.includes(id)) merged.push(id);
+  }
+  return merged.slice(-100);
+}
+
+function canceledNodeData(data: ImageNodeData): ImageNodeData {
+  const hasImage = !!data.serverNodeId || !!data.imageUrl;
+  return {
+    ...data,
+    status: hasImage ? "canceled" : "empty",
+    pendingRequestId: null,
+    pendingPhase: null,
+    pendingStartedAt: null,
+    error: hasImage ? t("node.canceledMessage") : undefined,
+  };
 }
 
 function clearGraphHistoryPatch(): Pick<
@@ -1463,21 +1496,24 @@ export const useAppStore = create<AppState>((set, get) => ({
           0,
         );
         const { items } = await getHistory({ limit: HISTORY_LIMIT, since: lastKnown });
-        const arr: GenerateItem[] = items.map((it) => ({
-          image: it.url,
-          url: it.url,
-          filename: it.filename,
-          thumb: it.url,
-          prompt: it.prompt ?? undefined,
-          size: it.size ?? undefined,
-          quality: it.quality ?? undefined,
-          format: it.format as Format | undefined,
-          createdAt: it.createdAt,
-          sessionId: it.sessionId ?? null,
-          nodeId: it.nodeId ?? null,
-          clientNodeId: it.clientNodeId ?? null,
-          kind: narrowGenerateKind(it.kind),
-        }));
+        const canceled = new Set(get().canceledRequestIds);
+        const arr: GenerateItem[] = items
+          .filter((it) => !canceled.has(it.requestId ?? ""))
+          .map((it) => ({
+            image: it.url,
+            url: it.url,
+            filename: it.filename,
+            thumb: it.url,
+            prompt: it.prompt ?? undefined,
+            size: it.size ?? undefined,
+            quality: it.quality ?? undefined,
+            format: it.format as Format | undefined,
+            createdAt: it.createdAt,
+            sessionId: it.sessionId ?? null,
+            nodeId: it.nodeId ?? null,
+            clientNodeId: it.clientNodeId ?? null,
+            kind: narrowGenerateKind(it.kind),
+          }));
         const existing = get().history;
         const fresh = arr.filter(
           (a) => !existing.some((e) => e.filename === a.filename),
@@ -1592,6 +1628,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   graphUndoFuture: [],
   canUndoGraph: false,
   canRedoGraph: false,
+  canceledRequestIds: [],
+  branchGenerationRootId: null,
+  branchGenerationRequestIds: [],
   selectedNodeId: null,
   selectedEdgeId: null,
   selectNode: (selectedNodeId) => set({ selectedNodeId, selectedEdgeId: null }),
@@ -1686,6 +1725,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         graphEdges,
         selectedNodeId: null,
         selectedEdgeId: null,
+        canceledRequestIds: [],
+        branchGenerationRootId: null,
+        branchGenerationRequestIds: [],
         sessionLoading: false,
         ...clearGraphHistoryPatch(),
       });
@@ -1755,7 +1797,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             data: { ...n.data, status: "reconciling" as const },
           };
         }
-        const recovered = findNodeHistoryResult(historyItems, sid, n);
+        const recovered = findNodeHistoryResult(historyItems, sid, n, get().canceledRequestIds);
         if (recovered) {
           shouldSave = true;
           return applyNodeHistoryResult(n, recovered);
@@ -1796,6 +1838,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         graphEdges: [],
         selectedNodeId: null,
         selectedEdgeId: null,
+        canceledRequestIds: [],
+        branchGenerationRootId: null,
+        branchGenerationRequestIds: [],
         ...clearGraphHistoryPatch(),
       });
     } catch (err) {
@@ -1832,6 +1877,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           graphEdges: [],
           selectedNodeId: null,
           selectedEdgeId: null,
+          canceledRequestIds: [],
+          branchGenerationRootId: null,
+          branchGenerationRequestIds: [],
           ...clearGraphHistoryPatch(),
         });
         if (remaining.length > 0) {
@@ -2203,6 +2251,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         clientNodeId: targetClientId,
       },
     ];
+    const branchRootId = options?.branchRootId ?? null;
     saveInFlight(nextInFlight);
     set({
       graphNodes: get().graphNodes.map((n) =>
@@ -2222,6 +2271,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
       activeGenerations: s.activeGenerations + 1,
       inFlight: nextInFlight,
+      ...(branchRootId
+        ? {
+            branchGenerationRequestIds: addUniqueRequestIds(
+              get().branchGenerationRequestIds,
+              [flightId],
+            ),
+          }
+        : {}),
     });
     get().startInFlightPolling();
     get().scheduleGraphSave();
@@ -2237,7 +2294,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         clientNodeId: targetClientId,
       });
       succeeded = true;
-      if (get().activeSessionId === requestSessionId) {
+      if (get().canceledRequestIds.includes(flightId)) {
+        succeeded = false;
+      } else if (get().activeSessionId === requestSessionId) {
         const nextNodes = get().graphNodes.map((n) =>
           n.id === targetClientId
             ? {
@@ -2294,6 +2353,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       // cross-session: result will be restored via recoverGraphNodesFromHistory
       // when the user returns to the originating session.
     } catch (err) {
+      const isCanceled =
+        (err as Error & { code?: string })?.code === "NODE_GEN_CANCELED" ||
+        get().canceledRequestIds.includes(flightId);
       const msg = err instanceof Error ? err.message : t("toast.nodeCreateFailed");
       if (get().activeSessionId === requestSessionId) {
         set({
@@ -2301,20 +2363,22 @@ export const useAppStore = create<AppState>((set, get) => ({
             n.id === targetClientId
               ? {
                   ...n,
-                  data: {
-                    ...n.data,
-                    status: hadGeneratedImage ? ("stale" as const) : ("error" as const),
-                    pendingRequestId: null,
-                    pendingPhase: null,
-                    pendingStartedAt: null,
-                    error: msg,
-                  },
+                  data: isCanceled
+                    ? canceledNodeData(n.data)
+                    : {
+                        ...n.data,
+                        status: hadGeneratedImage ? ("stale" as const) : ("error" as const),
+                        pendingRequestId: null,
+                        pendingPhase: null,
+                        pendingStartedAt: null,
+                        error: msg,
+                      },
                 }
               : n,
           ),
         });
         graphMutated = true;
-        get().showToast(msg, true);
+        if (!isCanceled) get().showToast(msg, true);
       }
       // cross-session: silent — user is on a different graph
     } finally {
@@ -2323,8 +2387,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const remaining = get().inFlight.filter((f) => f.id !== flightId);
       saveInFlight(remaining);
       set({
-        activeGenerations: Math.max(0, get().activeGenerations - 1),
+        activeGenerations: remaining.length,
         inFlight: remaining,
+        branchGenerationRequestIds: get().branchGenerationRequestIds.filter((id) => id !== flightId),
       });
       // Persist the graph only if we actually mutated it AND we are still on
       // the originating session.
@@ -2353,18 +2418,104 @@ export const useAppStore = create<AppState>((set, get) => ({
       window.confirm(t("node.branchRegenerateConfirm", { count: branchNodes.length }));
     if (!confirmed) return;
 
+    set({ branchGenerationRootId: clientId, branchGenerationRequestIds: [] });
     for (const level of branchLevels) {
-      const results = await Promise.all(
-        level.map((id) => get().generateNode(id, { selectOnComplete: false })),
-      );
-      if (results.some((ok) => !ok)) {
-        get().showToast(t("toast.nodeBranchStopped"), true);
+      if (get().branchGenerationRootId !== clientId) {
         set({ selectedNodeId: clientId, selectedEdgeId: null });
         return;
       }
+      const results = await Promise.all(
+        level.map((id) => get().generateNode(id, { selectOnComplete: false, branchRootId: clientId })),
+      );
+      if (get().branchGenerationRootId !== clientId) {
+        set({ selectedNodeId: clientId, selectedEdgeId: null });
+        return;
+      }
+      if (results.some((ok) => !ok)) {
+        get().showToast(t("toast.nodeBranchStopped"), true);
+        set({
+          selectedNodeId: clientId,
+          selectedEdgeId: null,
+          branchGenerationRootId: null,
+          branchGenerationRequestIds: [],
+        });
+        return;
+      }
     }
-    set({ selectedNodeId: clientId, selectedEdgeId: null });
+    set({
+      selectedNodeId: clientId,
+      selectedEdgeId: null,
+      branchGenerationRootId: null,
+      branchGenerationRequestIds: [],
+    });
     get().showToast(t("toast.nodeBranchComplete", { count: branchIds.length }));
+  },
+
+  async cancelNodeGeneration(clientId) {
+    const node = get().graphNodes.find((n) => n.id === clientId);
+    const requestId = node?.data.pendingRequestId;
+    if (!node || !requestId || !isNodeGeneratingStatus(node.data.status)) return;
+    void cancelInflight(requestId);
+
+    const remaining = get().inFlight.filter((f) => f.id !== requestId);
+    saveInFlight(remaining);
+    set({
+      canceledRequestIds: addUniqueRequestIds(get().canceledRequestIds, [requestId]),
+      graphNodes: get().graphNodes.map((n) =>
+        n.id === clientId ? { ...n, data: canceledNodeData(n.data) } : n,
+      ),
+      inFlight: remaining,
+      activeGenerations: remaining.length,
+      branchGenerationRequestIds: get().branchGenerationRequestIds.filter((id) => id !== requestId),
+    });
+    get().scheduleGraphSave();
+    get().showToast(t("toast.nodeGenerationCanceled"));
+  },
+
+  async cancelBranchGeneration(rootId) {
+    const branchIds = collectBranchNodeLevels(get().graphEdges, rootId).flat();
+    const branchIdSet = new Set(branchIds);
+    const requestIds = [
+      ...get().branchGenerationRequestIds,
+      ...get().graphNodes
+        .filter((node) => branchIdSet.has(node.id as ClientNodeId))
+        .map((node) => node.data.pendingRequestId)
+        .filter((id): id is string => Boolean(id)),
+    ];
+    const uniqueRequestIds = [...new Set(requestIds)];
+    if (uniqueRequestIds.length === 0) {
+      set({
+        branchGenerationRootId: null,
+        branchGenerationRequestIds: [],
+        selectedNodeId: rootId,
+        selectedEdgeId: null,
+      });
+      return;
+    }
+    for (const requestId of uniqueRequestIds) {
+      void cancelInflight(requestId);
+    }
+    const requestIdSet = new Set(uniqueRequestIds);
+    const remaining = get().inFlight.filter((f) => !requestIdSet.has(f.id));
+    saveInFlight(remaining);
+    set({
+      canceledRequestIds: addUniqueRequestIds(get().canceledRequestIds, uniqueRequestIds),
+      graphNodes: get().graphNodes.map((node) =>
+        branchIdSet.has(node.id as ClientNodeId) &&
+        node.data.pendingRequestId &&
+        requestIdSet.has(node.data.pendingRequestId)
+          ? { ...node, data: canceledNodeData(node.data) }
+          : node,
+      ),
+      inFlight: remaining,
+      activeGenerations: remaining.length,
+      branchGenerationRootId: null,
+      branchGenerationRequestIds: [],
+      selectedNodeId: rootId,
+      selectedEdgeId: null,
+    });
+    get().scheduleGraphSave();
+    get().showToast(t("toast.nodeBranchCanceled"));
   },
 
   deleteNode: (clientId) => {
@@ -2958,6 +3109,7 @@ async function recoverGraphNodesFromHistory(
     sessionId?: string | null;
     nodeId?: string | null;
     clientNodeId?: string | null;
+    requestId?: string | null;
   }> = [];
   try {
     const res = await getHistory({ sessionId: sid, limit: HISTORY_LIMIT });
@@ -2967,6 +3119,7 @@ async function recoverGraphNodesFromHistory(
     return;
   }
 
+  const canceled = new Set(get().canceledRequestIds);
   let changed = false;
   const next = get().graphNodes.map((n) => {
     if (n.data.imageUrl || n.data.serverNodeId) return n;
@@ -2975,6 +3128,7 @@ async function recoverGraphNodesFromHistory(
       (h) =>
         (h.sessionId ?? null) === sid &&
         (h.clientNodeId ?? null) === n.id &&
+        !canceled.has(h.requestId ?? "") &&
         (!startedAt || (h.createdAt ?? 0) >= startedAt),
     );
     if (!recovered) return n;

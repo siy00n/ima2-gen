@@ -17,7 +17,7 @@ import {
   loadAssetMeta,
   importAssetAsNode,
 } from "./lib/nodeStore.js";
-import { startJob, finishJob, listJobs, setJobPhase } from "./lib/inflight.js";
+import { startJob, finishJob, listJobs, setJobPhase, cancelJob, isJobCanceled } from "./lib/inflight.js";
 import {
   createSession,
   listSessions,
@@ -234,6 +234,23 @@ function imageDataUrl(mime, b64) {
   return `data:${mime};base64,${b64}`;
 }
 
+function nodeCanceledError() {
+  const err = new Error("Node generation canceled");
+  err.code = "NODE_GEN_CANCELED";
+  err.status = 499;
+  return err;
+}
+
+function isAbortLikeError(err) {
+  return err?.name === "AbortError" || err?.code === "ABORT_ERR" || err?.code === "NODE_GEN_CANCELED";
+}
+
+function throwIfCanceled(requestId, signal) {
+  if (signal?.aborted || isJobCanceled(requestId)) {
+    throw nodeCanceledError();
+  }
+}
+
 function buildGenerateTextPrompt(prompt) {
   return `Generate an image: ${prompt}${RESEARCH_SUFFIX}`;
 }
@@ -399,7 +416,15 @@ async function loadAssetPreview(rootDir, externalSrc) {
   };
 }
 
-async function generateViaOAuth(prompt, quality, size, moderation = "low", references = [], requestId = null) {
+async function generateViaOAuth(
+  prompt,
+  quality,
+  size,
+  moderation = "low",
+  references = [],
+  requestId = null,
+  signal = undefined,
+) {
   const tools = [
     { type: "web_search" },
     { type: "image_generation", quality, size, moderation },
@@ -407,9 +432,11 @@ async function generateViaOAuth(prompt, quality, size, moderation = "low", refer
 
   const userContent = buildGenerateUserContent(prompt, references);
 
+  throwIfCanceled(requestId, signal);
   const res = await fetch(`${OAUTH_URL}/v1/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    signal,
     body: JSON.stringify({
       model: OPENAI_IMAGE_MODEL,
       input: [
@@ -461,6 +488,7 @@ async function generateViaOAuth(prompt, quality, size, moderation = "low", refer
   let eventCount = 0;
 
   while (true) {
+    throwIfCanceled(requestId, signal);
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -515,9 +543,11 @@ async function generateViaOAuth(prompt, quality, size, moderation = "low", refer
   // Wait briefly and retry with non-stream to check if image was generated.
   if (!imageB64) {
     console.log("[oauth] no image in stream, retrying non-stream...");
+    throwIfCanceled(requestId, signal);
     const retryRes = await fetch(`${OAUTH_URL}/v1/responses`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal,
       body: JSON.stringify({
         model: OPENAI_IMAGE_MODEL,
         input: [{ role: "user", content: prompt }],
@@ -539,6 +569,7 @@ async function generateViaOAuth(prompt, quality, size, moderation = "low", refer
     throw new Error("No image data received from OAuth proxy (parsed " + eventCount + " events)");
   }
 
+  throwIfCanceled(requestId, signal);
   return { b64: imageB64, usage, webSearchCalls };
 }
 
@@ -632,6 +663,7 @@ app.get("/api/history", async (req, res) => {
         nodeId: meta?.nodeId || null,
         parentNodeId: meta?.parentNodeId || null,
         clientNodeId: meta?.clientNodeId || null,
+        requestId: meta?.requestId || null,
         kind: meta?.kind || null,
       };
     }));
@@ -742,7 +774,7 @@ app.get("/api/inflight", (req, res) => {
 });
 
 app.delete("/api/inflight/:requestId", (req, res) => {
-  finishJob(req.params.requestId, { canceled: true });
+  cancelJob(req.params.requestId);
   res.status(204).end();
 });
 
@@ -894,6 +926,7 @@ async function editViaOAuth(
   requestId = null,
   contextImages = [],
   parentContext = null,
+  signal = undefined,
 ) {
   const editContent = buildEditUserContent(
     prompt,
@@ -902,9 +935,11 @@ async function editViaOAuth(
     contextImages,
     parentContext,
   );
+  throwIfCanceled(requestId, signal);
   const res = await fetch(`${OAUTH_URL}/v1/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    signal,
     body: JSON.stringify({
       model: OPENAI_IMAGE_MODEL,
       input: [
@@ -936,6 +971,7 @@ async function editViaOAuth(
   let usage = null;
 
   while (true) {
+    throwIfCanceled(requestId, signal);
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -966,6 +1002,7 @@ async function editViaOAuth(
     }
   }
 
+  throwIfCanceled(requestId, signal);
   if (resultB64) return { b64: resultB64, usage };
   throw new Error("No image data received from OAuth edit");
 }
@@ -1250,6 +1287,7 @@ app.post("/api/node/generate", async (req, res) => {
     typeof body.clientNodeId === "string" ? body.clientNodeId : null;
   const jobPrompt =
     typeof body.displayPrompt === "string" ? body.displayPrompt : body.prompt;
+  const controller = new AbortController();
   startJob({
     requestId,
     kind: "node",
@@ -1260,6 +1298,7 @@ app.post("/api/node/generate", async (req, res) => {
       parentNodeId,
       clientNodeId,
     },
+    controller,
   });
   try {
     const {
@@ -1373,6 +1412,7 @@ app.post("/api/node/generate", async (req, res) => {
     const MAX_RETRIES = 1;
     let lastErr;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      throwIfCanceled(requestId, controller.signal);
       try {
         const r = parentImage
           ? await editViaOAuth(
@@ -1385,8 +1425,17 @@ app.post("/api/node/generate", async (req, res) => {
               requestId,
               ancestorImages,
               parentVisualContext,
+              controller.signal,
             )
-          : await generateViaOAuth(effectivePrompt, quality, size, moderation, refB64s, requestId);
+          : await generateViaOAuth(
+              effectivePrompt,
+              quality,
+              size,
+              moderation,
+              refB64s,
+              requestId,
+              controller.signal,
+            );
         if (r.b64) {
           b64 = r.b64;
           usage = r.usage;
@@ -1395,6 +1444,9 @@ app.post("/api/node/generate", async (req, res) => {
         }
         lastErr = new Error("Empty response (safety refusal)");
       } catch (e) {
+        if (isAbortLikeError(e) || controller.signal.aborted || isJobCanceled(requestId)) {
+          throw nodeCanceledError();
+        }
         lastErr = e;
       }
       if (attempt < MAX_RETRIES) {
@@ -1409,6 +1461,7 @@ app.post("/api/node/generate", async (req, res) => {
       });
     }
 
+    throwIfCanceled(requestId, controller.signal);
     const nodeId = newNodeId();
     const elapsed = +((Date.now() - startTime) / 1000).toFixed(1);
     const meta = {
@@ -1423,6 +1476,7 @@ app.post("/api/node/generate", async (req, res) => {
         : [],
       sessionId,
       clientNodeId,
+      requestId,
       prompt: displayPrompt,
       displayPrompt,
       effectivePrompt,
@@ -1438,8 +1492,10 @@ app.post("/api/node/generate", async (req, res) => {
       quality, size, format, moderation,
     };
     await mkdir(join(__dirname, "generated"), { recursive: true });
+    throwIfCanceled(requestId, controller.signal);
     const { filename } = await saveNode(__dirname, { nodeId, b64, meta, ext: format });
 
+    throwIfCanceled(requestId, controller.signal);
     res.json({
       nodeId,
       parentNodeId,

@@ -1641,6 +1641,7 @@ body {
 .image-node__status-pill--ready { color: var(--edge-context); border-color: rgba(94, 234, 212, 0.28); }
 .image-node__status-pill--pending,
 .image-node__status-pill--reconciling { color: var(--edge-settings); border-color: rgba(245, 184, 75, 0.3); }
+.image-node__status-pill--canceled,
 .image-node__status-pill--error,
 .image-node__status-pill--asset-missing { color: #ff8a8a; border-color: rgba(239, 68, 68, 0.36); }
 .image-node__menu {
@@ -1747,6 +1748,12 @@ body {
   background: linear-gradient(135deg, #7c5cff, #4f46e5) !important;
   border-color: rgba(255, 255, 255, 0.14) !important;
   color: #fff !important;
+  font-weight: 700;
+}
+.image-node__cancel {
+  background: rgba(239, 68, 68, 0.16) !important;
+  border-color: rgba(239, 68, 68, 0.38) !important;
+  color: #ffb4b4 !important;
   font-weight: 700;
 }
 .image-node__actions button:disabled { opacity: 0.5; cursor: not-allowed; }
