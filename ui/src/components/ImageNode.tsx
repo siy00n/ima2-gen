@@ -1,6 +1,11 @@
 import { memo, useCallback, useEffect, useState, type CSSProperties } from "react";
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
-import { useAppStore, type ImageNodeData, type GraphNode } from "../store/useAppStore";
+import {
+  canUseNodeAsBranchParent,
+  useAppStore,
+  type ImageNodeData,
+  type GraphNode,
+} from "../store/useAppStore";
 import { useI18n } from "../i18n";
 
 function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
@@ -11,6 +16,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   const addChildNode = useAppStore((s) => s.addChildNode);
   const duplicateBranchRoot = useAppStore((s) => s.duplicateBranchRoot);
   const deleteNode = useAppStore((s) => s.deleteNode);
+  const hasParentEdge = useAppStore((s) => s.graphEdges.some((edge) => edge.target === id));
   const updateNodeInternals = useUpdateNodeInternals();
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -24,7 +30,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   }, [id, generateNode]);
 
   const onBranch = useCallback(() => {
-    if (d.status !== "ready") return;
+    if (!canUseNodeAsBranchParent(d)) return;
     addChildNode(id);
   }, [id, d.status, addChildNode]);
 
@@ -41,7 +47,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   }, [id, confirmDelete, deleteNode]);
 
   const isBusy = d.status === "pending" || d.status === "reconciling";
-  const canBranch = d.status === "ready" && !!d.serverNodeId;
+  const canBranch = canUseNodeAsBranchParent(d);
   const graphLevel = d.graphLevel ?? 0;
   const graphTreeColor = d.graphTreeColor ?? "#a78bfa";
   const nodeName = d.name?.trim() || t("node.untitledName");
@@ -132,7 +138,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
           value={d.prompt}
           onChange={onPromptChange}
           onKeyDown={(e) => e.stopPropagation()}
-          placeholder={d.parentServerNodeId ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
+          placeholder={hasParentEdge ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
           rows={1}
           disabled={isBusy}
         />

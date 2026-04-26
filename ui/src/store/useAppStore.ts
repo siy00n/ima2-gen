@@ -192,6 +192,11 @@ const DEFAULT_EDGE_TRANSFER: EdgeTransferData = {
   maxAncestorImages: 3,
 };
 
+const TEXT_ONLY_EDGE_TRANSFER: EdgeTransferData = {
+  ...DEFAULT_EDGE_TRANSFER,
+  imageTransfer: "off",
+};
+
 const FALLBACK_NODE_SETTINGS: NodeSettings = {
   quality: "low",
   sizePreset: "1024x1024",
@@ -430,6 +435,22 @@ export type ImageNodeData = {
 
 export type GraphNode = FlowNode<ImageNodeData>;
 export type GraphEdge = FlowEdge<EdgeTransferData>;
+
+export function canUseNodeAsBranchParent(data: Pick<ImageNodeData, "status">): boolean {
+  return data.status !== "pending" && data.status !== "reconciling";
+}
+
+function hasReadyNodeImage(data: Pick<ImageNodeData, "status" | "serverNodeId">): boolean {
+  return data.status === "ready" && !!data.serverNodeId;
+}
+
+function edgeTransferForParent(parent: GraphNode): EdgeTransferData {
+  return hasReadyNodeImage(parent.data) ? DEFAULT_EDGE_TRANSFER : TEXT_ONLY_EDGE_TRANSFER;
+}
+
+function createChildEdge(parent: GraphNode, target: ClientNodeId): GraphEdge {
+  return createGraphEdge(parent.id as ClientNodeId, target, edgeTransferForParent(parent));
+}
 
 type NodePosition = { x: number; y: number };
 type GenerateNodeOptions = { selectOnComplete?: boolean };
@@ -1818,8 +1839,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   addChildNode: (parentClientId) => {
     const parent = get().graphNodes.find((n) => n.id === parentClientId);
     if (!parent) return parentClientId;
-    if (parent.data.status !== "ready" || !parent.data.serverNodeId) {
-      get().showToast(t("toast.nodeParentRequired"), true);
+    if (!canUseNodeAsBranchParent(parent.data)) {
+      get().showToast(t("toast.nodeBranchParentBusy"), true);
       return parentClientId;
     }
     const clientId = newClientNodeId();
@@ -1843,7 +1864,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         settings,
       },
     };
-    const edge = createGraphEdge(parentClientId, clientId);
+    const edge = createChildEdge(parent, clientId);
     commitUserGraphChange(get, set, {
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
@@ -2332,8 +2353,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   addChildNodeAt: (parentClientId, position) => {
     const parent = get().graphNodes.find((n) => n.id === parentClientId);
     if (!parent) return parentClientId;
-    if (parent.data.status !== "ready" || !parent.data.serverNodeId) {
-      get().showToast(t("toast.nodeParentRequired"), true);
+    if (!canUseNodeAsBranchParent(parent.data)) {
+      get().showToast(t("toast.nodeBranchParentBusy"), true);
       return parentClientId;
     }
     const clientId = newClientNodeId();
@@ -2357,7 +2378,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         settings,
       },
     };
-    const edge = createGraphEdge(parentClientId, clientId);
+    const edge = createChildEdge(parent, clientId);
     commitUserGraphChange(get, set, {
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
@@ -2377,8 +2398,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const target = get().graphNodes.find((n) => n.id === targetClientId);
     if (!source) return;
     if (!target) return;
-    if (source.data.status !== "ready" || !source.data.serverNodeId) {
-      get().showToast(t("toast.nodeParentRequired"), true);
+    if (!canUseNodeAsBranchParent(source.data)) {
+      get().showToast(t("toast.nodeBranchParentBusy"), true);
       return;
     }
     if (target.data.status === "pending" || target.data.status === "reconciling") {
@@ -2389,7 +2410,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       get().showToast(t("toast.nodeCycleRejected"), true);
       return;
     }
-    const edge = createGraphEdge(sourceClientId, targetClientId);
+    const edge = createChildEdge(source, targetClientId);
     const edgeData = normalizeEdgeTransferData(edge.data);
     const nextTargetData =
       target.data.status === "empty" && !target.data.serverNodeId && !target.data.imageUrl

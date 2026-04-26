@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  canUseNodeAsBranchParent,
   getEdgeVisualState,
   normalizeEdgeTransferData,
   useAppStore,
@@ -272,7 +273,7 @@ export function NodeInspector() {
             type="button"
             className="node-inspector__button"
             onClick={() => addChildFromSelectedEdge()}
-            disabled={edgeParent.data.status !== "ready" || !edgeParent.data.serverNodeId}
+            disabled={!canUseNodeAsBranchParent(edgeParent.data)}
           >
             {t("nodeInspector.addSiblingChild")}
           </button>
@@ -314,7 +315,7 @@ export function NodeInspector() {
   }
 
   const busy = isBusy(data);
-  const canBranch = data.status === "ready" && !!data.serverNodeId;
+  const canBranch = canUseNodeAsBranchParent(data);
   const canGenerate = !busy && data.prompt.trim().length > 0;
   const hasChildren = edges.some((edge) => edge.source === selected.id);
   const canRegenerateBranch = canGenerate && data.status === "ready" && !!data.serverNodeId && hasChildren;
@@ -518,7 +519,7 @@ export function NodeInspector() {
             value={data.prompt}
             disabled={busy}
             onChange={(e) => updateNodePrompt(selected.id, e.target.value)}
-            placeholder={data.parentServerNodeId ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
+            placeholder={hasParent ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
             rows={5}
           />
         </label>
