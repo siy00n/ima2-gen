@@ -267,6 +267,13 @@ export type NodeImportRequest = {
   clientNodeId?: string | null;
 };
 
+export type NodeAttachRequest = {
+  image: string;
+  prompt?: string;
+  sessionId?: string | null;
+  clientNodeId?: string | null;
+};
+
 export type NodeImportResponse = {
   nodeId: string;
   filename: string;
@@ -324,6 +331,14 @@ export async function postNodeGeneratePreview(
 
 export function postNodeImport(payload: NodeImportRequest): Promise<NodeImportResponse> {
   return jsonFetch("/api/node/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function postNodeAttach(payload: NodeAttachRequest): Promise<NodeImportResponse> {
+  return jsonFetch("/api/node/attach", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

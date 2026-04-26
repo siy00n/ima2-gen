@@ -74,6 +74,42 @@ const BASE64_RE = /^[A-Za-z0-9+/]+=*$/;
 const VALID_MODERATION = new Set(["auto", "low"]);
 const MAX_NODE_ANCESTOR_IMAGES = 8;
 const MAX_NODE_VISUAL_CONTEXT_ITEMS = MAX_NODE_ANCESTOR_IMAGES + 1;
+const NODE_ATTACH_MIME_TO_EXT = {
+  "image/png": "png",
+  "image/jpeg": "jpeg",
+  "image/webp": "webp",
+};
+
+function parseNodeAttachImage(image) {
+  if (typeof image !== "string" || image.trim().length === 0) {
+    const err = new Error("image is required");
+    err.code = "NODE_SOURCE_INVALID";
+    err.status = 400;
+    throw err;
+  }
+
+  const raw = image.trim();
+  const dataUrlMatch = raw.match(/^data:([^;,]+);base64,(.+)$/i);
+  const mime = (dataUrlMatch?.[1] || "image/png").toLowerCase();
+  const ext = NODE_ATTACH_MIME_TO_EXT[mime];
+  if (!ext) {
+    const err = new Error("image must be a png, jpeg, or webp image");
+    err.code = "NODE_SOURCE_INVALID";
+    err.status = 400;
+    throw err;
+  }
+
+  const b64 = (dataUrlMatch?.[2] || raw).replace(/\s/g, "");
+  if (!b64 || b64.length > MAX_REF_B64_BYTES || !BASE64_RE.test(b64)) {
+    const err = new Error("image is not valid base64 or exceeds the upload limit");
+    err.code = "NODE_SOURCE_INVALID";
+    err.status = 400;
+    throw err;
+  }
+
+  return { b64, ext, mime };
+}
+
 function validateAndNormalizeRefs(references) {
   if (!Array.isArray(references)) return { error: "references must be an array" };
   if (references.length > 5) return { error: "references may not exceed 5 items" };
@@ -1500,6 +1536,67 @@ app.post("/api/node/import", async (req, res) => {
     console.error("[node/import] error:", err.message);
     res.status(err.status || 500).json({
       error: { code: err.code || "NODE_IMPORT_FAILED", message: err.message },
+    });
+  }
+});
+
+app.post("/api/node/attach", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const { b64, ext } = parseNodeAttachImage(body.image);
+    const nodeId = newNodeId();
+    const now = Date.now();
+    const prompt = typeof body.prompt === "string" ? body.prompt : "";
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId : null;
+    const clientNodeId = typeof body.clientNodeId === "string" ? body.clientNodeId : null;
+    const provider = "upload";
+    const quality = null;
+    const size = null;
+    const format = ext;
+    const moderation = null;
+    const webSearchCalls = 0;
+
+    const meta = {
+      nodeId,
+      parentNodeId: null,
+      sessionId,
+      clientNodeId,
+      prompt,
+      options: { quality, size, format, moderation },
+      quality,
+      size,
+      format,
+      moderation,
+      createdAt: now,
+      createdAtIso: new Date(now).toISOString(),
+      elapsed: null,
+      usage: null,
+      webSearchCalls,
+      provider,
+      kind: "import",
+      source: "upload",
+    };
+
+    await mkdir(join(__dirname, "generated"), { recursive: true });
+    const { filename } = await saveNode(__dirname, { nodeId, b64, meta, ext });
+
+    res.json({
+      nodeId,
+      filename,
+      url: `/generated/${encodeURIComponent(filename)}`,
+      prompt,
+      provider,
+      createdAt: now,
+      quality,
+      size,
+      format,
+      moderation,
+      webSearchCalls,
+    });
+  } catch (err) {
+    console.error("[node/attach] error:", err.message);
+    res.status(err.status || 500).json({
+      error: { code: err.code || "NODE_ATTACH_FAILED", message: err.message },
     });
   }
 });

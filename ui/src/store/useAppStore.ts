@@ -17,6 +17,7 @@ import {
   getInflight,
   cancelInflight,
   postNodeGenerate,
+  postNodeAttach,
   postNodeImport,
   listSessions as apiListSessions,
   createSession as apiCreateSession,
@@ -423,6 +424,7 @@ export type ImageNodeData = {
   size?: string;
   format?: string;
   moderation?: string;
+  assetSource?: "upload";
   settings: NodeSettings;
   usage?: GenerateItem["usage"];
   createdAt?: number;
@@ -440,6 +442,12 @@ export function canUseNodeAsBranchParent(data: Pick<ImageNodeData, "status">): b
   return data.status !== "pending" && data.status !== "reconciling";
 }
 
+export function canAttachImageToNodeData(
+  data: Pick<ImageNodeData, "status" | "serverNodeId" | "imageUrl">,
+): boolean {
+  return data.status === "empty" && !data.serverNodeId && !data.imageUrl;
+}
+
 function hasReadyNodeImage(data: Pick<ImageNodeData, "status" | "serverNodeId">): boolean {
   return data.status === "ready" && !!data.serverNodeId;
 }
@@ -450,6 +458,41 @@ function edgeTransferForParent(parent: GraphNode): EdgeTransferData {
 
 function createChildEdge(parent: GraphNode, target: ClientNodeId): GraphEdge {
   return createGraphEdge(parent.id as ClientNodeId, target, edgeTransferForParent(parent));
+}
+
+const SUPPORTED_NODE_ATTACH_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+function nodeAttachMimeForFile(file: File): string | null {
+  if (SUPPORTED_NODE_ATTACH_TYPES.has(file.type)) return file.type;
+  if (/\.png$/i.test(file.name)) return "image/png";
+  if (/\.jpe?g$/i.test(file.name)) return "image/jpeg";
+  if (/\.webp$/i.test(file.name)) return "image/webp";
+  return null;
+}
+
+function isSupportedNodeAttachFile(file: File): boolean {
+  return nodeAttachMimeForFile(file) !== null;
+}
+
+function normalizeNodeAttachDataUrl(file: File, dataUrl: string): string {
+  const mime = nodeAttachMimeForFile(file);
+  if (!mime) return dataUrl;
+  return dataUrl.replace(/^data:[^;]*;base64,/i, `data:${mime};base64,`);
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("File read failed"));
+      }
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("File read failed"));
+    reader.readAsDataURL(file);
+  });
 }
 
 type NodePosition = { x: number; y: number };
@@ -639,6 +682,7 @@ function mapSessionToGraph(session: SessionFull): {
       size: d.size as string | undefined,
       format: d.format as string | undefined,
       moderation: d.moderation as string | undefined,
+      assetSource: d.assetSource === "upload" ? "upload" : undefined,
       settings: settingsFromNodeData(d),
       usage: d.usage as GenerateItem["usage"] | undefined,
       createdAt: d.createdAt as number | undefined,
@@ -760,6 +804,7 @@ type AppState = {
   regenerateBranch: (clientId: ClientNodeId) => Promise<void>;
   deleteNode: (clientId: ClientNodeId) => void;
   deleteNodes: (clientIds: ClientNodeId[]) => void;
+  attachImageToNode: (clientId: ClientNodeId, file: File) => Promise<void>;
   importHistoryItemAsNode: (item: GenerateItem) => Promise<void>;
   importCurrentImageAsNode: () => Promise<void>;
 
@@ -905,6 +950,9 @@ const NODE_RUNTIME_DATA_KEYS: Array<keyof ImageNodeData> = [
 function mergeCurrentRuntimeData(snapshotNode: GraphNode, currentNode: GraphNode | undefined): GraphNode {
   const next = cloneGraphNodeForSnapshot(snapshotNode);
   if (!currentNode) return next;
+  if (snapshotNode.data.assetSource === "upload" || currentNode.data.assetSource === "upload") {
+    return next;
+  }
   const data = { ...next.data };
   for (const key of NODE_RUNTIME_DATA_KEYS) {
     (data as Record<string, unknown>)[key] = (currentNode.data as Record<string, unknown>)[key];
@@ -2210,6 +2258,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                   size: payload.size,
                   format: nodeSettings.format,
                   moderation: res.moderation ?? nodeSettings.moderation,
+                  assetSource: undefined,
                   usage: res.usage,
                   createdAt: Date.now(),
                   error: undefined,
@@ -2348,6 +2397,112 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedNodeId: selectedNodeId && set_.has(selectedNodeId) ? null : selectedNodeId,
       selectedEdgeId: null,
     });
+  },
+
+  async attachImageToNode(clientId, file) {
+    const node = get().graphNodes.find((n) => n.id === clientId);
+    if (!node || !canAttachImageToNodeData(node.data)) {
+      get().showToast(t("toast.nodeAttachUnavailable"), true);
+      return;
+    }
+    if (!isSupportedNodeAttachFile(file)) {
+      get().showToast(t("toast.nodeAttachUnsupported"), true);
+      return;
+    }
+
+    let sessionId = get().activeSessionId;
+    if (!sessionId) {
+      await get().createAndSwitchSession(t("session.firstGraph"));
+      sessionId = get().activeSessionId;
+    }
+    if (!sessionId) {
+      get().showToast(t("toast.nodeAttachFailed"), true);
+      return;
+    }
+
+    try {
+      const image = normalizeNodeAttachDataUrl(file, await readFileAsDataUrl(file));
+      const res = await postNodeAttach({
+        image,
+        prompt: node.data.prompt,
+        sessionId,
+        clientNodeId: clientId,
+      });
+      if (get().activeSessionId !== sessionId) return;
+
+      const currentNode = get().graphNodes.find((n) => n.id === clientId);
+      if (!currentNode || !canAttachImageToNodeData(currentNode.data)) {
+        get().showToast(t("toast.nodeAttachUnavailable"), true);
+        return;
+      }
+
+      const importedSize = parseSizeSetting(res.size);
+      const nextNodes = get().graphNodes.map((n) =>
+        n.id === clientId
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                serverNodeId: res.nodeId,
+                imageUrl: res.url,
+                status: "ready" as const,
+                pendingRequestId: null,
+                pendingPhase: null,
+                pendingStartedAt: null,
+                error: undefined,
+                elapsed: undefined,
+                webSearchCalls: res.webSearchCalls ?? 0,
+                filename: res.filename,
+                provider: res.provider,
+                quality: res.quality ?? undefined,
+                size: res.size ?? undefined,
+                format: res.format ?? n.data.settings.format,
+                moderation: res.moderation ?? undefined,
+                assetSource: "upload" as const,
+                settings: normalizeNodeSettings(
+                  {
+                    quality: res.quality,
+                    sizePreset: importedSize?.sizePreset,
+                    customW: importedSize?.customW,
+                    customH: importedSize?.customH,
+                    format: res.format,
+                    moderation: res.moderation,
+                  },
+                  n.data.settings,
+                ),
+                usage: undefined,
+                createdAt: res.createdAt,
+              },
+            }
+          : n,
+      );
+      commitUserGraphChange(get, set, {
+        graphNodes: normalizeGraphParentPointers(nextNodes, get().graphEdges),
+        selectedNodeId: clientId,
+        selectedEdgeId: null,
+      });
+      get().addHistoryItem({
+        image: res.url,
+        url: res.url,
+        filename: res.filename,
+        prompt: res.prompt,
+        provider: res.provider,
+        quality: res.quality ?? undefined,
+        size: res.size ?? undefined,
+        format: res.format ?? undefined,
+        moderation: res.moderation ?? undefined,
+        thumb: res.url,
+        createdAt: res.createdAt,
+        sessionId,
+        nodeId: res.nodeId,
+        clientNodeId: clientId,
+        kind: "import",
+      });
+      get().showToast(t("toast.nodeImageAttached"));
+    } catch (err) {
+      console.warn("[node] attach failed:", err);
+      get().showToast(t("toast.nodeAttachFailed"), true);
+    }
   },
 
   addChildNodeAt: (parentClientId, position) => {

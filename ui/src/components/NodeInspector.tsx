@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  canAttachImageToNodeData,
   canUseNodeAsBranchParent,
   getEdgeVisualState,
   normalizeEdgeTransferData,
@@ -68,11 +69,13 @@ export function NodeInspector() {
   const { t } = useI18n();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [apiPreviewOpen, setApiPreviewOpen] = useState(false);
+  const [attachingImage, setAttachingImage] = useState(false);
   const [serverPreview, setServerPreview] = useState<{
     loading: boolean;
     data: NodeGeneratePreviewResponse | null;
     error: string | null;
   }>({ loading: false, data: null, error: null });
+  const attachInputRef = useRef<HTMLInputElement>(null);
   const nodes = useAppStore((s) => s.graphNodes);
   const edges = useAppStore((s) => s.graphEdges);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
@@ -94,6 +97,7 @@ export function NodeInspector() {
   const generateNode = useAppStore((s) => s.generateNode);
   const regenerateBranch = useAppStore((s) => s.regenerateBranch);
   const deleteNode = useAppStore((s) => s.deleteNode);
+  const attachImageToNode = useAppStore((s) => s.attachImageToNode);
   const importCurrentImageAsNode = useAppStore((s) => s.importCurrentImageAsNode);
   const currentImage = useAppStore((s) => s.currentImage);
   const showToast = useAppStore((s) => s.showToast);
@@ -316,6 +320,7 @@ export function NodeInspector() {
 
   const busy = isBusy(data);
   const canBranch = canUseNodeAsBranchParent(data);
+  const canAttachImage = canAttachImageToNodeData(data);
   const canGenerate = !busy && data.prompt.trim().length > 0;
   const hasChildren = edges.some((edge) => edge.source === selected.id);
   const canRegenerateBranch = canGenerate && data.status === "ready" && !!data.serverNodeId && hasChildren;
@@ -375,6 +380,18 @@ export function NodeInspector() {
       showToast(t("toast.promptCopied"));
     } catch {
       showToast(t("toast.copyFailed"), true);
+    }
+  };
+
+  const attachImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    setAttachingImage(true);
+    try {
+      await attachImageToNode(selected.id, file);
+    } finally {
+      setAttachingImage(false);
     }
   };
 
@@ -502,6 +519,27 @@ export function NodeInspector() {
             <div className="node-inspector__placeholder">{t("node.noImage")}</div>
           </div>
         )}
+        {canAttachImage ? (
+          <>
+            <input
+              ref={attachInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={attachImage}
+              className="node-inspector__file-input"
+              aria-hidden="true"
+              tabIndex={-1}
+            />
+            <button
+              type="button"
+              className="node-inspector__button node-inspector__attach-button"
+              onClick={() => attachInputRef.current?.click()}
+              disabled={attachingImage || busy}
+            >
+              {attachingImage ? t("nodeInspector.attachImageBusy") : t("nodeInspector.attachImage")}
+            </button>
+          </>
+        ) : null}
         <div className="node-inspector__pills" aria-label={t("nodeInspector.statusMeta")}>
           {metaPills.map((pill) => (
             <span

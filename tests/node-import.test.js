@@ -35,6 +35,7 @@ describe("Node import API", () => {
   const base = `http://localhost:${PORT}`;
   const createdFiles = new Set([SOURCE_FILENAME, `${SOURCE_FILENAME}.json`]);
   let importedFilename = null;
+  let attachedFilename = null;
 
   before(async () => {
     mkdirSync(GEN_DIR, { recursive: true });
@@ -80,6 +81,10 @@ describe("Node import API", () => {
     if (importedFilename) {
       createdFiles.add(importedFilename);
       createdFiles.add(`${importedFilename}.json`);
+    }
+    if (attachedFilename) {
+      createdFiles.add(attachedFilename);
+      createdFiles.add(`${attachedFilename}.json`);
     }
     for (const fn of createdFiles) {
       rmSync(join(GEN_DIR, fn), { force: true });
@@ -131,6 +136,60 @@ describe("Node import API", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ filename: "../outside.png" }),
+    });
+    assert.strictEqual(res.status, 400);
+    const body = await res.json();
+    assert.strictEqual(body.error.code, "NODE_SOURCE_INVALID");
+  });
+
+  it("attaches an uploaded image into a node-owned file with upload metadata", async () => {
+    const res = await fetch(`${base}/api/node/attach`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image: "data:image/webp;base64,UklGRg==",
+        prompt: "uploaded start",
+        sessionId: "session-attach",
+        clientNodeId: "client-node-attach",
+      }),
+    });
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    attachedFilename = body.filename;
+
+    assert.match(body.nodeId, /^n_[a-f0-9]+$/);
+    assert.strictEqual(body.filename, `${body.nodeId}.webp`);
+    assert.strictEqual(body.url, `/generated/${body.filename}`);
+    assert.strictEqual(body.prompt, "uploaded start");
+    assert.strictEqual(body.provider, "upload");
+    assert.strictEqual(body.format, "webp");
+    assert.ok(existsSync(join(GEN_DIR, body.filename)), "attached node image exists");
+
+    const meta = JSON.parse(readFileSync(join(GEN_DIR, `${body.filename}.json`), "utf-8"));
+    assert.strictEqual(meta.nodeId, body.nodeId);
+    assert.strictEqual(meta.parentNodeId, null);
+    assert.strictEqual(meta.sessionId, "session-attach");
+    assert.strictEqual(meta.clientNodeId, "client-node-attach");
+    assert.strictEqual(meta.prompt, "uploaded start");
+    assert.deepStrictEqual(meta.options, {
+      quality: null,
+      size: null,
+      format: "webp",
+      moderation: null,
+    });
+    assert.strictEqual(meta.kind, "import");
+    assert.strictEqual(meta.source, "upload");
+    assert.strictEqual(meta.provider, "upload");
+    assert.strictEqual(meta.elapsed, null);
+    assert.strictEqual(meta.usage, null);
+    assert.strictEqual(meta.webSearchCalls, 0);
+  });
+
+  it("rejects unsupported uploaded image types", async () => {
+    const res = await fetch(`${base}/api/node/attach`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: "data:image/gif;base64,R0lGODlh" }),
     });
     assert.strictEqual(res.status, 400);
     const body = await res.json();

@@ -1725,6 +1725,13 @@ body {
   grid-template-columns: minmax(0, 1fr) 30px 30px 30px;
   gap: 5px;
 }
+.image-node__actions--with-attach {
+  grid-template-columns: minmax(0, 1fr) 30px 30px 30px 30px;
+}
+.image-node__file-input,
+.node-inspector__file-input {
+  display: none;
+}
 .image-node__actions button {
   background: var(--surface-3, #2a2a2a);
   color: var(--text, #ddd);
@@ -2234,6 +2241,10 @@ body {
 
 .node-inspector__preview--empty {
   min-height: 148px;
+}
+
+.node-inspector__attach-button {
+  width: 100%;
 }
 
 .node-inspector__pills {
