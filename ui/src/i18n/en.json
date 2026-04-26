@@ -146,6 +146,8 @@
     "deleteAria": "Delete image",
     "importToNodeTitle": "Import to Node mode",
     "importToNodeAria": "Import image to Node mode",
+    "openPreviewTitle": "Open large preview",
+    "openPreviewAria": "Open large image preview",
     "ariaLabel": "Image gallery",
     "title": "Gallery",
     "total": "{n} total",

@@ -3,6 +3,7 @@ import { useAppStore } from "../store/useAppStore";
 import type { GenerateItem } from "../types";
 import { deleteHistoryItem, restoreHistoryItem, getHistoryGrouped } from "../lib/api";
 import { useI18n } from "../i18n";
+import { ImageLightbox } from "./ImageLightbox";
 
 type TrashPending = {
   filename: string;
@@ -35,10 +36,32 @@ function dateBucket(createdAt: number | undefined): DateBucketKey {
   });
 }
 
+function imageSrcForItem(item: GenerateItem): string {
+  return item.url ?? item.image;
+}
+
+function createdAtLabel(createdAt: number | undefined): string | null {
+  if (!createdAt) return null;
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString();
+}
+
+function previewMetaForItem(item: GenerateItem): string {
+  return [
+    item.filename,
+    item.size,
+    item.quality,
+    item.provider,
+    createdAtLabel(item.createdAt),
+  ].filter((value): value is string => Boolean(value)).join(" · ");
+}
+
 export function GalleryModal() {
   const { t } = useI18n();
   const open = useAppStore((s) => s.galleryOpen);
   const close = useAppStore((s) => s.closeGallery);
+  const uiMode = useAppStore((s) => s.uiMode);
   const history = useAppStore((s) => s.history);
   const selectHistory = useAppStore((s) => s.selectHistory);
   const currentImage = useAppStore((s) => s.currentImage);
@@ -51,20 +74,23 @@ export function GalleryModal() {
   const [sessionGroups, setSessionGroups] = useState<SessionGroup[]>([]);
   const [loose, setLoose] = useState<GenerateItem[]>([]);
   const [pending, setPending] = useState<TrashPending | null>(null);
+  const [previewItem, setPreviewItem] = useState<GenerateItem | null>(null);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      if (previewItem) return;
       if (e.key === "Escape") close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, close]);
+  }, [open, close, previewItem]);
 
   useEffect(() => {
     if (!open) {
       setQuery("");
       setPending(null);
+      setPreviewItem(null);
     }
   }, [open]);
 
@@ -163,6 +189,16 @@ export function GalleryModal() {
   async function handleImportToNode(item: GenerateItem, e: MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
     await importHistoryItemAsNode(item);
+    setPreviewItem(null);
+    close();
+  }
+
+  function handleTileClick(item: GenerateItem) {
+    selectHistory(item);
+    if (uiMode === "node") {
+      setPreviewItem(item);
+      return;
+    }
     close();
   }
 
@@ -189,6 +225,7 @@ export function GalleryModal() {
 
   const renderTile = (item: GenerateItem, keyPrefix: string, idx: number) => {
     const active = currentImage?.image === item.image;
+    const opensPreview = uiMode === "node";
     return (
       <div
         key={`${keyPrefix}-${idx}-${item.filename ?? idx}`}
@@ -197,11 +234,9 @@ export function GalleryModal() {
         <button
           type="button"
           className={`gallery__tile${active ? " gallery__tile--active" : ""}`}
-          onClick={() => {
-            selectHistory(item);
-            close();
-          }}
-          title={item.prompt ?? ""}
+          onClick={() => handleTileClick(item)}
+          title={opensPreview ? t("gallery.openPreviewTitle") : item.prompt ?? ""}
+          aria-label={opensPreview ? t("gallery.openPreviewAria") : undefined}
         >
           <img src={item.thumb || item.image} alt={item.prompt ?? t("gallery.imageAltFallback")} loading="lazy" decoding="async" />
           {item.prompt && (
@@ -240,126 +275,140 @@ export function GalleryModal() {
   const totalVisible = showSessions
     ? sessionGroups.reduce((a, g) => a + g.items.length, 0) + loose.length
     : filtered.length;
+  const previewTitle =
+    previewItem?.prompt?.trim() ||
+    previewItem?.filename ||
+    t("gallery.imageAltFallback");
+  const previewMeta = previewItem ? previewMetaForItem(previewItem) : "";
 
   return (
-    <div className="gallery-backdrop" onClick={close} role="presentation">
-      <div
-        className="gallery"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("gallery.ariaLabel")}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="gallery__header">
-          <div className="gallery__title-row">
-            <div className="gallery__title">{t("gallery.title")}</div>
-            <div className="gallery__meta">
-              {t("gallery.total", { n: totalVisible })}
-              {query ? t("gallery.totalFiltered", { n: history.length }) : ""}
+    <>
+      <div className="gallery-backdrop" onClick={close} role="presentation">
+        <div
+          className="gallery"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("gallery.ariaLabel")}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="gallery__header">
+            <div className="gallery__title-row">
+              <div className="gallery__title">{t("gallery.title")}</div>
+              <div className="gallery__meta">
+                {t("gallery.total", { n: totalVisible })}
+                {query ? t("gallery.totalFiltered", { n: history.length }) : ""}
+              </div>
+              <div className="gallery__group-toggle" role="tablist" aria-label={t("gallery.sortByAria")}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={groupBy === "date"}
+                  className={groupBy === "date" ? "active" : ""}
+                  onClick={() => setGroupBy("date")}
+                >
+                  {t("gallery.sortByDate")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={groupBy === "session"}
+                  className={groupBy === "session" ? "active" : ""}
+                  onClick={() => setGroupBy("session")}
+                >
+                  {t("gallery.sortBySession")}
+                </button>
+              </div>
             </div>
-            <div className="gallery__group-toggle" role="tablist" aria-label={t("gallery.sortByAria")}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={groupBy === "date"}
-                className={groupBy === "date" ? "active" : ""}
-                onClick={() => setGroupBy("date")}
-              >
-                {t("gallery.sortByDate")}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={groupBy === "session"}
-                className={groupBy === "session" ? "active" : ""}
-                onClick={() => setGroupBy("session")}
-              >
-                {t("gallery.sortBySession")}
-              </button>
-            </div>
+            <input
+              type="text"
+              className="gallery__search"
+              placeholder={showSessions ? t("gallery.searchDisabledPlaceholder") : t("gallery.searchPlaceholder")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              autoFocus
+              disabled={showSessions}
+            />
+            <button
+              type="button"
+              className="gallery__close"
+              onClick={close}
+              aria-label={t("gallery.closeAria")}
+              title={t("gallery.closeTitle")}
+            >
+              ×
+            </button>
           </div>
-          <input
-            type="text"
-            className="gallery__search"
-            placeholder={showSessions ? t("gallery.searchDisabledPlaceholder") : t("gallery.searchPlaceholder")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            autoFocus
-            disabled={showSessions}
-          />
-          <button
-            type="button"
-            className="gallery__close"
-            onClick={close}
-            aria-label={t("gallery.closeAria")}
-            title={t("gallery.closeTitle")}
-          >
-            ×
-          </button>
-        </div>
 
-        <div className="gallery__scroll">
-          {showSessions ? (
-            <>
-              {sessionGroups.map((g) => (
-                <section key={g.sessionId} className="gallery__group">
+          <div className="gallery__scroll">
+            {showSessions ? (
+              <>
+                {sessionGroups.map((g) => (
+                  <section key={g.sessionId} className="gallery__group">
+                    <header className="gallery__group-header">
+                      <span className="gallery__group-label">{t("gallery.sessionLabel", { name: g.label })}</span>
+                      <span className="gallery__group-count">{g.items.length}</span>
+                    </header>
+                    <div className="gallery__grid">
+                      {g.items.map((item, i) => renderTile(item, g.sessionId, i))}
+                    </div>
+                  </section>
+                ))}
+                {loose.length > 0 && (
+                  <section className="gallery__group">
+                    <header className="gallery__group-header">
+                      <span className="gallery__group-label">{t("gallery.standalone")}</span>
+                      <span className="gallery__group-count">{loose.length}</span>
+                    </header>
+                    <div className="gallery__grid">
+                      {loose.map((item, i) => renderTile(item, "loose", i))}
+                    </div>
+                  </section>
+                )}
+                {sessionGroups.length === 0 && loose.length === 0 && (
+                  <div className="gallery__empty">{t("gallery.emptySessions")}</div>
+                )}
+              </>
+            ) : filtered.length === 0 ? (
+              <div className="gallery__empty">
+                {history.length === 0
+                  ? t("gallery.emptyAll")
+                  : t("gallery.noResults")}
+              </div>
+            ) : (
+              dateGroups.map(([label, items]) => (
+                <section key={label} className="gallery__group">
                   <header className="gallery__group-header">
-                    <span className="gallery__group-label">{t("gallery.sessionLabel", { name: g.label })}</span>
-                    <span className="gallery__group-count">{g.items.length}</span>
+                    <span className="gallery__group-label">{localizeBucket(label)}</span>
+                    <span className="gallery__group-count">{items.length}</span>
                   </header>
                   <div className="gallery__grid">
-                    {g.items.map((item, i) => renderTile(item, g.sessionId, i))}
+                    {items.map((item, i) => renderTile(item, label, i))}
                   </div>
                 </section>
-              ))}
-              {loose.length > 0 && (
-                <section className="gallery__group">
-                  <header className="gallery__group-header">
-                    <span className="gallery__group-label">{t("gallery.standalone")}</span>
-                    <span className="gallery__group-count">{loose.length}</span>
-                  </header>
-                  <div className="gallery__grid">
-                    {loose.map((item, i) => renderTile(item, "loose", i))}
-                  </div>
-                </section>
-              )}
-              {sessionGroups.length === 0 && loose.length === 0 && (
-                <div className="gallery__empty">{t("gallery.emptySessions")}</div>
-              )}
-            </>
-          ) : filtered.length === 0 ? (
-            <div className="gallery__empty">
-              {history.length === 0
-                ? t("gallery.emptyAll")
-                : t("gallery.noResults")}
+              ))
+            )}
+          </div>
+
+          {pending && (
+            <div className="gallery__undo">
+              <span>{t("gallery.deleted", { filename: pending.filename })}</span>
+              <button type="button" onClick={handleUndo}>
+                {t("gallery.undo")}
+              </button>
+              <span className="gallery__undo-timer">
+                {t("gallery.secondsSuffix", { n: Math.max(0, Math.ceil((pending.expiresAt - Date.now()) / 1000)) })}
+              </span>
             </div>
-          ) : (
-            dateGroups.map(([label, items]) => (
-              <section key={label} className="gallery__group">
-                <header className="gallery__group-header">
-                  <span className="gallery__group-label">{localizeBucket(label)}</span>
-                  <span className="gallery__group-count">{items.length}</span>
-                </header>
-                <div className="gallery__grid">
-                  {items.map((item, i) => renderTile(item, label, i))}
-                </div>
-              </section>
-            ))
           )}
         </div>
-
-        {pending && (
-          <div className="gallery__undo">
-            <span>{t("gallery.deleted", { filename: pending.filename })}</span>
-            <button type="button" onClick={handleUndo}>
-              {t("gallery.undo")}
-            </button>
-            <span className="gallery__undo-timer">
-              {t("gallery.secondsSuffix", { n: Math.max(0, Math.ceil((pending.expiresAt - Date.now()) / 1000)) })}
-            </span>
-          </div>
-        )}
       </div>
-    </div>
+      <ImageLightbox
+        open={!!previewItem}
+        imageSrc={previewItem ? imageSrcForItem(previewItem) : null}
+        title={previewTitle}
+        meta={previewMeta}
+        onClose={() => setPreviewItem(null)}
+      />
+    </>
   );
 }
