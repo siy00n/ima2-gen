@@ -426,6 +426,7 @@ export type ImageNodeData = {
   format?: string;
   moderation?: string;
   assetSource?: "upload";
+  imageReferenceDetached?: true;
   settings: NodeSettings;
   usage?: GenerateItem["usage"];
   createdAt?: number;
@@ -447,6 +448,13 @@ export function canAttachImageToNodeData(
   data: Pick<ImageNodeData, "status" | "serverNodeId" | "imageUrl">,
 ): boolean {
   return data.status === "empty" && !data.serverNodeId && !data.imageUrl;
+}
+
+export function canRemoveNodeImageReference(
+  data: Pick<ImageNodeData, "status" | "serverNodeId" | "imageUrl" | "filename">,
+): boolean {
+  if (data.status === "pending" || data.status === "reconciling") return false;
+  return !!data.serverNodeId || !!data.imageUrl || !!data.filename;
 }
 
 function hasReadyNodeImage(data: Pick<ImageNodeData, "status" | "serverNodeId">): boolean {
@@ -582,7 +590,9 @@ function normalizeGraphParentPointers(nodes: GraphNode[], edges: GraphEdge[]): G
   return nodes.map((node) => {
     const incoming = incomingByTarget.get(node.id);
     const parent = incoming ? nodeById.get(incoming.source) : null;
-    const nextParentServerNodeId = parent?.data.serverNodeId ?? null;
+    const incomingData = incoming ? normalizeEdgeTransferData(incoming.data) : null;
+    const nextParentServerNodeId =
+      incomingData?.imageTransfer === "off" ? null : parent?.data.serverNodeId ?? null;
     if (node.data.parentServerNodeId === nextParentServerNodeId) return node;
     return {
       ...node,
@@ -646,6 +656,7 @@ function applyNodeHistoryResult(node: GraphNode, item: HistoryItem): GraphNode {
         node.data.settings,
       ),
       createdAt: item.createdAt,
+      imageReferenceDetached: undefined,
       error: undefined,
     },
   };
@@ -687,6 +698,7 @@ function mapSessionToGraph(session: SessionFull): {
       format: d.format as string | undefined,
       moderation: d.moderation as string | undefined,
       assetSource: d.assetSource === "upload" ? "upload" : undefined,
+      imageReferenceDetached: d.imageReferenceDetached === true ? true : undefined,
       settings: settingsFromNodeData(d),
       usage: d.usage as GenerateItem["usage"] | undefined,
       createdAt: d.createdAt as number | undefined,
@@ -813,6 +825,7 @@ type AppState = {
   cancelBranchGeneration: (rootId: ClientNodeId) => Promise<void>;
   deleteNode: (clientId: ClientNodeId) => void;
   deleteNodes: (clientIds: ClientNodeId[]) => void;
+  removeNodeImageReference: (clientId: ClientNodeId) => void;
   attachImageToNode: (clientId: ClientNodeId, file: File) => Promise<void>;
   importHistoryItemAsNode: (item: GenerateItem) => Promise<void>;
   importCurrentImageAsNode: () => Promise<void>;
@@ -913,6 +926,31 @@ function canceledNodeData(data: ImageNodeData): ImageNodeData {
   };
 }
 
+function removeImageReferenceFromNodeData(data: ImageNodeData): ImageNodeData {
+  return {
+    ...data,
+    serverNodeId: null,
+    imageUrl: null,
+    status: "empty",
+    pendingRequestId: null,
+    pendingPhase: null,
+    pendingStartedAt: null,
+    error: undefined,
+    elapsed: undefined,
+    webSearchCalls: undefined,
+    filename: undefined,
+    provider: undefined,
+    quality: undefined,
+    size: undefined,
+    format: undefined,
+    moderation: undefined,
+    assetSource: undefined,
+    usage: undefined,
+    createdAt: undefined,
+    imageReferenceDetached: true,
+  };
+}
+
 function clearGraphHistoryPatch(): Pick<
   AppState,
   "graphUndoPast" | "graphUndoFuture" | "canUndoGraph" | "canRedoGraph"
@@ -983,6 +1021,9 @@ const NODE_RUNTIME_DATA_KEYS: Array<keyof ImageNodeData> = [
 function mergeCurrentRuntimeData(snapshotNode: GraphNode, currentNode: GraphNode | undefined): GraphNode {
   const next = cloneGraphNodeForSnapshot(snapshotNode);
   if (!currentNode) return next;
+  if (snapshotNode.data.imageReferenceDetached || currentNode.data.imageReferenceDetached) {
+    return next;
+  }
   if (snapshotNode.data.assetSource === "upload" || currentNode.data.assetSource === "upload") {
     return next;
   }
@@ -1304,7 +1345,10 @@ function applyEdgeTransferPatch(
     typeof patch.transferSettings === "boolean"
       ? syncEffectiveNodeSettings(nodes, nextEdges)
       : nodes;
-  return { graphNodes: nextNodes, graphEdges: nextEdges };
+  return {
+    graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
+    graphEdges: nextEdges,
+  };
 }
 
 function wouldCreateCycle(
@@ -1961,9 +2005,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     };
     const edge = createChildEdge(parent, clientId);
+    const nextEdges = [...get().graphEdges, edge];
+    const nextNodes = [...get().graphNodes, node];
     commitUserGraphChange(get, set, {
-      graphNodes: [...get().graphNodes, node],
-      graphEdges: [...get().graphEdges, edge],
+      graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
+      graphEdges: nextEdges,
       selectedNodeId: clientId,
       selectedEdgeId: null,
     });
@@ -2030,9 +2076,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     };
     const edge = createGraphEdge(parentClientId, clientId, incomingEdge.data);
+    const nextEdges = [...get().graphEdges, edge];
+    const nextNodes = [...get().graphNodes, node];
     commitUserGraphChange(get, set, {
-      graphNodes: [...get().graphNodes, node],
-      graphEdges: [...get().graphEdges, edge],
+      graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
+      graphEdges: nextEdges,
       selectedNodeId: clientId,
       selectedEdgeId: null,
     });
@@ -2320,6 +2368,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                   assetSource: undefined,
                   usage: res.usage,
                   createdAt: Date.now(),
+                  imageReferenceDetached: undefined,
                   error: undefined,
                 },
               }
@@ -2550,6 +2599,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
+  removeNodeImageReference: (clientId) => {
+    const node = get().graphNodes.find((n) => n.id === clientId);
+    if (!node || !canRemoveNodeImageReference(node.data)) return;
+
+    const nextEdges = get().graphEdges.map((edge) => {
+      const edgeData = normalizeEdgeTransferData(edge.data);
+      if (edge.source !== clientId || edgeData.imageTransfer === "off") return edge;
+      return {
+        ...edge,
+        data: {
+          ...edgeData,
+          imageTransfer: "off" as const,
+        },
+      };
+    });
+    const nextNodes = get().graphNodes.map((n) =>
+      n.id === clientId
+        ? {
+            ...n,
+            data: removeImageReferenceFromNodeData(n.data),
+          }
+        : n,
+    );
+
+    commitUserGraphChange(get, set, {
+      graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
+      graphEdges: nextEdges,
+      selectedNodeId: clientId,
+      selectedEdgeId: null,
+    });
+    get().showToast(t("toast.nodeImageReferenceRemoved"));
+  },
+
   async attachImageToNode(clientId, file) {
     const node = get().graphNodes.find((n) => n.id === clientId);
     if (!node || !canAttachImageToNodeData(node.data)) {
@@ -2610,6 +2692,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 format: res.format ?? n.data.settings.format,
                 moderation: res.moderation ?? undefined,
                 assetSource: "upload" as const,
+                imageReferenceDetached: undefined,
                 settings: normalizeNodeSettings(
                   {
                     quality: res.quality,
@@ -2685,9 +2768,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     };
     const edge = createChildEdge(parent, clientId);
+    const nextEdges = [...get().graphEdges, edge];
+    const nextNodes = [...get().graphNodes, node];
     commitUserGraphChange(get, set, {
-      graphNodes: [...get().graphNodes, node],
-      graphEdges: [...get().graphEdges, edge],
+      graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
+      graphEdges: nextEdges,
       selectedNodeId: clientId,
       selectedEdgeId: null,
     });
@@ -2741,8 +2826,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const nextNodes = get().graphNodes.map((n) =>
       n.id === targetClientId ? { ...n, data: nextTargetData } : n,
     );
+    const syncedNodes = syncEffectiveNodeSettings(nextNodes, nextEdges);
     commitUserGraphChange(get, set, {
-      graphNodes: syncEffectiveNodeSettings(nextNodes, nextEdges),
+      graphNodes: normalizeGraphParentPointers(syncedNodes, nextEdges),
       graphEdges: nextEdges,
       selectedNodeId: targetClientId,
       selectedEdgeId: null,
@@ -3084,13 +3170,15 @@ function sanitizeForSave(d: ImageNodeData): Record<string, unknown> {
   delete persisted.graphTreeRootId;
   delete persisted.graphTreeIndex;
   delete persisted.graphTreeColor;
+  delete persisted.imageReferenceDetached;
   return persisted;
 }
 
 // Recover nodes whose asset lives on disk (via /api/history) but whose
 // client-side asset pointer was lost (older save, reload, HMR, conflict reload).
-// Candidate = node with neither imageUrl nor serverNodeId. The matching key
-// is (sessionId, clientNodeId); when pendingStartedAt is known we require
+// Candidate = non-empty node with neither imageUrl nor serverNodeId. Empty
+// nodes may be intentionally detached from their history asset. The matching
+// key is (sessionId, clientNodeId); when pendingStartedAt is known we require
 // createdAt >= pendingStartedAt to avoid picking an older retry's asset.
 async function recoverGraphNodesFromHistory(
   get: () => AppState,
@@ -3099,7 +3187,11 @@ async function recoverGraphNodesFromHistory(
   const sid = get().activeSessionId;
   if (!sid) return;
   const candidates = get().graphNodes.filter(
-    (n) => !n.data.imageUrl && !n.data.serverNodeId,
+    (n) =>
+      n.data.status !== "empty" &&
+      !n.data.imageReferenceDetached &&
+      !n.data.imageUrl &&
+      !n.data.serverNodeId,
   );
   if (candidates.length === 0) return;
 
@@ -3123,6 +3215,7 @@ async function recoverGraphNodesFromHistory(
   let changed = false;
   const next = get().graphNodes.map((n) => {
     if (n.data.imageUrl || n.data.serverNodeId) return n;
+    if (n.data.status === "empty" || n.data.imageReferenceDetached) return n;
     const startedAt = n.data.pendingStartedAt ?? 0;
     const recovered = items.find(
       (h) =>

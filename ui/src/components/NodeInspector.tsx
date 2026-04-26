@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   canAttachImageToNodeData,
+  canRemoveNodeImageReference,
   canUseNodeAsBranchParent,
   getEdgeVisualState,
   normalizeEdgeTransferData,
@@ -100,6 +101,7 @@ export function NodeInspector() {
   const cancelBranchGeneration = useAppStore((s) => s.cancelBranchGeneration);
   const branchGenerationRootId = useAppStore((s) => s.branchGenerationRootId);
   const deleteNode = useAppStore((s) => s.deleteNode);
+  const removeNodeImageReference = useAppStore((s) => s.removeNodeImageReference);
   const attachImageToNode = useAppStore((s) => s.attachImageToNode);
   const importCurrentImageAsNode = useAppStore((s) => s.importCurrentImageAsNode);
   const currentImage = useAppStore((s) => s.currentImage);
@@ -324,6 +326,7 @@ export function NodeInspector() {
   const busy = isBusy(data);
   const canBranch = canUseNodeAsBranchParent(data);
   const canAttachImage = canAttachImageToNodeData(data);
+  const canRemoveImageReference = canRemoveNodeImageReference(data);
   const canGenerate = !busy && data.prompt.trim().length > 0;
   const hasChildren = edges.some((edge) => edge.source === selected.id);
   const canRegenerateBranch = canGenerate && data.status === "ready" && !!data.serverNodeId && hasChildren;
@@ -782,7 +785,20 @@ export function NodeInspector() {
             <button type="button" className="node-inspector__button" onClick={() => void copyPrompt()} disabled={!data.prompt}>
               {t("result.copyPrompt")}
             </button>
+            {canRemoveImageReference ? (
+              <button
+                type="button"
+                className="node-inspector__danger"
+                onClick={() => removeNodeImageReference(selected.id)}
+                disabled={busy}
+              >
+                {t("nodeInspector.removeImage")}
+              </button>
+            ) : null}
           </div>
+          {canRemoveImageReference ? (
+            <p className="node-inspector__notice">{t("nodeInspector.removeImageHelp")}</p>
+          ) : null}
           <button
             type="button"
             className="node-inspector__danger node-inspector__danger--wide"
