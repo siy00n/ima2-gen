@@ -173,6 +173,7 @@ ima2 serve
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `OPENAI_API_KEY` | — | OpenAI API key（跳过 OAuth） |
+| `OPENAI_IMAGE_MODEL` | `gpt-5.5` | 用于图像生成/编辑的 Responses 模型 |
 | `PORT` | `3333` | Web 服务器端口 |
 | `OAUTH_PORT` | `10531` | OAuth 代理端口 |
 | `IMA2_SERVER` | — | 客户端: 覆盖目标服务器 URL |

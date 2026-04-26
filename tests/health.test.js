@@ -52,7 +52,7 @@ describe("Server: /api/health + advertisement", () => {
       }
       if (req.method === "GET" && req.url === "/v1/models") {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ data: [{ id: "gpt-5.4" }] }));
+        res.end(JSON.stringify({ data: [{ id: "gpt-5.5" }] }));
         return;
       }
       res.writeHead(404).end();
@@ -64,6 +64,7 @@ describe("Server: /api/health + advertisement", () => {
         ...process.env,
         PORT,
         OAUTH_PORT,
+        OPENAI_IMAGE_MODEL: "gpt-5.5",
         HOME: FAKE_HOME,
         USERPROFILE: FAKE_HOME,
         IMA2_NO_OAUTH_PROXY: "1",
@@ -145,6 +146,7 @@ describe("Server: /api/health + advertisement", () => {
     const body = await r.json();
     assert.strictEqual(body.moderation, "auto");
     assert.ok(lastOAuthPayload, "proxy request should be captured");
+    assert.strictEqual(lastOAuthPayload.model, "gpt-5.5");
     assert.strictEqual(lastOAuthPayload.tools[1].type, "image_generation");
     assert.strictEqual(lastOAuthPayload.tools[1].moderation, "auto");
   });

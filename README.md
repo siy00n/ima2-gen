@@ -177,6 +177,7 @@ Config lives in `.ima2/config.json` (auto-created, gitignored).
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENAI_API_KEY` | — | OpenAI API key (skips OAuth) |
+| `OPENAI_IMAGE_MODEL` | `gpt-5.5` | Responses model used for image generation/editing |
 | `PORT` | `3333` | Web server port |
 | `OAUTH_PORT` | `10531` | OAuth proxy port |
 | `IMA2_SERVER` | — | Client: override target server URL |
