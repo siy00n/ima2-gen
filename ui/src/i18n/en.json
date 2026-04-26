@@ -102,7 +102,9 @@
   },
   "history": {
     "openGalleryAria": "Open gallery",
-    "openGalleryTitle": "Open full gallery"
+    "openGalleryTitle": "Open full gallery",
+    "openPreviewAria": "Open image preview",
+    "openPreviewTitle": "Open large preview"
   },
   "panel": {
     "closeSettings": "Close settings",

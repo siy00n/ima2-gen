@@ -102,7 +102,9 @@
   },
   "history": {
     "openGalleryAria": "갤러리 열기",
-    "openGalleryTitle": "전체 갤러리 열기"
+    "openGalleryTitle": "전체 갤러리 열기",
+    "openPreviewAria": "이미지 크게 보기 열기",
+    "openPreviewTitle": "이미지 크게 보기"
   },
   "panel": {
     "closeSettings": "설정 닫기",
