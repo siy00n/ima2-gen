@@ -186,6 +186,7 @@ export type NodeGenerateRequest = {
   requestId?: string;
   sessionId?: string | null;
   clientNodeId?: string | null;
+  externalSrc?: string | null;
 };
 
 export type NodeVisualContextItem = {
@@ -208,6 +209,55 @@ export type NodeGenerateResponse = {
   webSearchCalls: number;
   provider: "oauth";
   moderation?: string;
+};
+
+export type NodeGeneratePreviewImage = {
+  order: number;
+  relation: "ancestor" | "parent" | "reference" | "external";
+  nodeId: string | null;
+  filename: string | null;
+  mime: string;
+  labelText: string | null;
+  visualContext: NodeVisualContextItem | null;
+  sourceMeta?: Record<string, unknown> | null;
+};
+
+export type OpenAiPreviewContentItem =
+  | { type: "input_text"; text: string; [key: string]: unknown }
+  | { type: "input_image"; image_url: string; [key: string]: unknown };
+
+export type NodeGeneratePreviewResponse = {
+  ok: true;
+  kind: "generate" | "edit";
+  parentNodeId: string | null;
+  ancestorNodeIds: string[];
+  prompt: string;
+  displayPrompt: string;
+  effectivePrompt: string;
+  options: {
+    quality: string;
+    size: string;
+    format: string;
+    moderation: "low" | "auto";
+  };
+  provider: "oauth";
+  images: NodeGeneratePreviewImage[];
+  openAi: {
+    model: string;
+    input: Array<{
+      role: "user";
+      content: string | OpenAiPreviewContentItem[];
+    }>;
+    tools: Array<Record<string, unknown>>;
+    tool_choice: "auto" | "required";
+    stream: boolean;
+  };
+  contentOrder: Array<
+    ({ order: number; image?: NodeGeneratePreviewImage | null } & (
+      | { type: "input_text"; text: string; [key: string]: unknown }
+      | { type: "input_image"; image_url: string; [key: string]: unknown }
+    ))
+  >;
 };
 
 export type NodeImportRequest = {
@@ -251,6 +301,25 @@ export async function postNodeGenerate(payload: NodeGenerateRequest): Promise<No
     throw e;
   }
   return data as NodeGenerateResponse;
+}
+
+export async function postNodeGeneratePreview(
+  payload: NodeGenerateRequest,
+): Promise<NodeGeneratePreviewResponse> {
+  const res = await fetch("/api/node/generate/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = data as NodeErrorResponse;
+    const msg = err?.error?.message ?? `Request failed: ${res.status}`;
+    const e = new Error(msg) as Error & { code?: string };
+    e.code = err?.error?.code;
+    throw e;
+  }
+  return data as NodeGeneratePreviewResponse;
 }
 
 export function postNodeImport(payload: NodeImportRequest): Promise<NodeImportResponse> {

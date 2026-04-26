@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { writeFile, mkdir, readFile, readdir, stat } from "fs/promises";
-import { join, dirname } from "path";
+import { join, dirname, extname, resolve, sep } from "path";
 import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 import { spawnBin, onShutdown } from "./bin/lib/platform.js";
@@ -193,22 +193,182 @@ function formatVisualImageLabel(context, index) {
 const RESEARCH_SUFFIX =
   "\n\n필요하면 먼저 웹에서 이 주제의 정확한 레퍼런스(얼굴/제품/장소/최신 정보)를 검색한 뒤 그걸 토대로 이미지를 생성해. 단순한 주제는 곧바로 생성해도 돼.";
 
+function imageDataUrl(mime, b64) {
+  return `data:${mime};base64,${b64}`;
+}
+
+function buildGenerateTextPrompt(prompt) {
+  return `Generate an image: ${prompt}${RESEARCH_SUFFIX}`;
+}
+
+function buildGenerateUserContent(prompt, references = []) {
+  const textPrompt = buildGenerateTextPrompt(prompt);
+  return references.length
+    ? [
+        ...references.map((b64) => ({
+          type: "input_image",
+          image_url: imageDataUrl("image/png", b64),
+        })),
+        { type: "input_text", text: textPrompt },
+      ]
+    : textPrompt;
+}
+
+function buildEditImageEntries(
+  imageB64,
+  imageMime = "image/png",
+  contextImages = [],
+  parentContext = null,
+) {
+  return [
+    ...contextImages.map((image) => ({
+      b64: image.b64,
+      mime: image.mime,
+      filename: image.filename ?? null,
+      visualContext: image.visualContext ?? null,
+    })),
+    { b64: imageB64, mime: imageMime, filename: null, visualContext: parentContext },
+  ];
+}
+
+function buildEditUserContent(prompt, imageB64, imageMime = "image/png", contextImages = [], parentContext = null) {
+  const imageEntries = buildEditImageEntries(imageB64, imageMime, contextImages, parentContext);
+  const hasVisualLabels = imageEntries.some((entry) => entry.visualContext);
+  const imageInputs = imageEntries.map((image) => ({
+    type: "input_image",
+    image_url: imageDataUrl(image.mime, image.b64),
+  }));
+  const editText = contextImages.length
+    ? `Edit the final input image. Earlier input images are ancestor visual context only; use them for continuity, but treat the final image as the direct parent and primary source. Instruction: ${prompt}`
+    : `Edit this image: ${prompt}`;
+
+  return hasVisualLabels
+    ? [
+        ...imageEntries.flatMap((image, index) => [
+          { type: "input_text", text: formatVisualImageLabel(image.visualContext, index + 1) },
+          {
+            type: "input_image",
+            image_url: imageDataUrl(image.mime, image.b64),
+          },
+        ]),
+        { type: "input_text", text: `Current node instruction:\n${prompt}` },
+      ]
+    : [
+        ...imageInputs,
+        { type: "input_text", text: editText },
+      ];
+}
+
+function redactOpenAiImageContent(content) {
+  if (!Array.isArray(content)) return content;
+  return content.map((item) => {
+    if (item?.type !== "input_image") return item;
+    const mime = /^data:([^;]+);base64,/.exec(item.image_url || "")?.[1] || "[mime]";
+    return { ...item, image_url: `data:${mime};base64,[redacted]` };
+  });
+}
+
+function mimeForPreviewFilename(filename) {
+  const ext = extname(filename || "").slice(1).toLowerCase();
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  return "image/png";
+}
+
+const PREVIEW_IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp"]);
+const REDACTED_B64 = "[redacted]";
+
+async function loadNodeImagePreview(rootDir, nodeId) {
+  if (typeof nodeId !== "string" || !nodeId || /[\\/\0]/.test(nodeId)) {
+    const err = new Error(`Node image not found: ${nodeId}`);
+    err.code = "NODE_NOT_FOUND";
+    err.status = 404;
+    throw err;
+  }
+
+  const candidates = [];
+  const meta = await loadNodeMeta(rootDir, nodeId, null);
+  const metaFormat = meta?.options?.format || meta?.format;
+  if (typeof metaFormat === "string" && metaFormat.length > 0) {
+    candidates.push(`${nodeId}.${metaFormat}`);
+    if (metaFormat === "jpeg") candidates.push(`${nodeId}.jpg`);
+    if (metaFormat === "jpg") candidates.push(`${nodeId}.jpeg`);
+  }
+  candidates.push(`${nodeId}.png`, `${nodeId}.jpeg`, `${nodeId}.jpg`, `${nodeId}.webp`);
+
+  for (const filename of [...new Set(candidates)]) {
+    const ext = extname(filename).slice(1).toLowerCase();
+    if (!PREVIEW_IMAGE_EXTS.has(ext)) continue;
+    try {
+      await stat(join(rootDir, "generated", filename));
+      return { filename, b64: REDACTED_B64, mime: mimeForPreviewFilename(filename), meta };
+    } catch {}
+  }
+
+  try {
+    const entries = await readdir(join(rootDir, "generated"));
+    const found = entries.find((name) => {
+      const ext = extname(name).slice(1).toLowerCase();
+      return name.startsWith(`${nodeId}.`) && PREVIEW_IMAGE_EXTS.has(ext);
+    });
+    if (found) return { filename: found, b64: REDACTED_B64, mime: mimeForPreviewFilename(found), meta };
+  } catch {}
+
+  const err = new Error(`Node image not found: ${nodeId}`);
+  err.code = "NODE_NOT_FOUND";
+  err.status = 404;
+  throw err;
+}
+
+async function loadAssetPreview(rootDir, externalSrc) {
+  if (typeof externalSrc !== "string" || !externalSrc || externalSrc.includes("\0")) {
+    const err = new Error("Asset path is required");
+    err.code = "NODE_SOURCE_INVALID";
+    err.status = 400;
+    throw err;
+  }
+
+  const baseDir = resolve(rootDir, "generated");
+  const target = resolve(baseDir, externalSrc);
+  if (target !== baseDir && !target.startsWith(baseDir + sep)) {
+    const err = new Error(`Asset path escapes generated/: ${externalSrc}`);
+    err.code = "NODE_SOURCE_INVALID";
+    err.status = 400;
+    throw err;
+  }
+
+  try {
+    await stat(target);
+  } catch {
+    const err = new Error(`Asset file not found: ${externalSrc}`);
+    err.code = "NODE_NOT_FOUND";
+    err.status = 404;
+    throw err;
+  }
+
+  const ext = extname(target).slice(1).toLowerCase();
+  if (!PREVIEW_IMAGE_EXTS.has(ext)) {
+    const err = new Error("Asset must be a png, jpg, jpeg, or webp image");
+    err.code = "NODE_SOURCE_INVALID";
+    err.status = 400;
+    throw err;
+  }
+
+  return {
+    b64: REDACTED_B64,
+    mime: mimeForPreviewFilename(externalSrc),
+    filename: externalSrc,
+    meta: await loadAssetMeta(rootDir, externalSrc),
+  };
+}
+
 async function generateViaOAuth(prompt, quality, size, moderation = "low", references = [], requestId = null) {
   const tools = [
     { type: "web_search" },
     { type: "image_generation", quality, size, moderation },
   ];
 
-  const textPrompt = `Generate an image: ${prompt}${RESEARCH_SUFFIX}`;
-  const userContent = references.length
-    ? [
-        ...references.map((b64) => ({
-          type: "input_image",
-          image_url: `data:image/png;base64,${b64}`,
-        })),
-        { type: "input_text", text: textPrompt },
-      ]
-    : textPrompt;
+  const userContent = buildGenerateUserContent(prompt, references);
 
   const res = await fetch(`${OAUTH_URL}/v1/responses`, {
     method: "POST",
@@ -697,37 +857,13 @@ async function editViaOAuth(
   contextImages = [],
   parentContext = null,
 ) {
-  const imageEntries = [
-    ...contextImages.map((image) => ({
-      b64: image.b64,
-      mime: image.mime,
-      visualContext: image.visualContext ?? null,
-    })),
-    { b64: imageB64, mime: imageMime, visualContext: parentContext },
-  ];
-  const hasVisualLabels = imageEntries.some((entry) => entry.visualContext);
-  const imageInputs = imageEntries.map((image) => ({
-    type: "input_image",
-    image_url: `data:${image.mime};base64,${image.b64}`,
-  }));
-  const editText = contextImages.length
-    ? `Edit the final input image. Earlier input images are ancestor visual context only; use them for continuity, but treat the final image as the direct parent and primary source. Instruction: ${prompt}`
-    : `Edit this image: ${prompt}`;
-  const editContent = hasVisualLabels
-    ? [
-        ...imageEntries.flatMap((image, index) => [
-          { type: "input_text", text: formatVisualImageLabel(image.visualContext, index + 1) },
-          {
-            type: "input_image",
-            image_url: `data:${image.mime};base64,${image.b64}`,
-          },
-        ]),
-        { type: "input_text", text: `Current node instruction:\n${prompt}` },
-      ]
-    : [
-        ...imageInputs,
-        { type: "input_text", text: editText },
-      ];
+  const editContent = buildEditUserContent(
+    prompt,
+    imageB64,
+    imageMime,
+    contextImages,
+    parentContext,
+  );
   const res = await fetch(`${OAUTH_URL}/v1/responses`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
@@ -849,6 +985,224 @@ app.post("/api/edit", async (req, res) => {
 });
 
 // ── Node mode (0.04) ──
+function buildPreviewContentOrder(content, images) {
+  if (!Array.isArray(content)) {
+    return [{ order: 1, type: "input_text", text: content }];
+  }
+
+  let imageIndex = 0;
+  return content.map((item, index) => {
+    if (item?.type === "input_image") {
+      const image = images[imageIndex] || null;
+      imageIndex += 1;
+      return { order: index + 1, ...item, image };
+    }
+    return { order: index + 1, ...item };
+  });
+}
+
+app.post("/api/node/generate/preview", async (req, res) => {
+  const body = req.body || {};
+  const parentNodeId = body.parentNodeId ?? null;
+
+  try {
+    const {
+      prompt,
+      quality = "low",
+      size = "1024x1024",
+      format = "png",
+      moderation = "low",
+      references = [],
+      ancestorNodeIds = [],
+      externalSrc = null,
+    } = body;
+    const { provider = "oauth" } = body;
+    const displayPrompt =
+      typeof body.displayPrompt === "string" && body.displayPrompt.trim()
+        ? body.displayPrompt
+        : prompt;
+    const effectivePrompt =
+      typeof body.effectivePrompt === "string" && body.effectivePrompt.trim()
+        ? body.effectivePrompt
+        : prompt;
+
+    if (provider === "api") {
+      return res.status(403).json({
+        error: { code: "APIKEY_DISABLED", message: "API key provider is disabled. Use OAuth." },
+        parentNodeId,
+      });
+    }
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({
+        error: { code: "INVALID_PROMPT", message: "Prompt is required" },
+        parentNodeId,
+      });
+    }
+    if (!Array.isArray(references) || references.length > 5) {
+      return res.status(400).json({
+        error: { code: "INVALID_REFS", message: "references must be an array of up to 5 base64 strings" },
+        parentNodeId,
+      });
+    }
+    if (
+      !Array.isArray(ancestorNodeIds) ||
+      ancestorNodeIds.length > MAX_NODE_ANCESTOR_IMAGES ||
+      ancestorNodeIds.some((id) => typeof id !== "string")
+    ) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_ANCESTORS",
+          message: `ancestorNodeIds must be an array of up to ${MAX_NODE_ANCESTOR_IMAGES} node ids`,
+        },
+        parentNodeId,
+      });
+    }
+    const visualContextCheck = normalizeVisualContext(body.visualContext);
+    if (visualContextCheck.error) {
+      return res.status(400).json({
+        error: { code: "INVALID_VISUAL_CONTEXT", message: visualContextCheck.error },
+        parentNodeId,
+      });
+    }
+    const refCheck = validateAndNormalizeRefs(references);
+    if (refCheck.error) {
+      return res.status(400).json({
+        error: { code: "INVALID_REFS", message: refCheck.error },
+        parentNodeId,
+      });
+    }
+    const moderationCheck = validateModeration(moderation);
+    if (moderationCheck.error) {
+      return res.status(400).json({
+        error: { code: "INVALID_MODERATION", message: moderationCheck.error },
+        parentNodeId,
+      });
+    }
+
+    let kind = "generate";
+    let userContent = null;
+    let images = [];
+    let parentImage = null;
+    let parentVisualContext = null;
+    let ancestorImages = [];
+
+    if (parentNodeId) {
+      kind = "edit";
+      parentImage = await loadNodeImagePreview(__dirname, parentNodeId);
+      parentVisualContext = await resolveNodeVisualContext(
+        __dirname,
+        parentNodeId,
+        "parent",
+        visualContextCheck.items,
+      );
+      ancestorImages = await Promise.all(
+        ancestorNodeIds
+          .filter((nodeId) => nodeId !== parentNodeId)
+          .slice(0, MAX_NODE_ANCESTOR_IMAGES)
+          .map(async (nodeId) => ({
+            ...(await loadNodeImagePreview(__dirname, nodeId)),
+            visualContext: await resolveNodeVisualContext(
+              __dirname,
+              nodeId,
+              "ancestor",
+              visualContextCheck.items,
+            ),
+          })),
+      );
+
+      userContent = buildEditUserContent(
+        effectivePrompt,
+        parentImage.b64,
+        parentImage.mime,
+        ancestorImages,
+        parentVisualContext,
+      );
+      images = [
+        ...ancestorImages.map((image, index) => ({
+          order: index + 1,
+          relation: "ancestor",
+          nodeId: image.visualContext?.nodeId ?? image.filename.replace(/\.[^.]+$/, ""),
+          filename: image.filename,
+          mime: image.mime,
+          labelText: image.visualContext ? formatVisualImageLabel(image.visualContext, index + 1) : null,
+          visualContext: image.visualContext ?? null,
+        })),
+        {
+          order: ancestorImages.length + 1,
+          relation: "parent",
+          nodeId: parentNodeId,
+          filename: parentImage.filename,
+          mime: parentImage.mime,
+          labelText: parentVisualContext
+            ? formatVisualImageLabel(parentVisualContext, ancestorImages.length + 1)
+            : null,
+          visualContext: parentVisualContext,
+        },
+      ];
+    } else if (typeof externalSrc === "string" && externalSrc.length > 0) {
+      kind = "edit";
+      parentImage = await loadAssetPreview(__dirname, externalSrc);
+      userContent = buildEditUserContent(effectivePrompt, parentImage.b64, parentImage.mime);
+      images = [{
+        order: 1,
+        relation: "external",
+        nodeId: null,
+        filename: externalSrc,
+        mime: parentImage.mime,
+        labelText: null,
+        visualContext: null,
+        sourceMeta: parentImage.meta,
+      }];
+    } else {
+      userContent = buildGenerateUserContent(effectivePrompt, refCheck.refs);
+      images = refCheck.refs.map((_, index) => ({
+        order: index + 1,
+        relation: "reference",
+        nodeId: null,
+        filename: null,
+        mime: "image/png",
+        labelText: null,
+        visualContext: null,
+      }));
+    }
+
+    const redactedContent = redactOpenAiImageContent(userContent);
+    const tools = kind === "edit"
+      ? [{ type: "image_generation", quality, size, moderation }]
+      : [
+          { type: "web_search" },
+          { type: "image_generation", quality, size, moderation },
+        ];
+
+    res.json({
+      ok: true,
+      kind,
+      parentNodeId,
+      ancestorNodeIds: parentImage ? ancestorImages.map((image) => image.filename.replace(/\.[^.]+$/, "")) : [],
+      prompt: displayPrompt,
+      displayPrompt,
+      effectivePrompt,
+      options: { quality, size, format, moderation },
+      provider: "oauth",
+      images,
+      openAi: {
+        model: "gpt-5.4",
+        input: [{ role: "user", content: redactedContent }],
+        tools,
+        tool_choice: kind === "edit" ? "required" : "auto",
+        stream: true,
+      },
+      contentOrder: buildPreviewContentOrder(redactedContent, images),
+    });
+  } catch (err) {
+    console.error("[node/generate/preview] error:", err.message);
+    res.status(err.status || 500).json({
+      error: { code: err.code || "NODE_GEN_PREVIEW_FAILED", message: err.message },
+      parentNodeId,
+    });
+  }
+});
+
 app.post("/api/node/generate", async (req, res) => {
   const body = req.body || {};
   const parentNodeId = body.parentNodeId ?? null;

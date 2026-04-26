@@ -20,6 +20,26 @@ import { WorkflowMiniMap } from "./WorkflowMiniMap";
 import { deriveGraphMeta } from "../lib/graphMeta";
 import { useI18n } from "../i18n";
 
+type GraphHistorySurface = {
+  undoGraph?: () => void;
+  redoGraph?: () => void;
+  canUndoGraph?: boolean | (() => boolean);
+  canRedoGraph?: boolean | (() => boolean);
+  graphHistoryPending?: boolean;
+  isGraphHistoryPending?: boolean;
+  pendingGraphOperation?: boolean;
+};
+
+function readBooleanFlag(value: boolean | (() => boolean) | undefined): boolean {
+  return typeof value === "function" ? value() : Boolean(value);
+}
+
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName.toLowerCase();
+  return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+}
+
 function NodeCanvasInner() {
   const { t } = useI18n();
   const nodes = useAppStore((s) => s.graphNodes);
@@ -32,8 +52,29 @@ function NodeCanvasInner() {
   const deleteNodes = useAppStore((s) => s.deleteNodes);
   const selectNode = useAppStore((s) => s.selectNode);
   const selectEdge = useAppStore((s) => s.selectEdge);
+  const selectedNodeId = useAppStore((s) => s.selectedNodeId);
   const detachNodeFromParent = useAppStore((s) => s.detachNodeFromParent);
   const sessionLoading = useAppStore((s) => s.sessionLoading);
+  const undoGraph = useAppStore((s) => (s as typeof s & GraphHistorySurface).undoGraph);
+  const redoGraph = useAppStore((s) => (s as typeof s & GraphHistorySurface).redoGraph);
+  const canUndoGraph = useAppStore((s) =>
+    readBooleanFlag((s as typeof s & GraphHistorySurface).canUndoGraph),
+  );
+  const canRedoGraph = useAppStore((s) =>
+    readBooleanFlag((s as typeof s & GraphHistorySurface).canRedoGraph),
+  );
+  const graphHistoryPending = useAppStore((s) => {
+    const history = s as typeof s & GraphHistorySurface;
+    return Boolean(
+      history.graphHistoryPending ||
+        history.isGraphHistoryPending ||
+        history.pendingGraphOperation,
+    );
+  });
+  const hasPendingNode = useMemo(
+    () => nodes.some((node) => node.data.status === "pending" || node.data.status === "reconciling"),
+    [nodes],
+  );
 
   const { screenToFlowPosition } = useReactFlow();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -53,6 +94,7 @@ function NodeCanvasInner() {
         };
         return {
           ...node,
+          selected: node.id === selectedNodeId,
           data: {
             ...node.data,
             graphLevel: meta.level,
@@ -63,17 +105,21 @@ function NodeCanvasInner() {
           },
         };
       }),
-    [nodes, graphMeta],
+    [nodes, graphMeta, selectedNodeId],
   );
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) =>
-      setGraphNodes(applyNodeChanges(changes, nodes) as GraphNode[]),
+    (changes: NodeChange[]) => {
+      if (changes.every((change) => change.type === "select")) return;
+      setGraphNodes(applyNodeChanges(changes, nodes) as GraphNode[]);
+    },
     [nodes, setGraphNodes],
   );
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) =>
-      setGraphEdges(applyEdgeChanges(changes, edges) as GraphEdge[]),
+    (changes: EdgeChange[]) => {
+      if (changes.every((change) => change.type === "select")) return;
+      setGraphEdges(applyEdgeChanges(changes, edges) as GraphEdge[]);
+    },
     [edges, setGraphEdges],
   );
 
@@ -112,11 +158,46 @@ function NodeCanvasInner() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") selectNode(null);
+      if (event.key === "Escape") {
+        selectNode(null);
+        return;
+      }
+      if (isEditableShortcutTarget(event.target) || graphHistoryPending || hasPendingNode || sessionLoading) return;
+      const key = event.key.toLowerCase();
+      const isMod = event.metaKey || event.ctrlKey;
+      if (!isMod) return;
+      if (key === "z" && event.shiftKey) {
+        if (!canRedoGraph || !redoGraph) return;
+        event.preventDefault();
+        redoGraph();
+        return;
+      }
+      if (key === "z") {
+        if (!canUndoGraph || !undoGraph) return;
+        event.preventDefault();
+        undoGraph();
+        return;
+      }
+      if (key === "y") {
+        if (!canRedoGraph || !redoGraph) return;
+        event.preventDefault();
+        redoGraph();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectNode]);
+  }, [
+    canRedoGraph,
+    canUndoGraph,
+    graphHistoryPending,
+    hasPendingNode,
+    redoGraph,
+    selectNode,
+    sessionLoading,
+    undoGraph,
+  ]);
+
+  const historyControlsDisabled = graphHistoryPending || hasPendingNode || sessionLoading;
 
   return (
     <main className="node-canvas" ref={wrapperRef}>
@@ -149,14 +230,36 @@ function NodeCanvasInner() {
             <Controls className="node-canvas__controls" />
             <WorkflowMiniMap nodes={displayNodes} edges={edges} graphMeta={graphMeta} />
           </ReactFlow>
-          <button
-            type="button"
-            className="node-canvas__add-root"
-            onClick={() => addRootNode()}
-            title={t("nodeCanvas.addRootTitle")}
-          >
-            +
-          </button>
+          <div className="node-canvas__top-actions">
+            <div className="node-canvas__history-toolbar" role="group" aria-label={t("nodeCanvas.historyToolbar")}>
+              <button
+                type="button"
+                onClick={() => undoGraph?.()}
+                disabled={historyControlsDisabled || !canUndoGraph || !undoGraph}
+                title={t("nodeCanvas.undoTitle")}
+                aria-label={t("nodeCanvas.undo")}
+              >
+                ↶
+              </button>
+              <button
+                type="button"
+                onClick={() => redoGraph?.()}
+                disabled={historyControlsDisabled || !canRedoGraph || !redoGraph}
+                title={t("nodeCanvas.redoTitle")}
+                aria-label={t("nodeCanvas.redo")}
+              >
+                ↷
+              </button>
+            </div>
+            <button
+              type="button"
+              className="node-canvas__add-root"
+              onClick={() => addRootNode()}
+              title={t("nodeCanvas.addRootTitle")}
+            >
+              +
+            </button>
+          </div>
           <div className="node-canvas__hint">
             {t("nodeCanvas.hint")}
           </div>

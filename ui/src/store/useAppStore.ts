@@ -25,6 +25,7 @@ import {
   deleteSession as apiDeleteSession,
   saveSessionGraph,
   type HistoryItem,
+  type NodeGenerateRequest,
   type NodeVisualContextItem,
   type SessionGraphEdge,
   type SessionGraphNode,
@@ -433,6 +434,28 @@ export type GraphEdge = FlowEdge<EdgeTransferData>;
 type NodePosition = { x: number; y: number };
 type GenerateNodeOptions = { selectOnComplete?: boolean };
 
+export type NodeGenerateDeliveryIssue = {
+  code: "missing-prompt" | "missing-parent-image";
+  message: string;
+  blocking: boolean;
+};
+
+export type NodeGenerateDelivery = {
+  node: GraphNode;
+  mode: "generate" | "edit";
+  imageTransfer: ImageTransferMode;
+  parentNode: GraphNode | null;
+  parentNodeId: string | null;
+  ancestorNodeIds: string[];
+  visualContext: NodeVisualContextItem[];
+  displayPrompt: string;
+  effectivePrompt: string;
+  nodeSettings: NodeSettings;
+  size: string;
+  payload: NodeGenerateRequest;
+  issues: NodeGenerateDeliveryIssue[];
+};
+
 const NODE_PLACEMENT_WIDTH = 282;
 const NODE_PLACEMENT_HEIGHT = 260;
 const NODE_PLACEMENT_MARGIN = 24;
@@ -679,10 +702,18 @@ type AppState = {
 
   graphNodes: GraphNode[];
   graphEdges: GraphEdge[];
+  graphUndoPast: GraphSnapshot[];
+  graphUndoFuture: GraphSnapshot[];
+  canUndoGraph: boolean;
+  canRedoGraph: boolean;
   selectedNodeId: ClientNodeId | null;
   selectedEdgeId: string | null;
   selectNode: (clientId: ClientNodeId | null) => void;
   selectEdge: (edgeId: string | null) => void;
+  undoGraph: () => void;
+  redoGraph: () => void;
+  resetGraphHistory: () => void;
+  buildNodeGeneratePreview: (clientId: ClientNodeId) => NodeGenerateDelivery | null;
   setGraphNodes: (n: GraphNode[]) => void;
   setGraphEdges: (e: GraphEdge[]) => void;
   addRootNode: () => ClientNodeId;
@@ -742,6 +773,144 @@ type AppState = {
   showToast: (message: string, error?: boolean) => void;
   getResolvedSize: () => string;
 };
+
+const GRAPH_HISTORY_LIMIT = 50;
+
+type GraphSnapshot = {
+  graphNodes: GraphNode[];
+  graphEdges: GraphEdge[];
+  selectedNodeId: ClientNodeId | null;
+  selectedEdgeId: string | null;
+};
+
+function cloneGraphNodeForSnapshot(node: GraphNode): GraphNode {
+  return {
+    ...node,
+    position: { ...node.position },
+    data: {
+      ...node.data,
+      settings: cloneNodeSettings(node.data.settings),
+    },
+  };
+}
+
+function cloneGraphEdgeForSnapshot(edge: GraphEdge): GraphEdge {
+  return {
+    ...edge,
+    data: normalizeEdgeTransferData(edge.data),
+  };
+}
+
+function takeGraphSnapshot(s: Pick<AppState, "graphNodes" | "graphEdges" | "selectedNodeId" | "selectedEdgeId">): GraphSnapshot {
+  return {
+    graphNodes: s.graphNodes.map(cloneGraphNodeForSnapshot),
+    graphEdges: s.graphEdges.map(cloneGraphEdgeForSnapshot),
+    selectedNodeId: s.selectedNodeId,
+    selectedEdgeId: s.selectedEdgeId,
+  };
+}
+
+function hasPendingGraphNodes(nodes: GraphNode[]): boolean {
+  return nodes.some((node) => node.data.status === "pending" || node.data.status === "reconciling");
+}
+
+function clearGraphHistoryPatch(): Pick<
+  AppState,
+  "graphUndoPast" | "graphUndoFuture" | "canUndoGraph" | "canRedoGraph"
+> {
+  return {
+    graphUndoPast: [],
+    graphUndoFuture: [],
+    canUndoGraph: false,
+    canRedoGraph: false,
+  };
+}
+
+function graphHistoryPatch(
+  graphUndoPast: GraphSnapshot[],
+  graphUndoFuture: GraphSnapshot[],
+): Pick<AppState, "graphUndoPast" | "graphUndoFuture" | "canUndoGraph" | "canRedoGraph"> {
+  return {
+    graphUndoPast,
+    graphUndoFuture,
+    canUndoGraph: graphUndoPast.length > 0,
+    canRedoGraph: graphUndoFuture.length > 0,
+  };
+}
+
+function pushGraphUndoPatch(s: AppState): Pick<
+  AppState,
+  "graphUndoPast" | "graphUndoFuture" | "canUndoGraph" | "canRedoGraph"
+> {
+  if (hasPendingGraphNodes(s.graphNodes)) {
+    return graphHistoryPatch(s.graphUndoPast, []);
+  }
+  const graphUndoPast = [...s.graphUndoPast, takeGraphSnapshot(s)].slice(-GRAPH_HISTORY_LIMIT);
+  return graphHistoryPatch(graphUndoPast, []);
+}
+
+function commitUserGraphChange(
+  get: () => AppState,
+  set: (patch: Partial<AppState>) => void,
+  patch: Partial<AppState>,
+): void {
+  set({
+    ...patch,
+    ...pushGraphUndoPatch(get()),
+  });
+  get().scheduleGraphSave();
+}
+
+const NODE_RUNTIME_DATA_KEYS: Array<keyof ImageNodeData> = [
+  "serverNodeId",
+  "imageUrl",
+  "status",
+  "pendingRequestId",
+  "pendingPhase",
+  "pendingStartedAt",
+  "error",
+  "elapsed",
+  "webSearchCalls",
+  "filename",
+  "provider",
+  "quality",
+  "size",
+  "format",
+  "moderation",
+  "usage",
+  "createdAt",
+];
+
+function mergeCurrentRuntimeData(snapshotNode: GraphNode, currentNode: GraphNode | undefined): GraphNode {
+  const next = cloneGraphNodeForSnapshot(snapshotNode);
+  if (!currentNode) return next;
+  const data = { ...next.data };
+  for (const key of NODE_RUNTIME_DATA_KEYS) {
+    (data as Record<string, unknown>)[key] = (currentNode.data as Record<string, unknown>)[key];
+  }
+  return {
+    ...next,
+    data,
+  };
+}
+
+function restoreGraphSnapshot(snapshot: GraphSnapshot, currentNodes: GraphNode[]): GraphSnapshot {
+  const currentById = new Map(currentNodes.map((node) => [node.id, node]));
+  const graphEdges = snapshot.graphEdges.map(cloneGraphEdgeForSnapshot);
+  const restoredNodes = snapshot.graphNodes.map((node) =>
+    mergeCurrentRuntimeData(node, currentById.get(node.id)),
+  );
+  const graphNodes = syncEffectiveNodeSettings(
+    normalizeGraphParentPointers(restoredNodes, graphEdges),
+    graphEdges,
+  );
+  return {
+    graphNodes,
+    graphEdges,
+    selectedNodeId: snapshot.selectedNodeId,
+    selectedEdgeId: snapshot.selectedEdgeId,
+  };
+}
 
 function findParentNodeFor(
   nodes: GraphNode[],
@@ -903,6 +1072,76 @@ function resolveNodeImageInputs(
     ancestorNodeIds: ancestorContext.map((item) => item.nodeId),
     visualContext,
     imageTransfer,
+  };
+}
+
+export function buildNodeGenerateDelivery(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  clientId: ClientNodeId,
+  options: { requestId?: string; sessionId?: string | null } = {},
+): NodeGenerateDelivery | null {
+  const node = nodes.find((n) => n.id === clientId);
+  if (!node) return null;
+
+  const displayPrompt = node.data.prompt;
+  const nodeSettings = resolveEffectiveNodeSettings(nodes, edges, clientId);
+  const size = resolveNodeSize(nodeSettings);
+  const {
+    parentNode,
+    parentServerNodeId,
+    ancestorNodeIds,
+    visualContext,
+    imageTransfer,
+  } = resolveNodeImageInputs(nodes, edges, clientId);
+  const effectivePrompt = buildEffectivePrompt(nodes, edges, clientId, visualContext);
+  const issues: NodeGenerateDeliveryIssue[] = [];
+
+  if (!displayPrompt.trim()) {
+    issues.push({
+      code: "missing-prompt",
+      message: t("toast.promptRequired"),
+      blocking: true,
+    });
+  }
+  if (parentNode && imageTransfer !== "off" && !parentServerNodeId) {
+    issues.push({
+      code: "missing-parent-image",
+      message: t("toast.nodeParentRequired"),
+      blocking: true,
+    });
+  }
+
+  const payload: NodeGenerateRequest = {
+    parentNodeId: parentServerNodeId,
+    ancestorNodeIds,
+    visualContext,
+    prompt: effectivePrompt,
+    displayPrompt,
+    effectivePrompt,
+    quality: nodeSettings.quality,
+    size,
+    format: nodeSettings.format,
+    moderation: nodeSettings.moderation,
+    requestId: options.requestId,
+    sessionId: options.sessionId,
+    clientNodeId: clientId,
+  };
+
+  return {
+    node,
+    mode: parentServerNodeId ? "edit" : "generate",
+    imageTransfer,
+    parentNode,
+    parentNodeId: parentServerNodeId,
+    ancestorNodeIds,
+    visualContext,
+    displayPrompt,
+    effectivePrompt,
+    nodeSettings,
+    size,
+    payload,
+    issues,
   };
 }
 
@@ -1280,6 +1519,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   graphNodes: [],
   graphEdges: [],
+  graphUndoPast: [],
+  graphUndoFuture: [],
+  canUndoGraph: false,
+  canRedoGraph: false,
   selectedNodeId: null,
   selectedEdgeId: null,
   selectNode: (selectedNodeId) => set({ selectedNodeId, selectedEdgeId: null }),
@@ -1289,9 +1532,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedNodeId: null,
       rightPanelOpen: selectedEdgeId ? true : s.rightPanelOpen,
     })),
-  setGraphNodes: (graphNodes) => {
-    set({ graphNodes });
+  undoGraph: () => {
+    const s = get();
+    if (hasPendingGraphNodes(s.graphNodes)) return;
+    const previous = s.graphUndoPast.at(-1);
+    if (!previous) return;
+    const current = takeGraphSnapshot(s);
+    const restored = restoreGraphSnapshot(previous, s.graphNodes);
+    const graphUndoPast = s.graphUndoPast.slice(0, -1);
+    const graphUndoFuture = [current, ...s.graphUndoFuture].slice(0, GRAPH_HISTORY_LIMIT);
+    set({
+      ...restored,
+      ...graphHistoryPatch(graphUndoPast, graphUndoFuture),
+    });
     get().scheduleGraphSave();
+  },
+  redoGraph: () => {
+    const s = get();
+    if (hasPendingGraphNodes(s.graphNodes)) return;
+    const next = s.graphUndoFuture[0];
+    if (!next) return;
+    const current = takeGraphSnapshot(s);
+    const restored = restoreGraphSnapshot(next, s.graphNodes);
+    const graphUndoPast = [...s.graphUndoPast, current].slice(-GRAPH_HISTORY_LIMIT);
+    const graphUndoFuture = s.graphUndoFuture.slice(1);
+    set({
+      ...restored,
+      ...graphHistoryPatch(graphUndoPast, graphUndoFuture),
+    });
+    get().scheduleGraphSave();
+  },
+  resetGraphHistory: () => {
+    set(clearGraphHistoryPatch());
+  },
+  buildNodeGeneratePreview: (clientId) =>
+    buildNodeGenerateDelivery(get().graphNodes, get().graphEdges, clientId, {
+      sessionId: get().activeSessionId,
+    }),
+  setGraphNodes: (graphNodes) => {
+    commitUserGraphChange(get, set, { graphNodes });
   },
   setGraphEdges: (graphEdges) => {
     const nextEdges = graphEdges.map((e) => ({
@@ -1299,11 +1578,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       type: "workflowEdge",
       data: normalizeEdgeTransferData(e.data),
     }));
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: normalizeGraphParentPointers(get().graphNodes, nextEdges),
       graphEdges: nextEdges,
     });
-    get().scheduleGraphSave();
   },
 
   sessions: [],
@@ -1340,6 +1618,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedNodeId: null,
         selectedEdgeId: null,
         sessionLoading: false,
+        ...clearGraphHistoryPatch(),
       });
       // Serialize reconcile and recovery so the two async writers don't race.
       // reconcileGraphPending already calls recoverGraphNodesFromHistory at the
@@ -1448,6 +1727,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         graphEdges: [],
         selectedNodeId: null,
         selectedEdgeId: null,
+        ...clearGraphHistoryPatch(),
       });
     } catch (err) {
       console.warn("[sessions] create failed:", err);
@@ -1483,6 +1763,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           graphEdges: [],
           selectedNodeId: null,
           selectedEdgeId: null,
+          ...clearGraphHistoryPatch(),
         });
         if (remaining.length > 0) {
           await get().switchSession(remaining[0].id);
@@ -1526,8 +1807,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         settings,
       },
     };
-    set({ graphNodes: [...get().graphNodes, node], selectedNodeId: clientId, selectedEdgeId: null });
-    get().scheduleGraphSave();
+    commitUserGraphChange(get, set, {
+      graphNodes: [...get().graphNodes, node],
+      selectedNodeId: clientId,
+      selectedEdgeId: null,
+    });
     return clientId;
   },
 
@@ -1560,13 +1844,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     };
     const edge = createGraphEdge(parentClientId, clientId);
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
       selectedNodeId: clientId,
       selectedEdgeId: null,
     });
-    get().scheduleGraphSave();
     return clientId;
   },
 
@@ -1597,8 +1880,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           settings: cloneNodeSettings(source.data.settings),
         },
       };
-      set({ graphNodes: [...get().graphNodes, node], selectedNodeId: clientId, selectedEdgeId: null });
-      get().scheduleGraphSave();
+      commitUserGraphChange(get, set, {
+        graphNodes: [...get().graphNodes, node],
+        selectedNodeId: clientId,
+        selectedEdgeId: null,
+      });
       return clientId;
     }
 
@@ -1627,44 +1913,40 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     };
     const edge = createGraphEdge(parentClientId, clientId, incomingEdge.data);
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
       selectedNodeId: clientId,
       selectedEdgeId: null,
     });
-    get().scheduleGraphSave();
     return clientId;
   },
 
   updateNodeName: (clientId, name) => {
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: get().graphNodes.map((n) =>
         n.id === clientId ? { ...n, data: { ...n.data, name } } : n,
       ),
     });
-    get().scheduleGraphSave();
   },
 
   updateNodePrompt: (clientId, prompt) => {
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: get().graphNodes.map((n) =>
         n.id === clientId ? { ...n, data: { ...n.data, prompt } } : n,
       ),
     });
-    get().scheduleGraphSave();
   },
 
   updateEdgeTransfer: (edgeId, patch) => {
     const next = applyEdgeTransferPatch(get().graphNodes, get().graphEdges, edgeId, patch);
     if (!next) return;
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: next.graphNodes,
       graphEdges: next.graphEdges,
       selectedEdgeId: edgeId,
       selectedNodeId: null,
     });
-    get().scheduleGraphSave();
   },
 
   setEdgeImageTransfer: (edgeId, mode) => {
@@ -1672,13 +1954,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       imageTransfer: mode,
     });
     if (!next) return;
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: next.graphNodes,
       graphEdges: next.graphEdges,
       selectedEdgeId: edgeId,
       selectedNodeId: null,
     });
-    get().scheduleGraphSave();
   },
 
   cycleEdgeImageTransferQuiet: (edgeId) => {
@@ -1689,12 +1970,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       imageTransfer: nextImageTransferMode(current.imageTransfer),
     });
     if (!next) return;
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: next.graphNodes,
       graphEdges: next.graphEdges,
       selectedEdgeId: null,
     });
-    get().scheduleGraphSave();
   },
 
   toggleEdgeTransfer: (edgeId, key) => {
@@ -1712,12 +1992,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       [key]: !current[key],
     });
     if (!next) return;
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: next.graphNodes,
       graphEdges: next.graphEdges,
       selectedEdgeId: null,
     });
-    get().scheduleGraphSave();
   },
 
   updateNodeSettings: (clientId, patch) => {
@@ -1750,11 +2029,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         : n,
     );
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: syncEffectiveNodeSettings(nextNodes, nextEdges),
       graphEdges: nextEdges,
     });
-    get().scheduleGraphSave();
   },
 
   copyParentPromptToNode: (clientId) => {
@@ -1762,7 +2040,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const node = nodes.find((n) => n.id === clientId);
     const parent = findParentNodeFor(nodes, get().graphEdges, clientId);
     if (!node || !parent) return;
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: nodes.map((n) =>
         n.id === clientId
           ? {
@@ -1775,7 +2053,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           : n,
       ),
     });
-    get().scheduleGraphSave();
   },
 
   copyParentSettingsToNode: (clientId) => {
@@ -1788,8 +2065,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ? { ...n, data: { ...n.data, settings: cloneNodeSettings(parent.data.settings) } }
         : n,
     );
-    set({ graphNodes: syncEffectiveNodeSettings(nextNodes, edges) });
-    get().scheduleGraphSave();
+    commitUserGraphChange(get, set, { graphNodes: syncEffectiveNodeSettings(nextNodes, edges) });
   },
 
   duplicateBranchRoot: (sourceClientId) => {
@@ -1817,8 +2093,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     };
     // no parent edge — becomes a new branch root at root layer
     void rootSiblings;
-    set({ graphNodes: [...get().graphNodes, node], selectedNodeId: clientId, selectedEdgeId: null });
-    get().scheduleGraphSave();
+    commitUserGraphChange(get, set, {
+      graphNodes: [...get().graphNodes, node],
+      selectedNodeId: clientId,
+      selectedEdgeId: null,
+    });
     return clientId;
   },
 
@@ -1827,34 +2106,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     const selectOnComplete = options?.selectOnComplete ?? true;
     const graphNodes = get().graphNodes;
     const graphEdges = get().graphEdges;
-    const node = graphNodes.find((n) => n.id === targetClientId);
-    if (!node) return false;
+    const delivery = buildNodeGenerateDelivery(graphNodes, graphEdges, targetClientId);
+    if (!delivery) return false;
+    const { node, displayPrompt, nodeSettings, parentNodeId, payload } = delivery;
     const hadGeneratedImage = !!node.data.serverNodeId || !!node.data.imageUrl;
-    const displayPrompt = node.data.prompt;
-    const nodeSettings = resolveEffectiveNodeSettings(graphNodes, graphEdges, targetClientId);
-    const {
-      parentNode,
-      parentServerNodeId,
-      ancestorNodeIds,
-      visualContext,
-      imageTransfer,
-    } = resolveNodeImageInputs(graphNodes, graphEdges, targetClientId);
-    const effectivePrompt = buildEffectivePrompt(
-      graphNodes,
-      graphEdges,
-      targetClientId,
-      visualContext,
-    );
-    if (!displayPrompt.trim()) {
-      get().showToast(t("toast.promptRequired"), true);
-      return false;
-    }
-    if (parentNode && imageTransfer !== "off" && !parentServerNodeId) {
-      get().showToast(t("toast.nodeParentRequired"), true);
+    const blockingIssue = delivery.issues.find((issue) => issue.blocking);
+    if (blockingIssue) {
+      get().showToast(blockingIssue.message, true);
       return false;
     }
     const s = get();
-    const size = resolveNodeSize(nodeSettings);
 
     // Capture request session so a later session switch does not corrupt graph B.
     const requestSessionId = s.activeSessionId;
@@ -1901,16 +2162,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     try {
       const res = await postNodeGenerate({
-        parentNodeId: parentServerNodeId,
-        ancestorNodeIds,
-        visualContext,
-        prompt: effectivePrompt,
-        displayPrompt,
-        effectivePrompt,
-        quality: nodeSettings.quality,
-        size,
-        format: nodeSettings.format,
-        moderation: nodeSettings.moderation,
+        ...payload,
         requestId: flightId,
         sessionId: requestSessionId,
         clientNodeId: targetClientId,
@@ -1934,7 +2186,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                   filename: res.filename,
                   provider: res.provider,
                   quality: nodeSettings.quality,
-                  size,
+                  size: payload.size,
                   format: nodeSettings.format,
                   moderation: res.moderation ?? nodeSettings.moderation,
                   usage: res.usage,
@@ -1955,7 +2207,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           prompt: displayPrompt,
           provider: res.provider,
           quality: nodeSettings.quality,
-          size,
+          size: payload.size,
           format: nodeSettings.format,
           moderation: res.moderation ?? nodeSettings.moderation,
           usage: res.usage,
@@ -1964,7 +2216,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           sessionId: requestSessionId,
           nodeId: res.nodeId,
           clientNodeId: targetClientId,
-          kind: parentServerNodeId ? "edit" : "generate",
+          kind: parentNodeId ? "edit" : "generate",
         });
         graphMutated = true;
         get().showToast(t("toast.nodeCreated", { id: res.nodeId.slice(0, 8), elapsed: res.elapsed }));
@@ -2051,13 +2303,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (reqId) void cancelInflight(reqId);
     const nextEdges = get().graphEdges.filter((e) => e.source !== clientId && e.target !== clientId);
     const nextNodes = get().graphNodes.filter((n) => n.id !== clientId);
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
       graphEdges: nextEdges,
       selectedNodeId: get().selectedNodeId === clientId ? null : get().selectedNodeId,
       selectedEdgeId: null,
     });
-    get().scheduleGraphSave();
   },
 
   deleteNodes: (clientIds) => {
@@ -2070,13 +2321,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     const nextEdges = get().graphEdges.filter((e) => !set_.has(e.source) && !set_.has(e.target));
     const nextNodes = get().graphNodes.filter((n) => !set_.has(n.id));
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
       graphEdges: nextEdges,
       selectedNodeId: selectedNodeId && set_.has(selectedNodeId) ? null : selectedNodeId,
       selectedEdgeId: null,
     });
-    get().scheduleGraphSave();
   },
 
   addChildNodeAt: (parentClientId, position) => {
@@ -2108,13 +2358,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     };
     const edge = createGraphEdge(parentClientId, clientId);
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: [...get().graphNodes, node],
       graphEdges: [...get().graphEdges, edge],
       selectedNodeId: clientId,
       selectedEdgeId: null,
     });
-    get().scheduleGraphSave();
     return clientId;
   },
 
@@ -2165,26 +2414,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     const nextNodes = get().graphNodes.map((n) =>
       n.id === targetClientId ? { ...n, data: nextTargetData } : n,
     );
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: syncEffectiveNodeSettings(nextNodes, nextEdges),
       graphEdges: nextEdges,
       selectedNodeId: targetClientId,
       selectedEdgeId: null,
     });
-    get().scheduleGraphSave();
   },
 
   detachNodeFromParent: (clientId) => {
     const target = get().graphNodes.find((n) => n.id === clientId);
     if (!target) return;
-    set({
+    commitUserGraphChange(get, set, {
       graphNodes: get().graphNodes.map((n) =>
         n.id === clientId ? { ...n, data: { ...n.data, parentServerNodeId: null } } : n,
       ),
       graphEdges: get().graphEdges.filter((e) => e.target !== clientId),
       selectedEdgeId: null,
     });
-    get().scheduleGraphSave();
   },
 
   detachSelectedEdge: () => {
@@ -2590,6 +2837,7 @@ async function reloadSessionAfterConflict(
     graphEdges,
     activeSessionGraphVersion: graphVersion,
     selectedEdgeId: null,
+    ...clearGraphHistoryPatch(),
   });
   get().showToast(t("toast.sessionReloadedElsewhere"), true);
   // After a server-driven reload, try to restore any nodes that lost their

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getEdgeVisualState,
   normalizeEdgeTransferData,
@@ -8,6 +8,7 @@ import {
   type ImageNodeStatus,
   type ImageTransferMode,
   type AncestorImageCount,
+  type NodeGenerateDelivery,
 } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
@@ -23,6 +24,10 @@ import {
   getSizePresetsRow5,
   snap16,
 } from "../lib/size";
+import {
+  postNodeGeneratePreview,
+  type NodeGeneratePreviewResponse,
+} from "../lib/api";
 
 function isBusy(data: ImageNodeData): boolean {
   return data.status === "pending" || data.status === "reconciling";
@@ -61,6 +66,12 @@ function imageTransferLabelKey(mode: ImageTransferMode) {
 export function NodeInspector() {
   const { t } = useI18n();
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [apiPreviewOpen, setApiPreviewOpen] = useState(false);
+  const [serverPreview, setServerPreview] = useState<{
+    loading: boolean;
+    data: NodeGeneratePreviewResponse | null;
+    error: string | null;
+  }>({ loading: false, data: null, error: null });
   const nodes = useAppStore((s) => s.graphNodes);
   const edges = useAppStore((s) => s.graphEdges);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
@@ -85,6 +96,7 @@ export function NodeInspector() {
   const importCurrentImageAsNode = useAppStore((s) => s.importCurrentImageAsNode);
   const currentImage = useAppStore((s) => s.currentImage);
   const showToast = useAppStore((s) => s.showToast);
+  const buildNodeGeneratePreview = useAppStore((s) => s.buildNodeGeneratePreview);
 
   const selected = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
   const data = selected?.data;
@@ -97,6 +109,38 @@ export function NodeInspector() {
   const nodeLabel = (node: { data: ImageNodeData; id: string }) =>
     node.data.name?.trim() ||
     (node.data.serverNodeId ? shortNodeId(node.data.serverNodeId) : shortNodeId(node.id));
+  const clientPreview = useMemo<NodeGenerateDelivery | null>(() => {
+    if (!apiPreviewOpen || !selectedNodeId) return null;
+    return buildNodeGeneratePreview(selectedNodeId);
+  }, [apiPreviewOpen, buildNodeGeneratePreview, selectedNodeId, nodes, edges]);
+  const apiPreviewHasBlockingIssue =
+    clientPreview?.issues.some((issue) => issue.blocking) ?? false;
+  const apiPreviewUnknownError = t("nodeInspector.apiPreviewErrorUnknown");
+
+  useEffect(() => {
+    if (!apiPreviewOpen || !clientPreview || apiPreviewHasBlockingIssue) {
+      setServerPreview({ loading: false, data: null, error: null });
+      return;
+    }
+    let cancelled = false;
+    setServerPreview({ loading: true, data: null, error: null });
+    void postNodeGeneratePreview(clientPreview.payload)
+      .then((data) => {
+        if (!cancelled) setServerPreview({ loading: false, data, error: null });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setServerPreview({
+            loading: false,
+            data: null,
+            error: err instanceof Error ? err.message : apiPreviewUnknownError,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiPreviewHasBlockingIssue, apiPreviewOpen, apiPreviewUnknownError, clientPreview]);
 
   const importCurrent = () => {
     void importCurrentImageAsNode();
@@ -378,6 +422,50 @@ export function NodeInspector() {
     data.format ?? data.settings.format,
     data.provider,
   ].filter((v): v is string => Boolean(v)).join(" · ");
+  const apiPreviewSummary = clientPreview
+    ? {
+        mode: clientPreview.mode,
+        imageTransfer: clientPreview.imageTransfer,
+        parentNodeId: clientPreview.parentNodeId,
+        ancestorCount: clientPreview.ancestorNodeIds.length,
+        quality: clientPreview.nodeSettings.quality,
+        size: clientPreview.size,
+        format: clientPreview.nodeSettings.format,
+        moderation: clientPreview.nodeSettings.moderation,
+      }
+    : null;
+  const clientPreviewJson =
+    clientPreview == null
+      ? t("nodeInspector.apiPreviewEmpty")
+      : JSON.stringify(
+          {
+            summary: apiPreviewSummary,
+            issues: clientPreview.issues,
+            images: clientPreview.visualContext.map((item, index) => ({
+              order: index + 1,
+              relation: item.relation,
+              nodeId: item.nodeId,
+              clientNodeId: item.clientNodeId ?? null,
+              name: item.name ?? null,
+              currentPrompt: item.currentPrompt ?? null,
+            })),
+            effectivePrompt: clientPreview.effectivePrompt,
+            payload: clientPreview.payload,
+          },
+          null,
+          2,
+        );
+  const serverPreviewJson = serverPreview.data
+    ? JSON.stringify(
+        {
+          images: serverPreview.data.images,
+          contentOrder: serverPreview.data.contentOrder,
+          openAi: serverPreview.data.openAi,
+        },
+        null,
+        2,
+      )
+    : null;
 
   return (
     <>
@@ -559,6 +647,49 @@ export function NodeInspector() {
           >
             {generateLabel}
           </button>
+          <details
+            className="node-inspector__api-preview"
+            open={apiPreviewOpen}
+            onToggle={(event) => setApiPreviewOpen(event.currentTarget.open)}
+          >
+            <summary className="node-inspector__api-preview-summary">
+              <span>{t("nodeInspector.apiPreviewTitle")}</span>
+              <small>{t("nodeInspector.apiPreviewHint")}</small>
+            </summary>
+            {clientPreview?.issues.length ? (
+              <div className="node-inspector__api-preview-issues">
+                {clientPreview.issues.map((issue) => (
+                  <div key={issue.code} data-blocking={issue.blocking ? "true" : "false"}>
+                    {issue.message}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="node-inspector__api-preview-label">
+              {t("nodeInspector.apiPreviewClient")}
+            </div>
+            <pre className="node-inspector__api-preview-code">{clientPreviewJson}</pre>
+            <div className="node-inspector__api-preview-label">
+              {t("nodeInspector.apiPreviewServer")}
+            </div>
+            {serverPreview.loading ? (
+              <div className="node-inspector__api-preview-status">
+                {t("nodeInspector.apiPreviewLoading")}
+              </div>
+            ) : serverPreview.error ? (
+              <div className="node-inspector__api-preview-status node-inspector__api-preview-status--error">
+                {serverPreview.error}
+              </div>
+            ) : serverPreviewJson ? (
+              <pre className="node-inspector__api-preview-code">{serverPreviewJson}</pre>
+            ) : (
+              <div className="node-inspector__api-preview-status">
+                {apiPreviewHasBlockingIssue
+                  ? t("nodeInspector.apiPreviewSkipped")
+                  : t("nodeInspector.apiPreviewEmpty")}
+              </div>
+            )}
+          </details>
           <div className="node-inspector__action-title">{t("nodeInspector.workflowActions")}</div>
           <div className="node-inspector__actions">
             <button
