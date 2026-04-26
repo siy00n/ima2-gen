@@ -19,6 +19,7 @@ import { WorkflowEdge } from "./WorkflowEdge";
 import { WorkflowMiniMap } from "./WorkflowMiniMap";
 import { deriveGraphMeta } from "../lib/graphMeta";
 import { useI18n } from "../i18n";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 type GraphHistorySurface = {
   undoGraph?: () => void;
@@ -42,6 +43,7 @@ function isEditableShortcutTarget(target: EventTarget | null): boolean {
 
 function NodeCanvasInner() {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const nodes = useAppStore((s) => s.graphNodes);
   const edges = useAppStore((s) => s.graphEdges);
   const setGraphNodes = useAppStore((s) => s.setGraphNodes);
@@ -222,6 +224,8 @@ function NodeCanvasInner() {
             onPaneClick={() => selectNode(null)}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
+            connectionRadius={isMobile ? 20 : 48}
+            connectionDragThreshold={isMobile ? 1 : 3}
             fitView
             deleteKeyCode={["Delete", "Backspace"]}
             proOptions={{ hideAttribution: true }}

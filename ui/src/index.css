@@ -2622,6 +2622,52 @@ body {
   background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 24%, #2b2f3a) !important;
 }
 
+@media (min-width: 801px) {
+  .image-node__handle {
+    width: 28px !important;
+    height: 28px !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none;
+  }
+
+  .image-node__handle::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 11px;
+    height: 11px;
+    transform: translate(-50%, -50%);
+    border: 2px solid #252733;
+    border-radius: 50%;
+    background: var(--node-tree-color, #a78bfa);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--node-tree-color, #a78bfa) 26%, transparent);
+    box-sizing: border-box;
+  }
+
+  .image-node__handle--source::before {
+    background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 72%, white);
+  }
+
+  .image-node__handle--disabled::before {
+    background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 24%, #2b2f3a);
+    box-shadow: none;
+  }
+
+  .image-node:hover .image-node__handle {
+    background: transparent !important;
+  }
+
+  .image-node:hover .image-node__handle::before {
+    background: var(--accent-bright, #fff);
+  }
+
+  .image-node:hover .image-node__handle--disabled::before {
+    background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 24%, #2b2f3a);
+  }
+}
+
 .node-canvas__hint {
   position: absolute;
   bottom: 12px;
