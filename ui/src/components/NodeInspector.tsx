@@ -329,7 +329,8 @@ export function NodeInspector() {
   const canRemoveImageReference = canRemoveNodeImageReference(data);
   const canGenerate = !busy && data.prompt.trim().length > 0;
   const hasChildren = edges.some((edge) => edge.source === selected.id);
-  const canRegenerateBranch = canGenerate && data.status === "ready" && !!data.serverNodeId && hasChildren;
+  const hasImageReference = !!data.serverNodeId || !!data.imageUrl;
+  const canRegenerateBranch = canGenerate && hasImageReference && hasChildren;
   const isBranchGenerating = branchGenerationRootId === selected.id;
   const imageSrc = data.imageUrl ?? null;
   const parent = selected ? nodes.find((n) => edges.some((e) => e.source === n.id && e.target === selected.id)) : null;
