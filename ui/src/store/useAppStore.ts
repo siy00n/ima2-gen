@@ -26,6 +26,8 @@ import {
   saveSessionGraph,
   type HistoryItem,
   type NodeVisualContextItem,
+  type SessionGraphEdge,
+  type SessionGraphNode,
   type SessionSummary,
   type SessionFull,
 } from "../lib/api";
@@ -2495,6 +2497,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 const SAVE_DEBOUNCE_MS = 800;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let saveGraphPromise: Promise<void> | null = null;
+let saveDirty = false;
 
 // Sanitize a node's data for PUT /api/sessions/:id/graph payload.
 // Pending/reconciling is intentionally persisted so reload/session-switch
@@ -2594,38 +2597,78 @@ async function reloadSessionAfterConflict(
   await recoverGraphNodesFromHistory(get, set).catch(() => {});
 }
 
-function doSave(
-  get: () => AppState,
-  set: (patch: Partial<AppState>) => void,
-): Promise<void> {
-  const id = get().activeSessionId;
-  const graphVersion = get().activeSessionGraphVersion;
-  if (!id) return Promise.resolve();
-  if (graphVersion == null) return Promise.resolve();
-  const { graphNodes, graphEdges } = get();
-  const nodes = graphNodes.map((n) => ({
+type GraphSaveResult = "saved" | "skipped" | "conflict" | "failed";
+
+function graphSavePayload(s: AppState): {
+  id: string;
+  graphVersion: number;
+  nodes: SessionGraphNode[];
+  edges: SessionGraphEdge[];
+} | null {
+  const id = s.activeSessionId;
+  const graphVersion = s.activeSessionGraphVersion;
+  if (!id) return null;
+  if (graphVersion == null) return null;
+  const nodes = s.graphNodes.map((n) => ({
     id: n.id,
     x: n.position.x,
     y: n.position.y,
     data: sanitizeForSave(n.data),
   }));
-  const edges = graphEdges.map((e) => ({
+  const edges = s.graphEdges.map((e) => ({
     id: e.id,
     source: e.source,
     target: e.target,
     data: normalizeEdgeTransferData(e.data),
   }));
+  return { id, graphVersion, nodes, edges };
+}
+
+function doSave(
+  get: () => AppState,
+  set: (patch: Partial<AppState>) => void,
+): Promise<GraphSaveResult> {
+  const payload = graphSavePayload(get());
+  if (!payload) return Promise.resolve("skipped");
+  const { id, graphVersion, nodes, edges } = payload;
   return saveSessionGraph(id, graphVersion, nodes, edges)
     .then((res) => {
-      set({ activeSessionGraphVersion: res.graphVersion });
+      if (get().activeSessionId === id) {
+        set({ activeSessionGraphVersion: res.graphVersion });
+      }
+      return "saved" as const;
     })
     .catch(async (err) => {
       if ((err as { status?: number }).status === 409) {
         await reloadSessionAfterConflict(get, set);
-        return;
+        return "conflict" as const;
       }
       console.warn("[sessions] save failed:", err);
+      return "failed" as const;
     });
+}
+
+function ensureSaveLoop(
+  get: () => AppState,
+  set: (patch: Partial<AppState>) => void,
+): Promise<void> {
+  if (saveGraphPromise) return saveGraphPromise;
+  saveGraphPromise = (async () => {
+    while (saveDirty) {
+      saveDirty = false;
+      const result = await doSave(get, set);
+      if (result === "conflict") {
+        saveDirty = false;
+        break;
+      }
+    }
+  })().finally(() => {
+    saveGraphPromise = null;
+    if (saveDirty) {
+      void ensureSaveLoop(get, set);
+    }
+  });
+  return saveGraphPromise;
 }
 
 function scheduleGraphSaveImpl(
@@ -2635,12 +2678,12 @@ function scheduleGraphSaveImpl(
   const s = get();
   if (!s.activeSessionId) return;
   if (s.sessionLoading) return;
+  saveDirty = true;
+  if (saveGraphPromise) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    saveGraphPromise = doSave(get, set).finally(() => {
-      saveGraphPromise = null;
-    });
+    void ensureSaveLoop(get, set);
   }, SAVE_DEBOUNCE_MS);
 }
 
@@ -2651,10 +2694,8 @@ async function flushGraphSaveImpl(
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
-    await doSave(get, set);
-  } else if (saveGraphPromise) {
-    await saveGraphPromise;
   }
+  if (saveDirty || saveGraphPromise) await ensureSaveLoop(get, set);
 }
 
 // Synchronous-ish save on page unload via sendBeacon
