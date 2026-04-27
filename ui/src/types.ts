@@ -41,6 +41,7 @@ export type GenerateItem = {
   nodeId?: string | null;
   clientNodeId?: string | null;
   kind?: "classic" | "edit" | "generate" | "import" | null;
+  isFavorite?: boolean;
 };
 
 export type GenerateSingleResponse = {

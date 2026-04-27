@@ -17,6 +17,8 @@ import {
   getHistory,
   getInflight,
   cancelInflight,
+  toggleHistoryFavorite,
+  readImageMetadata,
   postNodeGenerate,
   postNodeAttach,
   postNodeImport,
@@ -34,7 +36,20 @@ import {
   type SessionSummary,
   type SessionFull,
 } from "../lib/api";
+import {
+  createPrompt,
+  deletePrompt,
+  getPromptLibrary,
+  importPromptLibrary,
+  togglePromptFavorite,
+  updatePrompt,
+  type PromptCreatePayload,
+  type PromptItem,
+  type PromptLibraryImportPayload,
+  type PromptUpdatePayload,
+} from "../lib/promptLibrary";
 import { compressImage } from "../lib/image";
+import { compressToBase64, hasAlphaChannel, isHeic } from "../lib/compress";
 import { snap16 } from "../lib/size";
 import { newClientNodeId, initialPos, type ClientNodeId } from "../lib/graph";
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
@@ -499,6 +514,36 @@ function normalizeNodeAttachDataUrl(file: File, dataUrl: string): string {
   return dataUrl.replace(/^data:[^;]*;base64,/i, `data:${mime};base64,`);
 }
 
+function nodeSettingsFromEmbeddedMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  fallback: NodeSettings,
+): NodeSettings | null {
+  if (!metadata) return null;
+  const parsedSize = parseSizeSetting(metadata.size);
+  const settings = normalizeNodeSettings(
+    {
+      model: metadata.model,
+      quality: metadata.quality,
+      sizePreset: parsedSize?.sizePreset,
+      customW: parsedSize?.customW,
+      customH: parsedSize?.customH,
+      format: metadata.format,
+      moderation: metadata.moderation,
+    },
+    fallback,
+  );
+  return sameNodeSettings(settings, fallback) ? null : settings;
+}
+
+function promptFromEmbeddedMetadata(metadata: Record<string, unknown> | null | undefined): string | null {
+  if (!metadata) return null;
+  for (const key of ["userPrompt", "prompt"]) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return null;
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -781,6 +826,22 @@ type AppState = {
   syncFromStorage: () => void;
   currentImage: GenerateItem | null;
   history: GenerateItem[];
+  toggleGalleryFavorite: (filename: string) => Promise<void>;
+  promptLibraryOpen: boolean;
+  promptLibraryItems: PromptItem[];
+  promptLibraryLoading: boolean;
+  promptLibrarySaving: boolean;
+  promptLibraryError: string | null;
+  openPromptLibrary: () => Promise<void>;
+  closePromptLibrary: () => void;
+  refreshPromptLibrary: () => Promise<void>;
+  createPromptLibraryItem: (payload: PromptCreatePayload) => Promise<void>;
+  updatePromptLibraryItem: (id: string, payload: PromptUpdatePayload) => Promise<void>;
+  deletePromptLibraryItem: (id: string) => Promise<void>;
+  togglePromptLibraryFavorite: (id: string) => Promise<void>;
+  importPromptLibraryItems: (payload: PromptLibraryImportPayload) => Promise<void>;
+  usePromptLibraryItem: (item: PromptItem) => void;
+  insertPromptLibraryItem: (item: PromptItem) => void;
   toast: ToastState;
   rightPanelOpen: boolean;
   setRightPanelOpen: (open: boolean) => void;
@@ -1429,18 +1490,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   referenceImages: [],
   addReferences: async (files) => {
     const allowed = 5 - get().referenceImages.length;
-    const toAdd = files.slice(0, Math.max(0, allowed));
+    const toAdd = files
+      .filter((file) => {
+        if (!isHeic(file)) return true;
+        get().showToast(t("toast.refUnsupported"), true);
+        return false;
+      })
+      .slice(0, Math.max(0, allowed));
     const dataUrls = await Promise.all(
-      toAdd.map(
-        (f) =>
-          new Promise<string | null>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () =>
-              resolve(typeof reader.result === "string" ? reader.result : null);
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(f);
-          }),
-      ),
+      toAdd.map(async (file) => {
+        try {
+          return await compressToBase64(file, {
+            preserveTransparency: hasAlphaChannel(file),
+          });
+        } catch (err) {
+          console.warn("[refs] compression failed", err);
+          return await readFileAsDataUrl(file).catch(() => null);
+        }
+      }),
     );
     const valid = dataUrls.filter((x): x is string => !!x);
     set((s) => ({ referenceImages: [...s.referenceImages, ...valid].slice(0, 5) }));
@@ -1577,6 +1644,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             nodeId: it.nodeId ?? null,
             clientNodeId: it.clientNodeId ?? null,
             kind: narrowGenerateKind(it.kind),
+            isFavorite: it.isFavorite ?? false,
           }));
         const existing = get().history;
         const fresh = arr.filter(
@@ -1658,6 +1726,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   currentImage: null,
   history: [],
+  promptLibraryOpen: false,
+  promptLibraryItems: [],
+  promptLibraryLoading: false,
+  promptLibrarySaving: false,
+  promptLibraryError: null,
   toast: null,
   rightPanelOpen: loadRightPanelOpen(),
   setRightPanelOpen: (rightPanelOpen) => {
@@ -2677,9 +2750,28 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     try {
       const image = normalizeNodeAttachDataUrl(file, await readFileAsDataUrl(file));
+      let restoredPrompt: string | null = null;
+      let restoredSettings: NodeSettings | null = null;
+      try {
+        const metadataResult = await readImageMetadata(image);
+        if (metadataResult.metadata) {
+          restoredPrompt = promptFromEmbeddedMetadata(metadataResult.metadata);
+          restoredSettings = nodeSettingsFromEmbeddedMetadata(metadataResult.metadata, node.data.settings);
+          const shouldRestore =
+            (restoredPrompt || restoredSettings) &&
+            (typeof window === "undefined" || window.confirm(t("metadata.restoreConfirm")));
+          if (!shouldRestore) {
+            restoredPrompt = null;
+            restoredSettings = null;
+          }
+        }
+      } catch {
+        // Metadata restore is best-effort. Attach should still work.
+      }
+      const promptForAttach = restoredPrompt ?? node.data.prompt;
       const res = await postNodeAttach({
         image,
-        prompt: node.data.prompt,
+        prompt: promptForAttach,
         sessionId,
         clientNodeId: clientId,
       });
@@ -2716,18 +2808,19 @@ export const useAppStore = create<AppState>((set, get) => ({
                 model: res.model ?? undefined,
                 assetSource: "upload" as const,
                 imageReferenceDetached: undefined,
-                settings: normalizeNodeSettings(
-                  {
-                    quality: res.quality,
-                    sizePreset: importedSize?.sizePreset,
-                    customW: importedSize?.customW,
-                    customH: importedSize?.customH,
-                    format: res.format,
-                    moderation: res.moderation,
-                    model: res.model,
-                  },
-                  n.data.settings,
-                ),
+                prompt: promptForAttach,
+                settings: restoredSettings ?? normalizeNodeSettings(
+                    {
+                      quality: res.quality,
+                      sizePreset: importedSize?.sizePreset,
+                      customW: importedSize?.customW,
+                      customH: importedSize?.customH,
+                      format: res.format,
+                      moderation: res.moderation,
+                      model: res.model,
+                    },
+                    n.data.settings,
+                  ),
                 usage: undefined,
                 createdAt: res.createdAt,
               },
@@ -2743,7 +2836,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         image: res.url,
         url: res.url,
         filename: res.filename,
-        prompt: res.prompt,
+        prompt: promptForAttach,
         provider: res.provider,
         quality: res.quality ?? undefined,
         size: res.size ?? undefined,
@@ -3044,6 +3137,154 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ history: [withDefaults, ...s.history].slice(0, HISTORY_LIMIT) });
   },
 
+  toggleGalleryFavorite: async (filename) => {
+    const current = get().history.find((item) => item.filename === filename);
+    const nextFavorite = !(current?.isFavorite ?? false);
+    const applyFavorite = (favorite: boolean) =>
+      set((s) => ({
+        history: s.history.map((item) =>
+          item.filename === filename ? { ...item, isFavorite: favorite } : item,
+        ),
+        currentImage:
+          s.currentImage?.filename === filename
+            ? { ...s.currentImage, isFavorite: favorite }
+            : s.currentImage,
+      }));
+
+    applyFavorite(nextFavorite);
+    try {
+      const result = await toggleHistoryFavorite(filename, nextFavorite);
+      applyFavorite(result.isFavorite);
+    } catch (err) {
+      applyFavorite(!nextFavorite);
+      get().showToast(err instanceof Error ? err.message : t("toast.generateFailed"), true);
+    }
+  },
+
+  openPromptLibrary: async () => {
+    set({ promptLibraryOpen: true });
+    await get().refreshPromptLibrary();
+  },
+  closePromptLibrary: () => set({ promptLibraryOpen: false }),
+  refreshPromptLibrary: async () => {
+    set({ promptLibraryLoading: true, promptLibraryError: null });
+    try {
+      const { prompts } = await getPromptLibrary();
+      set({ promptLibraryItems: prompts, promptLibraryLoading: false });
+    } catch (err) {
+      set({
+        promptLibraryLoading: false,
+        promptLibraryError: err instanceof Error ? err.message : "Prompt library failed",
+      });
+    }
+  },
+  createPromptLibraryItem: async (payload) => {
+    set({ promptLibrarySaving: true, promptLibraryError: null });
+    try {
+      const { prompt } = await createPrompt(payload);
+      set((s) => ({
+        promptLibraryItems: [prompt, ...s.promptLibraryItems],
+        promptLibrarySaving: false,
+      }));
+    } catch (err) {
+      set({
+        promptLibrarySaving: false,
+        promptLibraryError: err instanceof Error ? err.message : "Prompt save failed",
+      });
+    }
+  },
+  updatePromptLibraryItem: async (id, payload) => {
+    set({ promptLibrarySaving: true, promptLibraryError: null });
+    try {
+      const { prompt } = await updatePrompt(id, payload);
+      set((s) => ({
+        promptLibraryItems: s.promptLibraryItems.map((item) =>
+          item.id === id ? prompt : item,
+        ),
+        promptLibrarySaving: false,
+      }));
+    } catch (err) {
+      set({
+        promptLibrarySaving: false,
+        promptLibraryError: err instanceof Error ? err.message : "Prompt update failed",
+      });
+    }
+  },
+  deletePromptLibraryItem: async (id) => {
+    set({ promptLibrarySaving: true, promptLibraryError: null });
+    try {
+      await deletePrompt(id);
+      set((s) => ({
+        promptLibraryItems: s.promptLibraryItems.filter((item) => item.id !== id),
+        promptLibrarySaving: false,
+      }));
+    } catch (err) {
+      set({
+        promptLibrarySaving: false,
+        promptLibraryError: err instanceof Error ? err.message : "Prompt delete failed",
+      });
+    }
+  },
+  togglePromptLibraryFavorite: async (id) => {
+    const current = get().promptLibraryItems.find((item) => item.id === id);
+    if (!current) return;
+    const optimistic = { ...current, isFavorite: !current.isFavorite };
+    set((s) => ({
+      promptLibraryItems: s.promptLibraryItems.map((item) =>
+        item.id === id ? optimistic : item,
+      ),
+    }));
+    try {
+      const result = await togglePromptFavorite(id);
+      set((s) => ({
+        promptLibraryItems: s.promptLibraryItems.map((item) =>
+          item.id === id
+            ? { ...item, isFavorite: result.isFavorite, favoritedAt: result.favoritedAt }
+            : item,
+        ),
+      }));
+    } catch {
+      set((s) => ({
+        promptLibraryItems: s.promptLibraryItems.map((item) =>
+          item.id === id ? current : item,
+        ),
+      }));
+    }
+  },
+  importPromptLibraryItems: async (payload) => {
+    set({ promptLibrarySaving: true, promptLibraryError: null });
+    try {
+      await importPromptLibrary(payload);
+      set({ promptLibrarySaving: false });
+      await get().refreshPromptLibrary();
+    } catch (err) {
+      set({
+        promptLibrarySaving: false,
+        promptLibraryError: err instanceof Error ? err.message : "Prompt import failed",
+      });
+    }
+  },
+  usePromptLibraryItem: (item) => {
+    const s = get();
+    if (s.uiMode === "node" && s.selectedNodeId) {
+      get().updateNodePrompt(s.selectedNodeId, item.text);
+    } else {
+      set({ prompt: item.text });
+    }
+    get().closePromptLibrary();
+  },
+  insertPromptLibraryItem: (item) => {
+    const s = get();
+    if (s.uiMode === "node" && s.selectedNodeId) {
+      const node = s.graphNodes.find((n) => n.id === s.selectedNodeId);
+      const next = [node?.data.prompt, item.text].filter(Boolean).join("\n\n");
+      get().updateNodePrompt(s.selectedNodeId, next);
+    } else {
+      set({ prompt: [s.prompt, item.text].filter(Boolean).join("\n\n") });
+    }
+    get().closePromptLibrary();
+  },
+
   getResolvedSize: () => {
     const { sizePreset, customW, customH } = get();
     return sizePreset === "custom" ? `${customW}x${customH}` : sizePreset;
@@ -3081,7 +3322,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         n: s.count,
         requestId: flightId,
         ...(s.referenceImages.length
-          ? { references: s.referenceImages.map((d) => d.replace(/^data:[^;]+;base64,/, "")) }
+          ? { references: s.referenceImages }
           : {}),
       };
 
@@ -3166,6 +3407,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           nodeId: it.nodeId ?? null,
           clientNodeId: it.clientNodeId ?? null,
           kind: narrowGenerateKind(it.kind),
+          isFavorite: it.isFavorite ?? false,
         }));
         if (history.length > 0) {
           const selected = loadSelectedFilename();

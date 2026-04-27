@@ -8,6 +8,7 @@
   "toast": {
     "localStorageFull": "Local storage is full — recent state may not persist.",
     "refLimitExceeded": "References are capped at 5. Extra images were dropped.",
+    "refUnsupported": "HEIC/HEIF images cannot be used directly in this browser. Convert to JPEG/PNG first.",
     "noCurrentImageForRef": "No current image to use as reference.",
     "refSlotFull": "Reference slots are full (max 5).",
     "currentImageLoadFailed": "Failed to load current image.",
@@ -140,6 +141,35 @@
     "openComposer": "Tap to edit or generate another image",
     "collapseComposer": "Hide prompt"
   },
+  "promptLibrary": {
+    "title": "Prompt library",
+    "open": "Open prompt library",
+    "short": "Library",
+    "add": "Add",
+    "import": "Import",
+    "importFiles": "Import JSON, TXT, or MD prompt files",
+    "search": "Search prompts",
+    "favorites": "Favorites",
+    "loading": "Loading...",
+    "empty": "No saved prompts yet.",
+    "dropImport": "Drop prompt files to import",
+    "edit": "Edit",
+    "use": "Use",
+    "insert": "Insert",
+    "untitled": "Untitled prompt",
+    "addTitle": "Add prompt",
+    "editTitle": "Edit prompt",
+    "name": "Name",
+    "text": "Prompt",
+    "tags": "Tags",
+    "mode": "Mode",
+    "save": "Save",
+    "saveCurrent": "Save current prompt",
+    "saveShort": "Save"
+  },
+  "metadata": {
+    "restoreConfirm": "This image contains ima2 metadata. Restore its prompt and settings into this node?"
+  },
   "canvas": {
     "resultAlt": "result",
     "tokens": "{n} tokens"
@@ -163,6 +193,9 @@
     "sortByAria": "Sort by",
     "sortByDate": "Date",
     "sortBySession": "Session",
+    "favoriteFilterAria": "Favorite filter",
+    "filterAll": "All",
+    "filterFavorites": "Favorites",
     "searchPlaceholder": "Search prompts or filenames",
     "searchDisabledPlaceholder": "Search is disabled in session view",
     "closeAria": "Close gallery",
@@ -171,10 +204,15 @@
     "standalone": "Standalone images",
     "emptySessions": "No sessions saved yet.",
     "emptyAll": "No images yet. Create one first.",
+    "emptyFavorites": "No favorite images yet.",
     "noResults": "No results.",
     "deleted": "Deleted: {filename}",
     "undo": "Undo",
-    "secondsSuffix": "{n}s"
+    "secondsSuffix": "{n}s",
+    "favoriteTitle": "Add to favorites",
+    "unfavoriteTitle": "Remove from favorites",
+    "favoriteAria": "Add to favorites",
+    "unfavoriteAria": "Remove from favorites"
   },
   "node": {
     "empty": "Empty",

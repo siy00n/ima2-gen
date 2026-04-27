@@ -15,6 +15,8 @@ export function PromptComposer() {
   const removeReference = useAppStore((s) => s.removeReference);
   const useCurrentAsReference = useAppStore((s) => s.useCurrentAsReference);
   const currentImage = useAppStore((s) => s.currentImage);
+  const openPromptLibrary = useAppStore((s) => s.openPromptLibrary);
+  const createPromptLibraryItem = useAppStore((s) => s.createPromptLibraryItem);
 
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -155,6 +157,29 @@ export function PromptComposer() {
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
           </svg>
           <span>{t("prompt.useCurrent")}</span>
+        </button>
+        <button
+          type="button"
+          className="composer__tool"
+          onClick={() => void openPromptLibrary()}
+          title={t("promptLibrary.open")}
+        >
+          <span>{t("promptLibrary.short")}</span>
+        </button>
+        <button
+          type="button"
+          className="composer__tool"
+          onClick={() =>
+            void createPromptLibraryItem({
+              name: prompt.trim().slice(0, 40) || t("promptLibrary.untitled"),
+              text: prompt,
+              mode: "auto",
+            })
+          }
+          disabled={!prompt.trim()}
+          title={t("promptLibrary.saveCurrent")}
+        >
+          <span>{t("promptLibrary.saveShort")}</span>
         </button>
         <span className="composer__hint">{t("prompt.hint")}</span>
       </div>

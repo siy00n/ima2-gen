@@ -104,6 +104,7 @@ export type HistoryItem = {
   clientNodeId?: string | null;
   requestId?: string | null;
   kind?: string | null;
+  isFavorite?: boolean;
 };
 
 export type HistoryCursor = { before: number; beforeFilename: string };
@@ -170,6 +171,32 @@ export function restoreHistoryItem(filename: string, trashId: string): Promise<{
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ trashId }),
+  });
+}
+
+export function toggleHistoryFavorite(
+  filename: string,
+  favorite?: boolean,
+): Promise<{ filename: string; isFavorite: boolean; updatedAt: number }> {
+  return jsonFetch(`/api/history/${encodeURIComponent(filename)}/favorite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(typeof favorite === "boolean" ? { favorite } : {}),
+  });
+}
+
+export type EmbeddedMetadataResponse = {
+  ok: true;
+  metadata: Record<string, unknown> | null;
+  source: string | null;
+  warnings: string[];
+};
+
+export function readImageMetadata(dataUrl: string): Promise<EmbeddedMetadataResponse> {
+  return jsonFetch("/api/metadata/read", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataUrl }),
   });
 }
 

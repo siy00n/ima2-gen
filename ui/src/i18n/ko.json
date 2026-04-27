@@ -8,6 +8,7 @@
   "toast": {
     "localStorageFull": "로컬 저장소가 가득 차서 최근 상태가 저장되지 않을 수 있습니다.",
     "refLimitExceeded": "참조 이미지는 최대 5장까지 추가할 수 있습니다. 초과한 이미지는 제외되었습니다.",
+    "refUnsupported": "HEIC/HEIF 이미지는 브라우저에서 바로 사용할 수 없습니다. JPEG/PNG로 변환해 주세요.",
     "noCurrentImageForRef": "참조로 사용할 현재 이미지가 없습니다.",
     "refSlotFull": "참조 이미지 슬롯이 가득 찼습니다. 최대 5장까지 가능합니다.",
     "currentImageLoadFailed": "현재 이미지를 불러오지 못했습니다.",
@@ -140,6 +141,35 @@
     "openComposer": "눌러서 수정하거나 새 이미지를 생성",
     "collapseComposer": "프롬프트 숨기기"
   },
+  "promptLibrary": {
+    "title": "프롬프트 라이브러리",
+    "open": "프롬프트 라이브러리 열기",
+    "short": "라이브러리",
+    "add": "추가",
+    "import": "가져오기",
+    "importFiles": "JSON, TXT, MD 프롬프트 파일 가져오기",
+    "search": "프롬프트 검색",
+    "favorites": "즐겨찾기",
+    "loading": "불러오는 중...",
+    "empty": "저장된 프롬프트가 없습니다.",
+    "dropImport": "프롬프트 파일을 놓아서 가져오기",
+    "edit": "수정",
+    "use": "사용",
+    "insert": "추가 삽입",
+    "untitled": "이름 없는 프롬프트",
+    "addTitle": "프롬프트 추가",
+    "editTitle": "프롬프트 수정",
+    "name": "이름",
+    "text": "프롬프트",
+    "tags": "태그",
+    "mode": "모드",
+    "save": "저장",
+    "saveCurrent": "현재 프롬프트 저장",
+    "saveShort": "저장"
+  },
+  "metadata": {
+    "restoreConfirm": "이 이미지에 저장된 ima2 메타데이터가 있습니다. 프롬프트와 설정을 이 노드에 복원할까요?"
+  },
   "canvas": {
     "resultAlt": "생성 결과",
     "tokens": "{n} 토큰"
@@ -163,6 +193,9 @@
     "sortByAria": "정렬 기준",
     "sortByDate": "날짜",
     "sortBySession": "세션",
+    "favoriteFilterAria": "즐겨찾기 필터",
+    "filterAll": "전체",
+    "filterFavorites": "즐겨찾기",
     "searchPlaceholder": "프롬프트나 파일명을 검색",
     "searchDisabledPlaceholder": "세션 보기에서는 검색이 비활성화됩니다",
     "closeAria": "갤러리 닫기",
@@ -171,10 +204,15 @@
     "standalone": "독립 이미지",
     "emptySessions": "아직 저장된 세션이 없습니다.",
     "emptyAll": "아직 생성된 이미지가 없습니다. 먼저 하나 만들어보세요.",
+    "emptyFavorites": "아직 즐겨찾기한 이미지가 없습니다.",
     "noResults": "검색 결과가 없습니다.",
     "deleted": "삭제됨: {filename}",
     "undo": "되돌리기",
-    "secondsSuffix": "{n}초"
+    "secondsSuffix": "{n}초",
+    "favoriteTitle": "즐겨찾기에 추가",
+    "unfavoriteTitle": "즐겨찾기에서 제거",
+    "favoriteAria": "즐겨찾기에 추가",
+    "unfavoriteAria": "즐겨찾기에서 제거"
   },
   "node": {
     "empty": "비어 있음",

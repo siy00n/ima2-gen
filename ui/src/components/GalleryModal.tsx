@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useAppStore } from "../store/useAppStore";
 import type { GenerateItem } from "../types";
 import { deleteHistoryItem, restoreHistoryItem, getHistoryGrouped } from "../lib/api";
+import { getGalleryItemKey, getGalleryItemReactKey } from "../lib/galleryNavigation";
 import { useI18n } from "../i18n";
 import { ImageLightbox } from "./ImageLightbox";
 
@@ -19,6 +20,9 @@ type SessionGroup = {
 };
 
 type DateBucketKey = "earlier" | "today" | "yesterday" | "thisWeek" | string;
+type FavoriteActions = {
+  toggleGalleryFavorite?: (filename: string) => void | Promise<void>;
+};
 
 function dateBucket(createdAt: number | undefined): DateBucketKey {
   if (!createdAt) return "earlier";
@@ -69,13 +73,18 @@ export function GalleryModal() {
   const removeFromHistory = useAppStore((s) => s.removeFromHistory);
   const addHistoryItem = useAppStore((s) => s.addHistoryItem);
   const importHistoryItemAsNode = useAppStore((s) => s.importHistoryItemAsNode);
+  const toggleGalleryFavorite = useAppStore((s) => (s as typeof s & FavoriteActions).toggleGalleryFavorite);
 
   const [query, setQuery] = useState("");
   const [groupBy, setGroupBy] = useState<"date" | "session">("date");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [sessionGroups, setSessionGroups] = useState<SessionGroup[]>([]);
   const [loose, setLoose] = useState<GenerateItem[]>([]);
   const [pending, setPending] = useState<TrashPending | null>(null);
   const [previewItem, setPreviewItem] = useState<GenerateItem | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Record<string, HTMLElement | null>>({});
+  const lastScrollTopRef = useRef(0);
 
   useEffect(() => {
     if (!open) return;
@@ -119,6 +128,7 @@ export function GalleryModal() {
             nodeId: h.nodeId ?? null,
             clientNodeId: h.clientNodeId ?? null,
             kind: narrowedKind,
+            isFavorite: (h as typeof h & { isFavorite?: boolean }).isFavorite ?? false,
           };
         };
         setSessionGroups(
@@ -140,13 +150,30 @@ export function GalleryModal() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase().normalize("NFC");
-    if (!q) return history;
-    return history.filter(
-      (h) =>
+    return history.filter((h) => {
+      if (favoritesOnly && !h.isFavorite) return false;
+      if (!q) return true;
+      return (
         (h.prompt ?? "").toLowerCase().normalize("NFC").includes(q) ||
-        (h.filename ?? "").toLowerCase().normalize("NFC").includes(q),
-    );
-  }, [history, query]);
+        (h.filename ?? "").toLowerCase().normalize("NFC").includes(q)
+      );
+    });
+  }, [history, query, favoritesOnly]);
+
+  const visibleSessionGroups = useMemo(() => {
+    if (!favoritesOnly) return sessionGroups;
+    return sessionGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.isFavorite),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [sessionGroups, favoritesOnly]);
+
+  const visibleLoose = useMemo(() => {
+    if (!favoritesOnly) return loose;
+    return loose.filter((item) => item.isFavorite);
+  }, [loose, favoritesOnly]);
 
   const dateGroups = useMemo(() => {
     const map = new Map<string, GenerateItem[]>();
@@ -157,6 +184,30 @@ export function GalleryModal() {
     }
     return Array.from(map.entries());
   }, [filtered]);
+
+  const showSessions = groupBy === "session";
+  const totalVisible = showSessions
+    ? visibleSessionGroups.reduce((a, g) => a + g.items.length, 0) + visibleLoose.length
+    : filtered.length;
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const selectedKey = currentImage ? getGalleryItemKey(currentImage) : null;
+    const selectedEl = selectedKey ? itemRefs.current[selectedKey] : null;
+    if (selectedEl) {
+      selectedEl.scrollIntoView({ block: "center" });
+      return;
+    }
+    if (scrollRef.current) scrollRef.current.scrollTop = lastScrollTopRef.current;
+  }, [
+    open,
+    currentImage,
+    groupBy,
+    totalVisible,
+    dateGroups.length,
+    visibleSessionGroups.length,
+    visibleLoose.length,
+  ]);
 
   useEffect(() => {
     if (!pending) return;
@@ -194,6 +245,23 @@ export function GalleryModal() {
     close();
   }
 
+  function handleToggleFavorite(item: GenerateItem, e: MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    if (!item.filename || !toggleGalleryFavorite) return;
+    const nextFavorite = !item.isFavorite;
+    const updateItem = (candidate: GenerateItem): GenerateItem =>
+      candidate.filename === item.filename ? { ...candidate, isFavorite: nextFavorite } : candidate;
+    setSessionGroups((groups) =>
+      groups.map((group) => ({
+        ...group,
+        items: group.items.map(updateItem),
+      })),
+    );
+    setLoose((items) => items.map(updateItem));
+    setPreviewItem((preview) => preview && preview.filename === item.filename ? { ...preview, isFavorite: nextFavorite } : preview);
+    void toggleGalleryFavorite(item.filename);
+  }
+
   function handleTileClick(item: GenerateItem) {
     selectHistory(item);
     if (uiMode === "node") {
@@ -224,13 +292,18 @@ export function GalleryModal() {
     return key;
   };
 
-  const renderTile = (item: GenerateItem, keyPrefix: string, idx: number) => {
+  const renderTile = (item: GenerateItem, keyPrefix: string) => {
     const active = currentImage?.image === item.image;
     const opensPreview = uiMode === "node";
+    const itemKey = getGalleryItemKey(item);
+    const setItemRef = (node: HTMLDivElement | null) => {
+      itemRefs.current[itemKey] = node;
+    };
     return (
       <div
-        key={`${keyPrefix}-${idx}-${item.filename ?? idx}`}
-        className={`gallery__tile-wrap${active ? " gallery__tile-wrap--active" : ""}`}
+        key={getGalleryItemReactKey(item, keyPrefix)}
+        ref={setItemRef}
+        className={`gallery__tile-wrap${active ? " gallery__tile-wrap--active" : ""}${item.isFavorite ? " gallery__tile-wrap--favorite" : ""}`}
       >
         <button
           type="button"
@@ -248,6 +321,16 @@ export function GalleryModal() {
         </button>
         {item.filename && (
           <>
+            <button
+              type="button"
+              className={`gallery__favorite${item.isFavorite ? " gallery__favorite--on" : ""}`}
+              onClick={(e) => handleToggleFavorite(item, e)}
+              title={item.isFavorite ? t("gallery.unfavoriteTitle") : t("gallery.favoriteTitle")}
+              aria-label={item.isFavorite ? t("gallery.unfavoriteAria") : t("gallery.favoriteAria")}
+              aria-pressed={item.isFavorite}
+            >
+              ★
+            </button>
             <button
               type="button"
               className="gallery__import-node"
@@ -272,10 +355,6 @@ export function GalleryModal() {
     );
   };
 
-  const showSessions = groupBy === "session";
-  const totalVisible = showSessions
-    ? sessionGroups.reduce((a, g) => a + g.items.length, 0) + loose.length
-    : filtered.length;
   const previewTitle =
     previewItem?.prompt?.trim() ||
     previewItem?.filename ||
@@ -297,7 +376,27 @@ export function GalleryModal() {
               <div className="gallery__title">{t("gallery.title")}</div>
               <div className="gallery__meta">
                 {t("gallery.total", { n: totalVisible })}
-                {query ? t("gallery.totalFiltered", { n: history.length }) : ""}
+                {query || favoritesOnly ? t("gallery.totalFiltered", { n: history.length }) : ""}
+              </div>
+              <div className="gallery__favorite-filter" role="tablist" aria-label={t("gallery.favoriteFilterAria")}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={!favoritesOnly}
+                  className={!favoritesOnly ? "active" : ""}
+                  onClick={() => setFavoritesOnly(false)}
+                >
+                  {t("gallery.filterAll")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={favoritesOnly}
+                  className={favoritesOnly ? "active" : ""}
+                  onClick={() => setFavoritesOnly(true)}
+                >
+                  {t("gallery.filterFavorites")}
+                </button>
               </div>
               <div className="gallery__group-toggle" role="tablist" aria-label={t("gallery.sortByAria")}>
                 <button
@@ -340,39 +439,49 @@ export function GalleryModal() {
             </button>
           </div>
 
-          <div className="gallery__scroll">
+          <div
+            className="gallery__scroll"
+            ref={scrollRef}
+            onScroll={() => {
+              lastScrollTopRef.current = scrollRef.current?.scrollTop ?? 0;
+            }}
+          >
             {showSessions ? (
               <>
-                {sessionGroups.map((g) => (
+                {visibleSessionGroups.map((g) => (
                   <section key={g.sessionId} className="gallery__group">
                     <header className="gallery__group-header">
                       <span className="gallery__group-label">{t("gallery.sessionLabel", { name: g.label })}</span>
                       <span className="gallery__group-count">{g.items.length}</span>
                     </header>
                     <div className="gallery__grid">
-                      {g.items.map((item, i) => renderTile(item, g.sessionId, i))}
+                      {g.items.map((item) => renderTile(item, g.sessionId))}
                     </div>
                   </section>
                 ))}
-                {loose.length > 0 && (
+                {visibleLoose.length > 0 && (
                   <section className="gallery__group">
                     <header className="gallery__group-header">
                       <span className="gallery__group-label">{t("gallery.standalone")}</span>
-                      <span className="gallery__group-count">{loose.length}</span>
+                      <span className="gallery__group-count">{visibleLoose.length}</span>
                     </header>
                     <div className="gallery__grid">
-                      {loose.map((item, i) => renderTile(item, "loose", i))}
+                      {visibleLoose.map((item) => renderTile(item, "loose"))}
                     </div>
                   </section>
                 )}
-                {sessionGroups.length === 0 && loose.length === 0 && (
-                  <div className="gallery__empty">{t("gallery.emptySessions")}</div>
+                {visibleSessionGroups.length === 0 && visibleLoose.length === 0 && (
+                  <div className="gallery__empty">
+                    {favoritesOnly ? t("gallery.emptyFavorites") : t("gallery.emptySessions")}
+                  </div>
                 )}
               </>
             ) : filtered.length === 0 ? (
               <div className="gallery__empty">
                 {history.length === 0
                   ? t("gallery.emptyAll")
+                  : favoritesOnly
+                    ? t("gallery.emptyFavorites")
                   : t("gallery.noResults")}
               </div>
             ) : (
@@ -383,7 +492,7 @@ export function GalleryModal() {
                     <span className="gallery__group-count">{items.length}</span>
                   </header>
                   <div className="gallery__grid">
-                    {items.map((item, i) => renderTile(item, label, i))}
+                    {items.map((item) => renderTile(item, label))}
                   </div>
                 </section>
               ))

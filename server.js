@@ -28,6 +28,30 @@ import {
   ensureDefaultSession,
 } from "./lib/sessionStore.js";
 import { trashAsset, restoreAsset } from "./lib/assetLifecycle.js";
+import {
+  readEmbeddedImageMetadata,
+  embedImageMetadataBestEffort,
+} from "./lib/imageMetadataStore.js";
+import { compressReferenceB64ForOAuth } from "./lib/referenceImageCompress.js";
+import {
+  normalizeGenerationFailure,
+  isNonRetryableGenerationError,
+  statusForErrorCode,
+} from "./lib/generationErrors.js";
+import {
+  createPrompt,
+  deletePrompt,
+  getPrompt,
+  importPromptLibrary,
+  listPromptLibrary,
+  togglePromptFavorite,
+  updatePrompt,
+} from "./lib/promptLibraryStore.js";
+import {
+  listGalleryFavoriteFilenames,
+  setGalleryFavorite,
+  toggleGalleryFavorite,
+} from "./lib/galleryFavorites.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -122,6 +146,39 @@ function parseNodeAttachImage(image) {
   return { b64, ext, mime };
 }
 
+function parseMetadataDataUrl(dataUrl) {
+  if (typeof dataUrl !== "string" || dataUrl.trim().length === 0) {
+    const err = new Error("image dataUrl is required");
+    err.status = 400;
+    err.code = "IMAGE_METADATA_INVALID_SOURCE";
+    throw err;
+  }
+  const match = dataUrl.trim().match(/^data:([^;,]+);base64,(.+)$/i);
+  if (!match) {
+    const err = new Error("image must be a base64 data URL");
+    err.status = 400;
+    err.code = "IMAGE_METADATA_INVALID_SOURCE";
+    throw err;
+  }
+  const mime = match[1].toLowerCase();
+  if (!NODE_ATTACH_MIME_TO_EXT[mime]) {
+    const err = new Error("image must be png, jpeg, or webp");
+    err.status = 400;
+    err.code = "IMAGE_METADATA_UNSUPPORTED_FORMAT";
+    throw err;
+  }
+  return { mime, buffer: Buffer.from(match[2].replace(/\s/g, ""), "base64") };
+}
+
+async function writeGeneratedImageWithMetadata(filename, b64, format, meta) {
+  const raw = Buffer.from(b64, "base64");
+  const embedded = await embedImageMetadataBestEffort(raw, format, meta, {
+    version: __pkg.version,
+  });
+  await writeFile(join(__dirname, "generated", filename), embedded.buffer);
+  await writeFile(join(__dirname, "generated", filename + ".json"), JSON.stringify(meta, null, 2)).catch(() => {});
+}
+
 function validateAndNormalizeRefs(references) {
   if (!Array.isArray(references)) return { error: "references must be an array" };
   if (references.length > 5) return { error: "references may not exceed 5 items" };
@@ -129,7 +186,9 @@ function validateAndNormalizeRefs(references) {
   for (let i = 0; i < references.length; i++) {
     const r = references[i];
     if (typeof r !== "string") return { error: `references[${i}] must be a string` };
-    const b64 = r.replace(/^data:[^;]+;base64,/, "");
+    const dataUrlMatch = r.match(/^data:([^;]+);base64,(.+)$/i);
+    const mime = dataUrlMatch?.[1]?.toLowerCase() || "image/png";
+    const b64 = (dataUrlMatch?.[2] || r).replace(/\s/g, "");
     if (!b64) return { error: `references[${i}] is empty` };
     if (b64.length > MAX_REF_B64_BYTES) {
       return { error: `references[${i}] exceeds ${MAX_REF_B64_BYTES} bytes` };
@@ -137,9 +196,31 @@ function validateAndNormalizeRefs(references) {
     if (!BASE64_RE.test(b64)) {
       return { error: `references[${i}] is not valid base64` };
     }
-    out.push(b64);
+    out.push({ b64, mime });
   }
   return { refs: out };
+}
+
+async function compressReferenceInputs(refs) {
+  return Promise.all(
+    refs.map((ref) =>
+      compressReferenceB64ForOAuth(ref.b64 || ref, {
+        mime: ref.mime || "image/png",
+      }),
+    ),
+  );
+}
+
+async function compressLoadedImageForOAuth(image) {
+  const compressed = await compressReferenceB64ForOAuth(image.b64, {
+    mime: image.mime || "image/png",
+  });
+  return {
+    ...image,
+    b64: compressed.b64,
+    mime: compressed.mime || image.mime || "image/png",
+    compressed: compressed.compressed,
+  };
 }
 
 function validateModeration(moderation) {
@@ -271,9 +352,9 @@ function buildGenerateUserContent(prompt, references = []) {
   const textPrompt = buildGenerateTextPrompt(prompt);
   return references.length
     ? [
-        ...references.map((b64) => ({
+        ...references.map((ref) => ({
           type: "input_image",
-          image_url: imageDataUrl("image/png", b64),
+          image_url: imageDataUrl(ref?.mime || "image/png", ref?.b64 || ref),
         })),
         { type: "input_text", text: textPrompt },
       ]
@@ -468,9 +549,15 @@ async function generateViaOAuth(
   if (!res.ok) {
     const text = await res.text();
     console.error("[oauth] error response:", text.slice(0, 500));
-    let msg;
-    try { msg = JSON.parse(text).error?.message; } catch {}
-    throw new Error(msg || `OAuth proxy returned ${res.status}: ${text.slice(0, 200)}`);
+    let parsedError;
+    try { parsedError = JSON.parse(text).error; } catch {}
+    const err = new Error(parsedError?.message || `OAuth proxy returned ${res.status}: ${text.slice(0, 200)}`);
+    err.code = "OAUTH_UPSTREAM_ERROR";
+    err.status = res.status;
+    err.upstreamCode = parsedError?.code;
+    err.upstreamType = parsedError?.type;
+    err.upstreamParam = parsedError?.param;
+    throw err;
   }
 
   const contentType = res.headers.get("content-type") || "";
@@ -542,7 +629,14 @@ async function generateViaOAuth(
           if (typeof wsNum === "number" && wsNum > webSearchCalls) webSearchCalls = wsNum;
         }
         if (data.type === "error") {
-          throw new Error(data.error?.message || JSON.stringify(data));
+          const err = new Error(data.error?.message || JSON.stringify(data));
+          err.code = "OAUTH_UPSTREAM_ERROR";
+          err.upstreamCode = data.error?.code;
+          err.upstreamType = data.error?.type;
+          err.upstreamParam = data.error?.param;
+          err.eventType = data.type;
+          err.eventCount = eventCount;
+          throw err;
         }
       } catch (e) {
         if (e.message && !e.message.startsWith("Unexpected")) throw e;
@@ -579,7 +673,14 @@ async function generateViaOAuth(
       }
     }
 
-    throw new Error("No image data received from OAuth proxy (parsed " + eventCount + " events)");
+    const err = new Error("No image data received from OAuth proxy (parsed " + eventCount + " events)");
+    err.code = "EMPTY_RESPONSE";
+    err.eventCount = eventCount;
+    err.size = size;
+    err.quality = quality;
+    err.model = model;
+    err.refsCount = references.length;
+    throw err;
   }
 
   throwIfCanceled(requestId, signal);
@@ -652,6 +753,7 @@ app.get("/api/history", async (req, res) => {
     const groupBy = req.query.groupBy === "session" ? "session" : null;
 
     const imgs = await listImages(dir);
+    const favorites = listGalleryFavoriteFilenames();
     const rows = await Promise.all(imgs.map(async ({ full, rel, name }) => {
       const st = await stat(full).catch(() => null);
       let meta = null;
@@ -679,6 +781,7 @@ app.get("/api/history", async (req, res) => {
         clientNodeId: meta?.clientNodeId || null,
         requestId: meta?.requestId || null,
         kind: meta?.kind || null,
+        isFavorite: favorites.has(rel),
       };
     }));
 
@@ -759,6 +862,95 @@ app.post("/api/history/:filename/restore", async (req, res) => {
   }
 });
 
+app.post("/api/history/:filename/favorite", (req, res) => {
+  try {
+    const filename = decodeURIComponent(req.params.filename);
+    const favorite =
+      typeof req.body?.favorite === "boolean"
+        ? req.body.favorite
+        : undefined;
+    const result =
+      typeof favorite === "boolean"
+        ? setGalleryFavorite(filename, favorite)
+        : toggleGalleryFavorite(filename);
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, code: err.code });
+  }
+});
+
+app.post("/api/metadata/read", async (req, res) => {
+  try {
+    const { buffer } = parseMetadataDataUrl(req.body?.dataUrl || req.body?.image);
+    const result = await readEmbeddedImageMetadata(buffer);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(err.status || 500).json({
+      error: { code: err.code || "IMAGE_METADATA_READ_FAILED", message: err.message },
+    });
+  }
+});
+
+app.get("/api/prompts", (req, res) => {
+  try {
+    res.json(
+      listPromptLibrary({
+        search: typeof req.query.search === "string" ? req.query.search : "",
+        folderId: typeof req.query.folderId === "string" ? req.query.folderId : null,
+        favoritesOnly: req.query.favoritesOnly === "1" || req.query.favoritesOnly === "true",
+      }),
+    );
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post("/api/prompts", (req, res) => {
+  try {
+    res.status(201).json({ prompt: createPrompt(req.body || {}) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.patch("/api/prompts/:id", (req, res) => {
+  try {
+    const prompt = updatePrompt(req.params.id, req.body || {});
+    if (!prompt) return res.status(404).json({ error: "Prompt not found" });
+    res.json({ prompt });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/prompts/:id", (req, res) => {
+  try {
+    const ok = deletePrompt(req.params.id);
+    if (!ok) return res.status(404).json({ error: "Prompt not found" });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post("/api/prompts/:id/favorite", (req, res) => {
+  try {
+    const result = togglePromptFavorite(req.params.id);
+    if (!result) return res.status(404).json({ error: "Prompt not found" });
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+app.post("/api/prompts/import", (req, res) => {
+  try {
+    res.json(importPromptLibrary(req.body || {}));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 // ── OAuth status ──
 app.get("/api/oauth/status", async (_req, res) => {
   try {
@@ -831,14 +1023,14 @@ app.post("/api/generate", async (req, res) => {
     }
     const refCheck = validateAndNormalizeRefs(references);
     if (refCheck.error) return res.status(400).json({ error: refCheck.error });
-    const refB64s = refCheck.refs;
+    const refInputs = await compressReferenceInputs(refCheck.refs);
 
     if (provider === "api") {
       return res.status(403).json({ error: "API key provider is disabled. Use OAuth (Codex login).", code: "APIKEY_DISABLED" });
     }
     const useOAuth = true;
     const __client = req.get("x-ima2-client") || "ui";
-    console.log(`[generate][${__client}] provider=oauth model=${model} quality=${quality} size=${size} moderation=${moderation} n=${count} refs=${refB64s.length}`);
+    console.log(`[generate][${__client}] provider=oauth model=${model} quality=${quality} size=${size} moderation=${moderation} n=${count} refs=${refInputs.length}`);
     const startTime = Date.now();
 
     const mimeMap = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" };
@@ -850,19 +1042,25 @@ app.post("/api/generate", async (req, res) => {
       let lastErr;
       for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
         try {
-          const r = await generateViaOAuth(prompt, quality, size, moderation, refB64s, requestId, undefined, model);
+          const r = await generateViaOAuth(prompt, quality, size, moderation, refInputs, requestId, undefined, model);
           if (r.b64) return r;
-          lastErr = new Error("Empty response (safety refusal)");
+          lastErr = Object.assign(new Error("No image data received from OAuth proxy"), {
+            code: "EMPTY_RESPONSE",
+            eventCount: 0,
+            size,
+            quality,
+            model,
+            refsCount: refInputs.length,
+          });
         } catch (e) {
           lastErr = e;
+          if (isNonRetryableGenerationError(e)) break;
         }
         if (attempt < MAX_RETRIES) console.log(`[retry] attempt ${attempt + 1}/${MAX_RETRIES} after: ${lastErr.message}`);
       }
-      const err = new Error("Content generation refused after retries");
-      err.code = "SAFETY_REFUSAL";
-      err.status = 422;
-      err.cause = lastErr;
-      throw err;
+      throw normalizeGenerationFailure(lastErr, {
+        safetyMessage: "Content generation refused after retries",
+      });
     };
 
     const results = await Promise.allSettled(Array.from({ length: count }, generateOne));
@@ -874,7 +1072,6 @@ app.post("/api/generate", async (req, res) => {
       if (r.status === "fulfilled" && r.value.b64) {
         const rand = randomBytes(4).toString("hex");
         const filename = `${Date.now()}_${rand}_${images.length}.${format}`;
-        await writeFile(join(__dirname, "generated", filename), Buffer.from(r.value.b64, "base64"));
         // Sidecar metadata for /api/history reconstruction
         const meta = {
           prompt,
@@ -887,8 +1084,9 @@ app.post("/api/generate", async (req, res) => {
           createdAt: Date.now(),
           usage: r.value.usage || null,
           webSearchCalls: r.value.webSearchCalls || 0,
+          refsCount: refInputs.length,
         };
-        await writeFile(join(__dirname, "generated", filename + ".json"), JSON.stringify(meta)).catch(() => {});
+        await writeGeneratedImageWithMetadata(filename, r.value.b64, format, meta);
         images.push({
           image: `data:${mime};base64,${r.value.b64}`,
           filename,
@@ -905,10 +1103,10 @@ app.post("/api/generate", async (req, res) => {
 
     if (images.length === 0) {
       const firstErr = results.find(r => r.status === "rejected")?.reason;
-      if (firstErr?.code === "SAFETY_REFUSAL") {
-        return res.status(422).json({ error: firstErr.message, code: "SAFETY_REFUSAL" });
-      }
-      return res.status(500).json({ error: "All generation attempts failed" });
+      const normalized = normalizeGenerationFailure(firstErr, { proxyMessage: "All generation attempts failed" });
+      return res
+        .status(normalized.status || statusForErrorCode(normalized.code, 500))
+        .json({ error: normalized.message, code: normalized.code, requestId });
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -929,7 +1127,12 @@ app.post("/api/generate", async (req, res) => {
     }
   } catch (err) {
     console.error("Generate error:", err.message);
-    res.status(err.status || 500).json({ error: err.message, code: err.code, requestId });
+    const normalized = normalizeGenerationFailure(err);
+    res.status(normalized.status || err.status || 500).json({
+      error: normalized.message,
+      code: normalized.code || err.code,
+      requestId,
+    });
   } finally {
     finishJob(requestId);
   }
@@ -980,9 +1183,15 @@ async function editViaOAuth(
 
   if (!res.ok) {
     const text = await res.text();
-    let msg;
-    try { msg = JSON.parse(text).error?.message; } catch {}
-    throw new Error(msg || `OAuth edit returned ${res.status}`);
+    let parsedError;
+    try { parsedError = JSON.parse(text).error; } catch {}
+    const err = new Error(parsedError?.message || `OAuth edit returned ${res.status}`);
+    err.code = "OAUTH_UPSTREAM_ERROR";
+    err.status = res.status;
+    err.upstreamCode = parsedError?.code;
+    err.upstreamType = parsedError?.type;
+    err.upstreamParam = parsedError?.param;
+    throw err;
   }
 
   const reader = res.body.getReader();
@@ -1016,7 +1225,15 @@ async function editViaOAuth(
           if (requestId) setJobPhase(requestId, "decoding");
         }
         if (data.type === "response.completed") usage = data.response?.usage || null;
-        if (data.type === "error") throw new Error(data.error?.message || JSON.stringify(data));
+        if (data.type === "error") {
+          const err = new Error(data.error?.message || JSON.stringify(data));
+          err.code = "OAUTH_UPSTREAM_ERROR";
+          err.upstreamCode = data.error?.code;
+          err.upstreamType = data.error?.type;
+          err.upstreamParam = data.error?.param;
+          err.eventType = data.type;
+          throw err;
+        }
       } catch (e) {
         if (e.message && !e.message.startsWith("Unexpected")) throw e;
       }
@@ -1025,7 +1242,14 @@ async function editViaOAuth(
 
   throwIfCanceled(requestId, signal);
   if (resultB64) return { b64: resultB64, usage };
-  throw new Error("No image data received from OAuth edit");
+  const err = new Error("No image data received from OAuth edit");
+  err.code = "EMPTY_RESPONSE";
+  err.eventCount = 0;
+  err.size = size;
+  err.quality = quality;
+  err.model = model;
+  err.inputImageCount = 1 + contextImages.length;
+  throw err;
 }
 
 // ── Edit image (inpainting) ──
@@ -1054,7 +1278,6 @@ app.post("/api/edit", async (req, res) => {
 
     await mkdir(join(__dirname, "generated"), { recursive: true });
     const filename = `${Date.now()}_${randomBytes(4).toString("hex")}.png`;
-    await writeFile(join(__dirname, "generated", filename), Buffer.from(resultB64, "base64"));
     const meta = {
       prompt,
       quality,
@@ -1068,7 +1291,7 @@ app.post("/api/edit", async (req, res) => {
       usage: usage || null,
       webSearchCalls: 0,
     };
-    await writeFile(join(__dirname, "generated", filename + ".json"), JSON.stringify(meta)).catch(() => {});
+    await writeGeneratedImageWithMetadata(filename, resultB64, "png", meta);
 
     res.json({
       image: `data:image/png;base64,${resultB64}`,
@@ -1081,7 +1304,8 @@ app.post("/api/edit", async (req, res) => {
     });
   } catch (err) {
     console.error("Edit error:", err.message);
-    res.status(err.status || 500).json({ error: err.message });
+    const normalized = normalizeGenerationFailure(err);
+    res.status(normalized.status || err.status || 500).json({ error: normalized.message, code: normalized.code });
   }
 });
 
@@ -1173,6 +1397,7 @@ app.post("/api/node/generate/preview", async (req, res) => {
         parentNodeId,
       });
     }
+    const refInputs = await compressReferenceInputs(refCheck.refs);
     const moderationCheck = validateModeration(moderation);
     if (moderationCheck.error) {
       return res.status(400).json({
@@ -1264,13 +1489,13 @@ app.post("/api/node/generate/preview", async (req, res) => {
         sourceMeta: parentImage.meta,
       }];
     } else {
-      userContent = buildGenerateUserContent(effectivePrompt, refCheck.refs);
-      images = refCheck.refs.map((_, index) => ({
+      userContent = buildGenerateUserContent(effectivePrompt, refInputs);
+      images = refInputs.map((ref, index) => ({
         order: index + 1,
         relation: "reference",
         nodeId: null,
         filename: null,
-        mime: "image/png",
+        mime: ref.mime || "image/png",
         labelText: null,
         visualContext: null,
       }));
@@ -1306,7 +1531,7 @@ app.post("/api/node/generate/preview", async (req, res) => {
     });
   } catch (err) {
     console.error("[node/generate/preview] error:", err.message);
-    res.status(err.status || 500).json({
+    res.status(normalized.status || err.status || 500).json({
       error: { code: err.code || "NODE_GEN_PREVIEW_FAILED", message: err.message },
       parentNodeId,
     });
@@ -1417,14 +1642,14 @@ app.post("/api/node/generate", async (req, res) => {
       });
     }
     const model = modelCheck.model;
-    const refB64s = refCheck.refs;
+    const refInputs = await compressReferenceInputs(refCheck.refs);
 
     const startTime = Date.now();
     let parentImage = null;
     let parentVisualContext = null;
     let ancestorImages = [];
     if (parentNodeId) {
-      parentImage = await loadNodeImage(__dirname, parentNodeId);
+      parentImage = await compressLoadedImageForOAuth(await loadNodeImage(__dirname, parentNodeId));
       parentVisualContext = await resolveNodeVisualContext(
         __dirname,
         parentNodeId,
@@ -1435,21 +1660,27 @@ app.post("/api/node/generate", async (req, res) => {
         ancestorNodeIds
           .filter((nodeId) => nodeId !== parentNodeId)
           .slice(0, MAX_NODE_ANCESTOR_IMAGES)
-          .map(async (nodeId) => ({
-            ...(await loadNodeImage(__dirname, nodeId)),
-            visualContext: await resolveNodeVisualContext(
-              __dirname,
-              nodeId,
-              "ancestor",
-              visualContextCheck.items,
-            ),
-          })),
+          .map(async (nodeId) => {
+            const image = await compressLoadedImageForOAuth(await loadNodeImage(__dirname, nodeId));
+            return {
+              ...image,
+              visualContext: await resolveNodeVisualContext(
+                __dirname,
+                nodeId,
+                "ancestor",
+                visualContextCheck.items,
+              ),
+            };
+          }),
       );
     } else if (typeof externalSrc === "string" && externalSrc.length > 0) {
       // TODO(0.09 D4): history promotion should materialize imported assets into a
       // node-owned file path. This stub allows controlled reads from generated/
       // so promotion can fail gracefully instead of assuming <nodeId>.png only.
-      parentImage = { b64: await loadAssetB64(__dirname, externalSrc), mime: "image/png" };
+      parentImage = await compressLoadedImageForOAuth({
+        b64: await loadAssetB64(__dirname, externalSrc),
+        mime: mimeForPreviewFilename(externalSrc),
+      });
     }
 
     let b64, usage, webSearchCalls = 0;
@@ -1477,7 +1708,7 @@ app.post("/api/node/generate", async (req, res) => {
               quality,
               size,
               moderation,
-              refB64s,
+              refInputs,
               requestId,
               controller.signal,
               model,
@@ -1488,12 +1719,21 @@ app.post("/api/node/generate", async (req, res) => {
           webSearchCalls = r.webSearchCalls || 0;
           break;
         }
-        lastErr = new Error("Empty response (safety refusal)");
+        lastErr = Object.assign(new Error("No image data received from OAuth proxy"), {
+          code: "EMPTY_RESPONSE",
+          eventCount: 0,
+          size,
+          quality,
+          model,
+          refsCount: refInputs.length,
+          inputImageCount: parentImage ? 1 + ancestorImages.length : refInputs.length,
+        });
       } catch (e) {
         if (isAbortLikeError(e) || controller.signal.aborted || isJobCanceled(requestId)) {
           throw nodeCanceledError();
         }
         lastErr = e;
+        if (isNonRetryableGenerationError(e)) break;
       }
       if (attempt < MAX_RETRIES) {
         console.log(`[node] retry ${attempt + 1}: ${lastErr?.message}`);
@@ -1501,8 +1741,11 @@ app.post("/api/node/generate", async (req, res) => {
     }
 
     if (!b64) {
-      return res.status(422).json({
-        error: { code: "SAFETY_REFUSAL", message: lastErr?.message || "Empty response after retry" },
+      const normalized = normalizeGenerationFailure(lastErr, {
+        safetyMessage: "Content generation refused after retries",
+      });
+      return res.status(normalized.status || statusForErrorCode(normalized.code, 422)).json({
+        error: { code: normalized.code || "NODE_GEN_FAILED", message: normalized.message },
         parentNodeId,
       });
     }
@@ -1534,6 +1777,7 @@ app.post("/api/node/generate", async (req, res) => {
       webSearchCalls,
       provider: "oauth",
       kind: parentImage ? "edit" : "generate",
+      refsCount: parentImage ? ancestorImages.length + 1 : refInputs.length,
       // Fields consumed by /api/history flat scan (so node images appear in history too)
       quality, size, format, moderation, model,
     };
@@ -1558,8 +1802,13 @@ app.post("/api/node/generate", async (req, res) => {
     });
   } catch (err) {
     console.error("[node/generate] error:", err.message);
+    const normalized =
+      err?.code === "NODE_GEN_CANCELED" ? err : normalizeGenerationFailure(err);
     res.status(err.status || 500).json({
-      error: { code: err.code || "NODE_GEN_FAILED", message: err.message },
+      error: {
+        code: normalized.code || err.code || "NODE_GEN_FAILED",
+        message: normalized.message || err.message,
+      },
       parentNodeId,
     });
   } finally {

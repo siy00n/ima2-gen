@@ -107,6 +107,8 @@ export function NodeInspector() {
   const currentImage = useAppStore((s) => s.currentImage);
   const showToast = useAppStore((s) => s.showToast);
   const buildNodeGeneratePreview = useAppStore((s) => s.buildNodeGeneratePreview);
+  const openPromptLibrary = useAppStore((s) => s.openPromptLibrary);
+  const createPromptLibraryItem = useAppStore((s) => s.createPromptLibraryItem);
 
   const selected = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
   const data = selected?.data;
@@ -575,7 +577,27 @@ export function NodeInspector() {
           ))}
         </div>
         <label className="node-inspector__prompt-block">
-          <span className="node-inspector__section-label">{t("nodeInspector.prompt")}</span>
+          <span className="node-inspector__section-label node-inspector__section-label--row">
+            <span>{t("nodeInspector.prompt")}</span>
+            <span className="node-inspector__section-actions">
+              <button type="button" onClick={() => void openPromptLibrary()}>
+                {t("promptLibrary.short")}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  void createPromptLibraryItem({
+                    name: (data.name || data.prompt).trim().slice(0, 40) || t("promptLibrary.untitled"),
+                    text: data.prompt,
+                    mode: "auto",
+                  })
+                }
+                disabled={!data.prompt.trim()}
+              >
+                {t("promptLibrary.saveShort")}
+              </button>
+            </span>
+          </span>
           <textarea
             className="node-inspector__prompt"
             value={data.prompt}
