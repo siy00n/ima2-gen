@@ -165,10 +165,11 @@ describe("Node delivery preview", () => {
   });
 
   it("keeps client preview and generation on the same delivery helper", () => {
-    const source = readFileSync(join(process.cwd(), "ui/src/store/useAppStore.ts"), "utf8");
-    assert.match(source, /buildNodeGeneratePreview:[\s\S]*buildNodeGenerateDelivery/);
-    assert.match(source, /async generateNode[\s\S]*const delivery = buildNodeGenerateDelivery/);
-    assert.match(source, /imageTransfer === "off"\) break/);
-    assert.match(source, /slice\(-maxAncestorImages\)/);
+    const storeSource = readFileSync(join(process.cwd(), "ui/src/store/useAppStore.ts"), "utf8");
+    const deliverySource = readFileSync(join(process.cwd(), "ui/src/lib/nodeDelivery.ts"), "utf8");
+    assert.match(storeSource, /buildNodeGeneratePreview:[\s\S]*buildNodeGenerateDelivery/);
+    assert.match(storeSource, /async generateNode[\s\S]*const delivery = buildNodeGenerateDelivery/);
+    assert.match(deliverySource, /imageTransfer === "off"\) break/);
+    assert.match(deliverySource, /slice\(-maxAncestorImages\)/);
   });
 });

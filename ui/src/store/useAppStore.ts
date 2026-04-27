@@ -29,8 +29,6 @@ import {
   deleteSession as apiDeleteSession,
   saveSessionGraph,
   type HistoryItem,
-  type NodeGenerateRequest,
-  type NodeVisualContextItem,
   type SessionGraphEdge,
   type SessionGraphNode,
   type SessionSummary,
@@ -52,8 +50,39 @@ import { compressImage } from "../lib/image";
 import { compressToBase64, hasAlphaChannel, isHeic } from "../lib/compress";
 import { snap16 } from "../lib/size";
 import { newClientNodeId, initialPos, type ClientNodeId } from "../lib/graph";
+import {
+  DEFAULT_EDGE_TRANSFER,
+  DEFAULT_IMAGE_MODEL,
+  FALLBACK_NODE_SETTINGS,
+  TEXT_ONLY_EDGE_TRANSFER,
+  buildNodeGenerateDelivery as buildNodeGenerateDeliveryCore,
+  cloneNodeSettings,
+  nextImageTransferMode,
+  normalizeEdgeTransferData,
+  sameNodeSettings,
+  syncEffectiveNodeSettings,
+  type EdgeTransferData,
+  type ImageTransferMode,
+  type NodeGenerateDelivery,
+  type NodeSettings,
+} from "../lib/nodeDelivery";
 import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import { t, loadLocale, saveLocale, type Locale } from "../i18n";
+
+export {
+  ANCESTOR_IMAGE_COUNT_OPTIONS,
+  getEdgeVisualState,
+  normalizeEdgeTransferData,
+} from "../lib/nodeDelivery";
+export type {
+  AncestorImageCount,
+  EdgeTransferData,
+  EdgeVisualState,
+  ImageTransferMode,
+  NodeGenerateDelivery,
+  NodeGenerateDeliveryIssue,
+  NodeSettings,
+} from "../lib/nodeDelivery";
 
 function loadRightPanelOpen(): boolean {
   try {
@@ -180,52 +209,6 @@ const SIZE_PRESET_VALUES: SizePreset[] = [
   "custom",
 ];
 export const IMAGE_MODEL_VALUES: ImageModel[] = ["gpt-5.4-mini", "gpt-5.4", "gpt-5.5"];
-export const DEFAULT_IMAGE_MODEL: ImageModel = "gpt-5.4-mini";
-
-export type NodeSettings = {
-  model: ImageModel;
-  quality: Quality;
-  sizePreset: SizePreset;
-  customW: number;
-  customH: number;
-  format: Format;
-  moderation: Moderation;
-};
-
-export type ImageTransferMode = "off" | "parent" | "ancestor";
-
-export const ANCESTOR_IMAGE_COUNT_OPTIONS = [1, 3, 5, 8] as const;
-export type AncestorImageCount = (typeof ANCESTOR_IMAGE_COUNT_OPTIONS)[number];
-
-export type EdgeTransferData = {
-  transferContext: boolean;
-  transferSettings: boolean;
-  imageTransfer: ImageTransferMode;
-  maxAncestorImages: AncestorImageCount;
-  transferAncestorImages?: boolean;
-};
-
-const DEFAULT_EDGE_TRANSFER: EdgeTransferData = {
-  transferContext: true,
-  transferSettings: true,
-  imageTransfer: "parent",
-  maxAncestorImages: 3,
-};
-
-const TEXT_ONLY_EDGE_TRANSFER: EdgeTransferData = {
-  ...DEFAULT_EDGE_TRANSFER,
-  imageTransfer: "off",
-};
-
-const FALLBACK_NODE_SETTINGS: NodeSettings = {
-  model: DEFAULT_IMAGE_MODEL,
-  quality: "low",
-  sizePreset: "1024x1024",
-  customW: 1920,
-  customH: 1088,
-  format: "png",
-  moderation: "low",
-};
 
 function hasStringValue<T extends string>(values: readonly T[], value: unknown): value is T {
   return typeof value === "string" && values.includes(value as T);
@@ -247,99 +230,6 @@ function parseSizeSetting(size: unknown): Pick<NodeSettings, "sizePreset" | "cus
     customW: snap16(Number(match[1])),
     customH: snap16(Number(match[2])),
   };
-}
-
-function cloneNodeSettings(settings: NodeSettings): NodeSettings {
-  return { ...settings };
-}
-
-function sameNodeSettings(a: NodeSettings, b: NodeSettings): boolean {
-  return (
-    a.model === b.model &&
-    a.quality === b.quality &&
-    a.sizePreset === b.sizePreset &&
-    a.customW === b.customW &&
-    a.customH === b.customH &&
-    a.format === b.format &&
-    a.moderation === b.moderation
-  );
-}
-
-function isImageTransferMode(value: unknown): value is ImageTransferMode {
-  return value === "off" || value === "parent" || value === "ancestor";
-}
-
-function isAncestorImageCount(value: unknown): value is AncestorImageCount {
-  return (
-    typeof value === "number" &&
-    ANCESTOR_IMAGE_COUNT_OPTIONS.includes(value as AncestorImageCount)
-  );
-}
-
-export function normalizeEdgeTransferData(raw: unknown): EdgeTransferData {
-  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const transferContext =
-    typeof obj.transferContext === "boolean"
-      ? obj.transferContext
-      : DEFAULT_EDGE_TRANSFER.transferContext;
-  const legacyAncestorImages = obj.transferAncestorImages;
-  const imageTransfer = isImageTransferMode(obj.imageTransfer)
-    ? obj.imageTransfer
-    : typeof legacyAncestorImages === "boolean"
-      ? legacyAncestorImages
-        ? "ancestor"
-        : "parent"
-      : DEFAULT_EDGE_TRANSFER.imageTransfer;
-  return {
-    transferContext,
-    transferSettings:
-      typeof obj.transferSettings === "boolean"
-        ? obj.transferSettings
-        : DEFAULT_EDGE_TRANSFER.transferSettings,
-    imageTransfer,
-    maxAncestorImages: isAncestorImageCount(obj.maxAncestorImages)
-      ? obj.maxAncestorImages
-      : DEFAULT_EDGE_TRANSFER.maxAncestorImages,
-  };
-}
-
-export type EdgeVisualState =
-  | "none"
-  | "image"
-  | "context"
-  | "settings"
-  | "both"
-  | "text"
-  | "text-settings"
-  | "ancestor"
-  | "ancestor-context"
-  | "ancestor-settings"
-  | "ancestor-both";
-
-export function getEdgeVisualState(raw: unknown): EdgeVisualState {
-  const data = normalizeEdgeTransferData(raw);
-  if (data.imageTransfer === "ancestor") {
-    if (data.transferContext && data.transferSettings) return "ancestor-both";
-    if (data.transferContext) return "ancestor-context";
-    if (data.transferSettings) return "ancestor-settings";
-    return "ancestor";
-  }
-  if (data.imageTransfer === "off") {
-    if (data.transferContext && data.transferSettings) return "text-settings";
-    if (data.transferContext) return "text";
-    if (data.transferSettings) return "settings";
-    return "none";
-  }
-  if (data.transferContext && data.transferSettings) return "both";
-  if (data.transferContext) return "context";
-  if (data.transferSettings) return "settings";
-  return "image";
-}
-
-export function nextImageTransferMode(mode: ImageTransferMode): ImageTransferMode {
-  if (mode === "parent") return "ancestor";
-  if (mode === "ancestor") return "off";
-  return "parent";
 }
 
 function createGraphEdge(
@@ -399,12 +289,6 @@ function settingsFromNodeData(d: Partial<ImageNodeData>): NodeSettings {
       : FALLBACK_NODE_SETTINGS.moderation,
   };
   return normalizeNodeSettings(d.settings, legacyFallback);
-}
-
-function resolveNodeSize(settings: NodeSettings): string {
-  return settings.sizePreset === "custom"
-    ? `${snap16(settings.customW)}x${snap16(settings.customH)}`
-    : settings.sizePreset;
 }
 
 function nextNodeName(nodes: GraphNode[]): string {
@@ -561,28 +445,6 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 type NodePosition = { x: number; y: number };
 type GenerateNodeOptions = { selectOnComplete?: boolean; branchRootId?: ClientNodeId };
-
-export type NodeGenerateDeliveryIssue = {
-  code: "missing-prompt" | "missing-parent-image";
-  message: string;
-  blocking: boolean;
-};
-
-export type NodeGenerateDelivery = {
-  node: GraphNode;
-  mode: "generate" | "edit";
-  imageTransfer: ImageTransferMode;
-  parentNode: GraphNode | null;
-  parentNodeId: string | null;
-  ancestorNodeIds: string[];
-  visualContext: NodeVisualContextItem[];
-  displayPrompt: string;
-  effectivePrompt: string;
-  nodeSettings: NodeSettings;
-  size: string;
-  payload: NodeGenerateRequest;
-  issues: NodeGenerateDeliveryIssue[];
-};
 
 const NODE_PLACEMENT_WIDTH = 282;
 const NODE_PLACEMENT_HEIGHT = 260;
@@ -950,7 +812,7 @@ type AppState = {
   undoGraph: () => void;
   redoGraph: () => void;
   resetGraphHistory: () => void;
-  buildNodeGeneratePreview: (clientId: ClientNodeId) => NodeGenerateDelivery | null;
+  buildNodeGeneratePreview: (clientId: ClientNodeId) => NodeGenerateDelivery<GraphNode> | null;
   setGraphNodes: (n: GraphNode[]) => void;
   setGraphEdges: (e: GraphEdge[]) => void;
   addRootNode: () => ClientNodeId;
@@ -1224,264 +1086,16 @@ function findParentNodeFor(
   return nodes.find((n) => n.id === incoming.source) ?? null;
 }
 
-function findIncomingEdgeFor(edges: GraphEdge[], clientId: ClientNodeId): GraphEdge | null {
-  return edges.find((e) => e.target === clientId) ?? null;
-}
-
-function shortVisualNodeId(value: string | null | undefined): string {
-  return value ? value.replace(/^n_/, "").slice(0, 8) : "-";
-}
-
-function nodeVisualContextItem(
-  node: GraphNode,
-  relation: NodeVisualContextItem["relation"],
-): NodeVisualContextItem | null {
-  if (!node.data.serverNodeId) return null;
-  const name = node.data.name?.trim() || null;
-  const currentPrompt = node.data.prompt.trim() || null;
-  return {
-    relation,
-    nodeId: node.data.serverNodeId,
-    clientNodeId: node.id,
-    name,
-    currentPrompt,
-  };
-}
-
-function visualContextPromptLines(visualContext: NodeVisualContextItem[]): string[] {
-  if (visualContext.length === 0) return [];
-  return [
-    "Attached visual references:",
-    ...visualContext.map((item, index) => {
-      const relation =
-        item.relation === "parent"
-          ? "direct parent, primary visual source"
-          : "ancestor continuity reference";
-      const label = item.name?.trim() || shortVisualNodeId(item.nodeId);
-      const prompt = item.currentPrompt?.trim() || "(no current prompt)";
-      return `${index + 1}. ${relation}: ${label} (${shortVisualNodeId(item.nodeId)}). Current prompt: ${prompt}`;
-    }),
-    "",
-  ];
-}
-
-function buildEffectivePrompt(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-  clientId: ClientNodeId,
-  visualContext: NodeVisualContextItem[] = [],
-): string {
-  const node = nodes.find((n) => n.id === clientId);
-  const displayPrompt = node?.data.prompt.trim() ?? "";
-  if (!node) return displayPrompt;
-
-  const contextNodes: GraphNode[] = [];
-  let currentId = clientId;
-  while (true) {
-    const edge = findIncomingEdgeFor(edges, currentId);
-    if (!edge || !normalizeEdgeTransferData(edge.data).transferContext) break;
-    const parent = nodes.find((n) => n.id === edge.source);
-    if (!parent) break;
-    contextNodes.push(parent);
-    currentId = parent.id as ClientNodeId;
-  }
-
-  const contextLines = contextNodes
-    .reverse()
-    .map((n, index) => {
-      const prompt = n.data.prompt.trim();
-      if (!prompt) return null;
-      const label = n.data.serverNodeId?.slice(0, 8) ?? n.id;
-      return `${index + 1}. ${label}: ${prompt}`;
-    })
-    .filter((line): line is string => Boolean(line));
-
-  if (contextLines.length === 0 && visualContext.length === 0) return displayPrompt;
-  const incomingData = normalizeEdgeTransferData(findIncomingEdgeFor(edges, clientId)?.data);
-  const imageGuidance =
-    incomingData.imageTransfer === "off"
-      ? "No parent image is attached for this step."
-      : incomingData.imageTransfer === "ancestor"
-        ? "Use the attached parent and ancestor images as visual source material."
-        : "Use the attached parent image as the visual source.";
-  return [
-    `Previous workflow context. Use this text as continuity guidance. ${imageGuidance}`,
-    ...visualContextPromptLines(visualContext),
-    ...contextLines,
-    "",
-    "Current node instruction:",
-    displayPrompt,
-  ].join("\n");
-}
-
-function resolveNodeImageInputs(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-  clientId: ClientNodeId,
-): {
-  parentNode: GraphNode | null;
-  parentServerNodeId: string | null;
-  ancestorNodeIds: string[];
-  visualContext: NodeVisualContextItem[];
-  imageTransfer: ImageTransferMode;
-} {
-  const incoming = findIncomingEdgeFor(edges, clientId);
-  const incomingData = incoming ? normalizeEdgeTransferData(incoming.data) : null;
-  const parentNode = incoming ? nodes.find((n) => n.id === incoming.source) ?? null : null;
-  const imageTransfer = parentNode && incomingData ? incomingData.imageTransfer : "off";
-  const parentServerNodeId =
-    imageTransfer === "off" ? null : parentNode?.data.serverNodeId ?? null;
-  if (!parentNode || imageTransfer !== "ancestor") {
-    const parentContext =
-      parentNode && imageTransfer === "parent"
-        ? nodeVisualContextItem(parentNode, "parent")
-        : null;
-    return {
-      parentNode,
-      parentServerNodeId,
-      ancestorNodeIds: [],
-      visualContext: parentContext ? [parentContext] : [],
-      imageTransfer,
-    };
-  }
-
-  const ancestorNodes: GraphNode[] = [];
-  const seen = new Set<ClientNodeId>();
-  let currentId = parentNode.id as ClientNodeId;
-  while (true) {
-    if (seen.has(currentId)) break;
-    seen.add(currentId);
-    const edge = findIncomingEdgeFor(edges, currentId);
-    if (!edge || normalizeEdgeTransferData(edge.data).imageTransfer === "off") break;
-    const parent = nodes.find((n) => n.id === edge.source);
-    if (!parent) break;
-    if (parent.data.serverNodeId) ancestorNodes.push(parent);
-    currentId = parent.id as ClientNodeId;
-  }
-
-  const maxAncestorImages =
-    incomingData?.maxAncestorImages ?? DEFAULT_EDGE_TRANSFER.maxAncestorImages;
-  const orderedAncestors = ancestorNodes.reverse().slice(-maxAncestorImages);
-  const ancestorContext = orderedAncestors
-    .map((ancestor) => nodeVisualContextItem(ancestor, "ancestor"))
-    .filter((item): item is NodeVisualContextItem => Boolean(item));
-  const parentContext = nodeVisualContextItem(parentNode, "parent");
-  const visualContext = parentContext ? [...ancestorContext, parentContext] : ancestorContext;
-
-  return {
-    parentNode,
-    parentServerNodeId,
-    ancestorNodeIds: ancestorContext.map((item) => item.nodeId),
-    visualContext,
-    imageTransfer,
-  };
-}
-
-export function buildNodeGenerateDelivery(
+function buildNodeGenerateDelivery(
   nodes: GraphNode[],
   edges: GraphEdge[],
   clientId: ClientNodeId,
   options: { requestId?: string; sessionId?: string | null } = {},
-): NodeGenerateDelivery | null {
-  const node = nodes.find((n) => n.id === clientId);
-  if (!node) return null;
-
-  const displayPrompt = node.data.prompt;
-  const nodeSettings = resolveEffectiveNodeSettings(nodes, edges, clientId);
-  const size = resolveNodeSize(nodeSettings);
-  const {
-    parentNode,
-    parentServerNodeId,
-    ancestorNodeIds,
-    visualContext,
-    imageTransfer,
-  } = resolveNodeImageInputs(nodes, edges, clientId);
-  const effectivePrompt = buildEffectivePrompt(nodes, edges, clientId, visualContext);
-  const issues: NodeGenerateDeliveryIssue[] = [];
-
-  if (!displayPrompt.trim()) {
-    issues.push({
-      code: "missing-prompt",
-      message: t("toast.promptRequired"),
-      blocking: true,
-    });
-  }
-  if (parentNode && imageTransfer !== "off" && !parentServerNodeId) {
-    issues.push({
-      code: "missing-parent-image",
-      message: t("toast.nodeParentRequired"),
-      blocking: true,
-    });
-  }
-
-  const payload: NodeGenerateRequest = {
-    parentNodeId: parentServerNodeId,
-    ancestorNodeIds,
-    visualContext,
-    prompt: effectivePrompt,
-    displayPrompt,
-    effectivePrompt,
-    quality: nodeSettings.quality,
-    size,
-    format: nodeSettings.format,
-    moderation: nodeSettings.moderation,
-    model: nodeSettings.model,
-    requestId: options.requestId,
-    sessionId: options.sessionId,
-    clientNodeId: clientId,
-  };
-
-  return {
-    node,
-    mode: parentServerNodeId ? "edit" : "generate",
-    imageTransfer,
-    parentNode,
-    parentNodeId: parentServerNodeId,
-    ancestorNodeIds,
-    visualContext,
-    displayPrompt,
-    effectivePrompt,
-    nodeSettings,
-    size,
-    payload,
-    issues,
-  };
-}
-
-function resolveEffectiveNodeSettings(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-  clientId: ClientNodeId,
-): NodeSettings {
-  let current = nodes.find((n) => n.id === clientId);
-  if (!current) return cloneNodeSettings(FALLBACK_NODE_SETTINGS);
-  let settings = cloneNodeSettings(current.data.settings);
-  let currentId = clientId;
-
-  while (true) {
-    const edge = findIncomingEdgeFor(edges, currentId);
-    if (!edge || !normalizeEdgeTransferData(edge.data).transferSettings) break;
-    const parent = nodes.find((n) => n.id === edge.source);
-    if (!parent) break;
-    settings = cloneNodeSettings(parent.data.settings);
-    current = parent;
-    currentId = current.id as ClientNodeId;
-  }
-
-  return settings;
-}
-
-function syncEffectiveNodeSettings(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
-  return nodes.map((node) => {
-    const settings = resolveEffectiveNodeSettings(nodes, edges, node.id as ClientNodeId);
-    if (sameNodeSettings(node.data.settings, settings)) return node;
-    return {
-      ...node,
-      data: {
-        ...node.data,
-        settings,
-      },
-    };
+): NodeGenerateDelivery<GraphNode> | null {
+  return buildNodeGenerateDeliveryCore(nodes, edges, clientId, {
+    ...options,
+    promptRequiredMessage: t("toast.promptRequired"),
+    parentRequiredMessage: t("toast.nodeParentRequired"),
   });
 }
 
@@ -2372,7 +1986,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const edges = get().graphEdges;
     const node = nodes.find((n) => n.id === clientId);
     if (!node) return;
-    const incomingEdge = findIncomingEdgeFor(edges, clientId);
+    const incomingEdge = edges.find((e) => e.target === clientId);
     const shouldDisableIncomingSettings =
       !!incomingEdge && normalizeEdgeTransferData(incomingEdge.data).transferSettings;
     const nextEdges = shouldDisableIncomingSettings
