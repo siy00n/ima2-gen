@@ -72,6 +72,12 @@
     "highLabel": "High",
     "highSub": "Best"
   },
+  "model": {
+    "title": "Model",
+    "fast": "Fast",
+    "balanced": "Balanced",
+    "best": "Best"
+  },
   "moderation": {
     "title": "Moderation",
     "autoLabel": "Auto",

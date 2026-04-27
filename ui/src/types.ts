@@ -4,6 +4,7 @@ export type Quality = "low" | "medium" | "high";
 export type Format = "png" | "jpeg" | "webp";
 export type Moderation = "low" | "auto";
 export type Count = 1 | 2 | 4;
+export type ImageModel = "gpt-5.4-mini" | "gpt-5.4" | "gpt-5.5";
 
 export type SizePreset =
   | "1024x1024"
@@ -32,6 +33,7 @@ export type GenerateItem = {
   size?: string;
   format?: string;
   moderation?: string;
+  model?: string;
   usage?: { total_tokens?: number } & Record<string, unknown>;
   thumb?: string;
   createdAt?: number;
@@ -50,6 +52,7 @@ export type GenerateSingleResponse = {
   quality?: string;
   size?: string;
   moderation?: string;
+  model?: string;
 };
 
 export type GenerateMultiResponse = {
@@ -61,6 +64,7 @@ export type GenerateMultiResponse = {
   quality?: string;
   size?: string;
   moderation?: string;
+  model?: string;
 };
 
 export type GenerateResponse = GenerateSingleResponse | GenerateMultiResponse;
@@ -75,6 +79,7 @@ export type GenerateRequest = {
   size: string;
   format: Format;
   moderation: Moderation;
+  model: ImageModel;
   provider: Provider;
   n: number;
   image?: string;

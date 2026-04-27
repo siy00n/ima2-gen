@@ -2,6 +2,7 @@ import type {
   BillingResponse,
   GenerateRequest,
   GenerateResponse,
+  ImageModel,
   OAuthStatus,
 } from "../types";
 
@@ -92,6 +93,7 @@ export type HistoryItem = {
   quality: string | null;
   size: string | null;
   moderation?: string | null;
+  model?: string | null;
   format: string;
   provider: string;
   usage: Record<string, unknown> | null;
@@ -182,6 +184,7 @@ export type NodeGenerateRequest = {
   size: string;
   format: string;
   moderation: "low" | "auto";
+  model: ImageModel;
   provider?: "oauth";
   references?: string[];
   requestId?: string;
@@ -210,6 +213,7 @@ export type NodeGenerateResponse = {
   webSearchCalls: number;
   provider: "oauth";
   moderation?: string;
+  model?: string;
 };
 
 export type NodeGeneratePreviewImage = {
@@ -240,6 +244,7 @@ export type NodeGeneratePreviewResponse = {
     size: string;
     format: string;
     moderation: "low" | "auto";
+    model: string;
   };
   provider: "oauth";
   images: NodeGeneratePreviewImage[];
@@ -286,6 +291,7 @@ export type NodeImportResponse = {
   size?: string | null;
   format?: string | null;
   moderation?: string | null;
+  model?: string | null;
   webSearchCalls?: number;
 };
 

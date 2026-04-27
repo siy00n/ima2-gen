@@ -4,6 +4,7 @@ import type {
   Format,
   GenerateItem,
   GenerateResponse,
+  ImageModel,
   Moderation,
   Provider,
   Quality,
@@ -163,8 +164,11 @@ const SIZE_PRESET_VALUES: SizePreset[] = [
   "auto",
   "custom",
 ];
+export const IMAGE_MODEL_VALUES: ImageModel[] = ["gpt-5.4-mini", "gpt-5.4", "gpt-5.5"];
+export const DEFAULT_IMAGE_MODEL: ImageModel = "gpt-5.4-mini";
 
 export type NodeSettings = {
+  model: ImageModel;
   quality: Quality;
   sizePreset: SizePreset;
   customW: number;
@@ -199,6 +203,7 @@ const TEXT_ONLY_EDGE_TRANSFER: EdgeTransferData = {
 };
 
 const FALLBACK_NODE_SETTINGS: NodeSettings = {
+  model: DEFAULT_IMAGE_MODEL,
   quality: "low",
   sizePreset: "1024x1024",
   customW: 1920,
@@ -235,6 +240,7 @@ function cloneNodeSettings(settings: NodeSettings): NodeSettings {
 
 function sameNodeSettings(a: NodeSettings, b: NodeSettings): boolean {
   return (
+    a.model === b.model &&
     a.quality === b.quality &&
     a.sizePreset === b.sizePreset &&
     a.customW === b.customW &&
@@ -337,6 +343,7 @@ function createGraphEdge(
 
 function currentNodeSettings(s: AppState): NodeSettings {
   return {
+    model: s.model,
     quality: s.quality,
     sizePreset: s.sizePreset,
     customW: s.customW,
@@ -349,6 +356,7 @@ function currentNodeSettings(s: AppState): NodeSettings {
 function normalizeNodeSettings(raw: unknown, fallback: NodeSettings = FALLBACK_NODE_SETTINGS): NodeSettings {
   const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   return {
+    model: hasStringValue(IMAGE_MODEL_VALUES, obj.model) ? obj.model : fallback.model,
     quality: hasStringValue(QUALITY_VALUES, obj.quality) ? obj.quality : fallback.quality,
     sizePreset: hasStringValue(SIZE_PRESET_VALUES, obj.sizePreset)
       ? obj.sizePreset
@@ -365,6 +373,7 @@ function normalizeNodeSettings(raw: unknown, fallback: NodeSettings = FALLBACK_N
 function settingsFromNodeData(d: Partial<ImageNodeData>): NodeSettings {
   const legacySize = parseSizeSetting(d.size);
   const legacyFallback: NodeSettings = {
+    model: hasStringValue(IMAGE_MODEL_VALUES, d.model) ? d.model : FALLBACK_NODE_SETTINGS.model,
     quality: hasStringValue(QUALITY_VALUES, d.quality) ? d.quality : FALLBACK_NODE_SETTINGS.quality,
     sizePreset: legacySize?.sizePreset ?? FALLBACK_NODE_SETTINGS.sizePreset,
     customW: legacySize?.customW ?? FALLBACK_NODE_SETTINGS.customW,
@@ -425,6 +434,7 @@ export type ImageNodeData = {
   size?: string;
   format?: string;
   moderation?: string;
+  model?: string;
   assetSource?: "upload";
   imageReferenceDetached?: true;
   settings: NodeSettings;
@@ -644,6 +654,7 @@ function applyNodeHistoryResult(node: GraphNode, item: HistoryItem): GraphNode {
       size: item.size ?? node.data.size,
       format: item.format ?? node.data.format,
       moderation: item.moderation ?? node.data.moderation,
+      model: item.model ?? node.data.model,
       settings: normalizeNodeSettings(
         {
           quality: item.quality,
@@ -652,6 +663,7 @@ function applyNodeHistoryResult(node: GraphNode, item: HistoryItem): GraphNode {
           customH: importedSize?.customH,
           format: item.format,
           moderation: item.moderation,
+          model: item.model,
         },
         node.data.settings,
       ),
@@ -697,6 +709,7 @@ function mapSessionToGraph(session: SessionFull): {
       size: d.size as string | undefined,
       format: d.format as string | undefined,
       moderation: d.moderation as string | undefined,
+      model: d.model as string | undefined,
       assetSource: d.assetSource === "upload" ? "upload" : undefined,
       imageReferenceDetached: d.imageReferenceDetached === true ? true : undefined,
       settings: settingsFromNodeData(d),
@@ -745,6 +758,7 @@ function selectHistoryItem(item: GenerateItem, set: (patch: Partial<AppState>) =
 
 type AppState = {
   provider: Provider;
+  model: ImageModel;
   quality: Quality;
   sizePreset: SizePreset;
   customW: number;
@@ -844,6 +858,7 @@ type AppState = {
   flushGraphSave: () => Promise<void>;
 
   setProvider: (p: Provider) => void;
+  setModel: (m: ImageModel) => void;
   setQuality: (q: Quality) => void;
   setSizePreset: (s: SizePreset) => void;
   setCustomSize: (w: number, h: number) => void;
@@ -944,6 +959,7 @@ function removeImageReferenceFromNodeData(data: ImageNodeData): ImageNodeData {
     size: undefined,
     format: undefined,
     moderation: undefined,
+    model: undefined,
     assetSource: undefined,
     usage: undefined,
     createdAt: undefined,
@@ -1014,6 +1030,7 @@ const NODE_RUNTIME_DATA_KEYS: Array<keyof ImageNodeData> = [
   "size",
   "format",
   "moderation",
+  "model",
   "usage",
   "createdAt",
 ];
@@ -1266,6 +1283,7 @@ export function buildNodeGenerateDelivery(
     size,
     format: nodeSettings.format,
     moderation: nodeSettings.moderation,
+    model: nodeSettings.model,
     requestId: options.requestId,
     sessionId: options.sessionId,
     clientNodeId: clientId,
@@ -1399,6 +1417,7 @@ function joinParentPrompt(parentPrompt: string, childPrompt: string): string {
 
 export const useAppStore = create<AppState>((set, get) => ({
   provider: "oauth",
+  model: DEFAULT_IMAGE_MODEL,
   quality: "low",
   sizePreset: "1024x1024",
   customW: 1920,
@@ -1552,6 +1571,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             size: it.size ?? undefined,
             quality: it.quality ?? undefined,
             format: it.format as Format | undefined,
+            model: it.model ?? undefined,
             createdAt: it.createdAt,
             sessionId: it.sessionId ?? null,
             nodeId: it.nodeId ?? null,
@@ -2365,6 +2385,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                   size: payload.size,
                   format: nodeSettings.format,
                   moderation: res.moderation ?? nodeSettings.moderation,
+                  model: res.model ?? nodeSettings.model,
                   assetSource: undefined,
                   usage: res.usage,
                   createdAt: Date.now(),
@@ -2388,6 +2409,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           size: payload.size,
           format: nodeSettings.format,
           moderation: res.moderation ?? nodeSettings.moderation,
+          model: res.model ?? nodeSettings.model,
           usage: res.usage,
           thumb: res.url,
           createdAt: Date.now(),
@@ -2691,6 +2713,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 size: res.size ?? undefined,
                 format: res.format ?? n.data.settings.format,
                 moderation: res.moderation ?? undefined,
+                model: res.model ?? undefined,
                 assetSource: "upload" as const,
                 imageReferenceDetached: undefined,
                 settings: normalizeNodeSettings(
@@ -2701,6 +2724,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                     customH: importedSize?.customH,
                     format: res.format,
                     moderation: res.moderation,
+                    model: res.model,
                   },
                   n.data.settings,
                 ),
@@ -2725,6 +2749,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         size: res.size ?? undefined,
         format: res.format ?? undefined,
         moderation: res.moderation ?? undefined,
+        model: res.model ?? undefined,
         thumb: res.url,
         createdAt: res.createdAt,
         sessionId,
@@ -2905,6 +2930,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           size: res.size ?? item.size,
           format: res.format ?? item.format,
           moderation: res.moderation ?? item.moderation,
+          model: res.model ?? item.model,
           settings: normalizeNodeSettings(
             {
               quality: res.quality ?? item.quality,
@@ -2913,6 +2939,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               customH: importedSize?.customH,
               format: res.format ?? item.format,
               moderation: res.moderation ?? item.moderation,
+              model: res.model ?? item.model,
             },
             currentSettings,
           ),
@@ -2937,6 +2964,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         size: res.size ?? item.size,
         format: res.format ?? item.format,
         moderation: res.moderation ?? item.moderation,
+        model: res.model ?? item.model,
         thumb: res.url,
         createdAt: res.createdAt,
         sessionId,
@@ -2964,6 +2992,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setProvider: (provider) => set({ provider }),
+  setModel: (model) => set({ model }),
   setQuality: (quality) => set({ quality }),
   setSizePreset: (sizePreset) => set({ sizePreset }),
   setCustomSize: (w, h) => set({ customW: snap16(w), customH: snap16(h) }),
@@ -3047,6 +3076,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         size,
         format: s.format,
         moderation: s.moderation,
+        model: s.model,
         provider: s.provider,
         n: s.count,
         requestId: flightId,
@@ -3068,6 +3098,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             usage: res.usage,
             quality: res.quality ?? s.quality,
             size: res.size ?? size,
+            model: res.model ?? s.model,
           };
           await addHistory(item, set, get);
         }
@@ -3085,6 +3116,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             usage: res.usage,
             quality: res.quality ?? s.quality,
             size: res.size ?? size,
+            model: res.model ?? s.model,
           };
         } else {
           item = {
@@ -3096,6 +3128,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             usage: res.usage,
             quality: res.quality ?? s.quality,
             size: res.size ?? size,
+            model: res.model ?? s.model,
           };
         }
         await addHistory(item, set, get);

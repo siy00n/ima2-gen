@@ -18,7 +18,7 @@ import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
 import { OptionGroup, type OptionItem } from "./OptionGroup";
 import { ImageLightbox } from "./ImageLightbox";
 import { deriveGraphMeta } from "../lib/graphMeta";
-import type { Format, Moderation, Quality, SizePreset } from "../types";
+import type { Format, ImageModel, Moderation, Quality, SizePreset } from "../types";
 import {
   SIZE_PRESETS_ROW1,
   SIZE_PRESETS_ROW2,
@@ -349,6 +349,12 @@ export function NodeInspector() {
     { value: "high" as const, label: t("quality.highLabel"), sub: t("quality.highSub") },
   ];
 
+  const MODEL_ITEMS = [
+    { value: "gpt-5.4-mini" as const, label: "5.4 Mini", sub: t("model.fast") },
+    { value: "gpt-5.4" as const, label: "5.4", sub: t("model.balanced") },
+    { value: "gpt-5.5" as const, label: "5.5", sub: t("model.best") },
+  ];
+
   const MOD_ITEMS = [
     { value: "auto" as const, label: t("moderation.autoLabel"), sub: t("moderation.autoSub") },
     {
@@ -420,6 +426,7 @@ export function NodeInspector() {
       ? `${snap16(data.settings.customW)}x${snap16(data.settings.customH)}`
       : data.settings.sizePreset;
   const settingsSummary = [
+    data.settings.model,
     data.settings.quality,
     resolvedSize,
     data.settings.format,
@@ -453,6 +460,7 @@ export function NodeInspector() {
     data.quality ?? data.settings.quality,
     data.size ?? resolvedSize,
     data.format ?? data.settings.format,
+    data.model ?? data.settings.model,
     data.provider,
   ].filter((v): v is string => Boolean(v)).join(" · ");
   const apiPreviewSummary = clientPreview
@@ -461,6 +469,7 @@ export function NodeInspector() {
         imageTransfer: clientPreview.imageTransfer,
         parentNodeId: clientPreview.parentNodeId,
         ancestorCount: clientPreview.ancestorNodeIds.length,
+        model: clientPreview.nodeSettings.model,
         quality: clientPreview.nodeSettings.quality,
         size: clientPreview.size,
         format: clientPreview.nodeSettings.format,
@@ -603,6 +612,12 @@ export function NodeInspector() {
             <small>{settingsSummary}</small>
           </summary>
           <div className="node-inspector__settings-body">
+            <OptionGroup<ImageModel>
+              title={t("model.title")}
+              items={MODEL_ITEMS}
+              value={data.settings.model}
+              onChange={(model) => updateNodeSettings(selected.id, { model })}
+            />
             <OptionGroup<Quality>
               title={t("quality.title")}
               items={QUALITY_ITEMS}

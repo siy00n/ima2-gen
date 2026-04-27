@@ -173,7 +173,7 @@ ima2 serve
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | `OPENAI_API_KEY` | — | OpenAI API 키 (OAuth 건너뜀) |
-| `OPENAI_IMAGE_MODEL` | `gpt-5.5` | 이미지 생성/편집에 사용할 Responses 모델 |
+| `OPENAI_IMAGE_MODEL` | `gpt-5.4-mini` | 이미지 생성/편집에 사용할 fallback Responses 모델 |
 | `PORT` | `3333` | 웹 서버 포트 |
 | `OAUTH_PORT` | `10531` | OAuth 프록시 포트 |
 | `IMA2_SERVER` | — | 클라이언트: 대상 서버 URL 재정의 |

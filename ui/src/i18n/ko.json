@@ -72,6 +72,12 @@
     "highLabel": "높음",
     "highSub": "최상"
   },
+  "model": {
+    "title": "모델",
+    "fast": "빠름",
+    "balanced": "균형",
+    "best": "최상"
+  },
   "moderation": {
     "title": "모더레이션",
     "autoLabel": "자동",

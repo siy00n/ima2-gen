@@ -20,6 +20,7 @@ function previewMetaForItem(item: GenerateItem): string {
     item.filename,
     item.size,
     item.quality,
+    item.model,
     item.provider,
     createdAtLabel(item.createdAt),
   ].filter((value): value is string => Boolean(value)).join(" · ");

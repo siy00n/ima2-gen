@@ -156,9 +156,42 @@ describe("Server: /api/health + advertisement", () => {
     const body = await r.json();
     assert.strictEqual(body.moderation, "auto");
     assert.ok(lastOAuthPayload, "proxy request should be captured");
-    assert.strictEqual(lastOAuthPayload.model, "gpt-5.5");
+    assert.strictEqual(lastOAuthPayload.model, "gpt-5.4-mini");
     assert.strictEqual(lastOAuthPayload.tools[1].type, "image_generation");
     assert.strictEqual(lastOAuthPayload.tools[1].moderation, "auto");
+  });
+
+  it("/api/generate rejects unsupported image models", async () => {
+    lastOAuthPayload = null;
+    const r = await fetch(`http://localhost:${PORT}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "test invalid model",
+        model: "codex-auto-review",
+      }),
+    });
+    assert.strictEqual(r.status, 400);
+    const body = await r.json();
+    assert.strictEqual(body.code, "INVALID_MODEL");
+    assert.strictEqual(lastOAuthPayload, null);
+  });
+
+  it("/api/generate forwards selected image model", async () => {
+    lastOAuthPayload = null;
+    const r = await fetch(`http://localhost:${PORT}/api/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "test model forwarding",
+        model: "gpt-5.5",
+      }),
+    });
+    assert.strictEqual(r.status, 200);
+    const body = await r.json();
+    assert.strictEqual(body.model, "gpt-5.5");
+    assert.ok(lastOAuthPayload, "proxy request should be captured");
+    assert.strictEqual(lastOAuthPayload.model, "gpt-5.5");
   });
 
   it("aborts a running node generation through /api/inflight", async () => {

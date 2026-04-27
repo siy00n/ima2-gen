@@ -173,7 +173,7 @@ ima2 serve
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
 | `OPENAI_API_KEY` | — | OpenAI API キー（OAuth をスキップ） |
-| `OPENAI_IMAGE_MODEL` | `gpt-5.5` | 画像生成/編集に使用する Responses モデル |
+| `OPENAI_IMAGE_MODEL` | `gpt-5.4-mini` | 画像生成/編集に使用する fallback Responses モデル |
 | `PORT` | `3333` | Web サーバーポート |
 | `OAUTH_PORT` | `10531` | OAuth プロキシポート |
 | `IMA2_SERVER` | — | クライアント: 対象サーバー URL の上書き |

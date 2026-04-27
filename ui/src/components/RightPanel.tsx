@@ -5,7 +5,7 @@ import { SizePicker } from "./SizePicker";
 import { CostEstimate } from "./CostEstimate";
 import { ProviderSelect } from "./ProviderSelect";
 import { NodeInspector } from "./NodeInspector";
-import type { Count, Format, Moderation, Quality } from "../types";
+import type { Count, Format, ImageModel, Moderation, Quality } from "../types";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
 
@@ -31,6 +31,8 @@ export function RightPanel() {
 
   const drawerOpen = isMobile ? open : true;
 
+  const model = useAppStore((s) => s.model);
+  const setModel = useAppStore((s) => s.setModel);
   const quality = useAppStore((s) => s.quality);
   const setQuality = useAppStore((s) => s.setQuality);
   const format = useAppStore((s) => s.format);
@@ -44,6 +46,12 @@ export function RightPanel() {
     { value: "low" as const, label: t("quality.lowLabel"), sub: t("quality.lowSub") },
     { value: "medium" as const, label: t("quality.mediumLabel"), sub: t("quality.mediumSub") },
     { value: "high" as const, label: t("quality.highLabel"), sub: t("quality.highSub") },
+  ];
+
+  const MODEL_ITEMS = [
+    { value: "gpt-5.4-mini" as const, label: "5.4 Mini", sub: t("model.fast") },
+    { value: "gpt-5.4" as const, label: "5.4", sub: t("model.balanced") },
+    { value: "gpt-5.5" as const, label: "5.5", sub: t("model.best") },
   ];
 
   const MOD_ITEMS = [
@@ -92,6 +100,12 @@ export function RightPanel() {
             <>
               {isMobile ? <ProviderSelect /> : null}
               <div className="section-title">{t("panel.detailSettings")}</div>
+              <OptionGroup<ImageModel>
+                title={t("model.title")}
+                items={MODEL_ITEMS}
+                value={model}
+                onChange={setModel}
+              />
               <OptionGroup<Quality>
                 title={t("quality.title")}
                 items={QUALITY_ITEMS}
