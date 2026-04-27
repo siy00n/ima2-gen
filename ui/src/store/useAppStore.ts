@@ -942,8 +942,11 @@ type AppState = {
   attachingNodeIds: ClientNodeId[];
   selectedNodeId: ClientNodeId | null;
   selectedEdgeId: string | null;
+  edgePopoverId: string | null;
   selectNode: (clientId: ClientNodeId | null) => void;
   selectEdge: (edgeId: string | null) => void;
+  openEdgePopover: (edgeId: string) => void;
+  closeEdgePopover: () => void;
   undoGraph: () => void;
   redoGraph: () => void;
   resetGraphHistory: () => void;
@@ -957,7 +960,9 @@ type AppState = {
   addChildNodeAt: (parentClientId: ClientNodeId, position: { x: number; y: number }) => ClientNodeId;
   connectNodes: (sourceClientId: ClientNodeId, targetClientId: ClientNodeId) => void;
   updateEdgeTransfer: (edgeId: string, patch: Partial<EdgeTransferData>) => void;
+  updateEdgeTransferQuiet: (edgeId: string, patch: Partial<EdgeTransferData>) => void;
   setEdgeImageTransfer: (edgeId: string, mode: ImageTransferMode) => void;
+  setEdgeImageTransferQuiet: (edgeId: string, mode: ImageTransferMode) => void;
   cycleEdgeImageTransferQuiet: (edgeId: string) => void;
   toggleEdgeTransfer: (edgeId: string, key: "transferContext" | "transferSettings") => void;
   toggleEdgeTransferQuiet: (edgeId: string, key: "transferContext" | "transferSettings") => void;
@@ -967,6 +972,7 @@ type AppState = {
   copyParentPromptToNode: (clientId: ClientNodeId) => void;
   copyParentSettingsToNode: (clientId: ClientNodeId) => void;
   detachNodeFromParent: (clientId: ClientNodeId) => void;
+  detachEdge: (edgeId: string) => void;
   detachSelectedEdge: () => void;
   addChildFromSelectedEdge: () => ClientNodeId | null;
   generateNode: (clientId: ClientNodeId, options?: GenerateNodeOptions) => Promise<boolean>;
@@ -1841,13 +1847,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   attachingNodeIds: [],
   selectedNodeId: null,
   selectedEdgeId: null,
-  selectNode: (selectedNodeId) => set({ selectedNodeId, selectedEdgeId: null }),
+  edgePopoverId: null,
+  selectNode: (selectedNodeId) => set({ selectedNodeId, selectedEdgeId: null, edgePopoverId: null }),
   selectEdge: (selectedEdgeId) =>
     set((s) => ({
       selectedEdgeId,
       selectedNodeId: null,
+      edgePopoverId: null,
       rightPanelOpen: selectedEdgeId ? true : s.rightPanelOpen,
     })),
+  openEdgePopover: (edgePopoverId) =>
+    set({ edgePopoverId, selectedEdgeId: null }),
+  closeEdgePopover: () => set({ edgePopoverId: null }),
   undoGraph: () => {
     const s = get();
     if (hasPendingGraphNodes(s.graphNodes)) return;
@@ -2275,6 +2286,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       graphEdges: next.graphEdges,
       selectedEdgeId: edgeId,
       selectedNodeId: null,
+      edgePopoverId: null,
+    });
+  },
+
+  updateEdgeTransferQuiet: (edgeId, patch) => {
+    const next = applyEdgeTransferPatch(get().graphNodes, get().graphEdges, edgeId, patch);
+    if (!next) return;
+    commitUserGraphChange(get, set, {
+      graphNodes: next.graphNodes,
+      graphEdges: next.graphEdges,
+      selectedEdgeId: null,
+      edgePopoverId: get().edgePopoverId === edgeId ? edgeId : get().edgePopoverId,
     });
   },
 
@@ -2288,6 +2311,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       graphEdges: next.graphEdges,
       selectedEdgeId: edgeId,
       selectedNodeId: null,
+      edgePopoverId: null,
+    });
+  },
+
+  setEdgeImageTransferQuiet: (edgeId, mode) => {
+    const next = applyEdgeTransferPatch(get().graphNodes, get().graphEdges, edgeId, {
+      imageTransfer: mode,
+    });
+    if (!next) return;
+    commitUserGraphChange(get, set, {
+      graphNodes: next.graphNodes,
+      graphEdges: next.graphEdges,
+      selectedEdgeId: null,
+      edgePopoverId: get().edgePopoverId === edgeId ? edgeId : get().edgePopoverId,
     });
   },
 
@@ -2303,6 +2340,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       graphNodes: next.graphNodes,
       graphEdges: next.graphEdges,
       selectedEdgeId: null,
+      edgePopoverId: null,
     });
   },
 
@@ -2325,6 +2363,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       graphNodes: next.graphNodes,
       graphEdges: next.graphEdges,
       selectedEdgeId: null,
+      edgePopoverId: null,
     });
   },
 
@@ -3022,13 +3061,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
       graphEdges: get().graphEdges.filter((e) => e.target !== clientId),
       selectedEdgeId: null,
+      edgePopoverId: null,
     });
   },
 
-  detachSelectedEdge: () => {
-    const edge = get().graphEdges.find((e) => e.id === get().selectedEdgeId);
+  detachEdge: (edgeId) => {
+    const edge = get().graphEdges.find((e) => e.id === edgeId);
     if (!edge) return;
     get().detachNodeFromParent(edge.target as ClientNodeId);
+  },
+
+  detachSelectedEdge: () => {
+    const edgeId = get().selectedEdgeId ?? get().edgePopoverId;
+    if (!edgeId) return;
+    get().detachEdge(edgeId);
   },
 
   addChildFromSelectedEdge: () => {

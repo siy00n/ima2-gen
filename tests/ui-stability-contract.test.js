@@ -37,4 +37,24 @@ describe("UI stability contracts", () => {
     assert.match(canvas, /isEditableTarget/);
     assert.match(css, /\.result-nav\s*\{/);
   });
+
+  it("uses a desktop edge popover without switching the right inspector", () => {
+    const store = readSource("ui/src/store/useAppStore.ts");
+    const edge = readSource("ui/src/components/WorkflowEdge.tsx");
+    const canvas = readSource("ui/src/components/NodeCanvas.tsx");
+    const inspector = readSource("ui/src/components/NodeInspector.tsx");
+
+    assert.match(store, /edgePopoverId: string \| null/);
+    assert.match(store, /openEdgePopover:/);
+    assert.match(store, /closeEdgePopover:/);
+    assert.match(store, /updateEdgeTransferQuiet:/);
+    assert.match(store, /setEdgeImageTransferQuiet:/);
+    assert.match(edge, /edgePopoverId === id && !isMobile/);
+    assert.match(edge, /if \(isMobile\) selectEdge\(id\);\s*else openEdgePopover\(id\);/);
+    assert.match(edge, /updateEdgeTransferQuiet\(id, \{ transferContext/);
+    assert.match(edge, /setEdgeImageTransferQuiet\(id, mode\)/);
+    assert.match(edge, /maxAncestorImages/);
+    assert.match(canvas, /if \(isMobile\) selectEdge\(edge\.id\);\s*else openEdgePopover\(edge\.id\);/);
+    assert.match(inspector, /if \(isMobile && selectedEdge && edgeParent && edgeChild\)/);
+  });
 });

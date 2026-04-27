@@ -54,6 +54,7 @@ function NodeCanvasInner() {
   const deleteNodes = useAppStore((s) => s.deleteNodes);
   const selectNode = useAppStore((s) => s.selectNode);
   const selectEdge = useAppStore((s) => s.selectEdge);
+  const openEdgePopover = useAppStore((s) => s.openEdgePopover);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
   const detachNodeFromParent = useAppStore((s) => s.detachNodeFromParent);
   const sessionLoading = useAppStore((s) => s.sessionLoading);
@@ -220,7 +221,10 @@ function NodeCanvasInner() {
             onNodesDelete={onNodesDelete}
             onEdgesDelete={onEdgesDelete}
             onNodeClick={(_, node) => selectNode(node.id)}
-            onEdgeClick={(_, edge) => selectEdge(edge.id)}
+            onEdgeClick={(_, edge) => {
+              if (isMobile) selectEdge(edge.id);
+              else openEdgePopover(edge.id);
+            }}
             onPaneClick={() => selectNode(null)}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}

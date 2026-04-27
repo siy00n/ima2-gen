@@ -31,6 +31,7 @@ import {
   postNodeGeneratePreview,
   type NodeGeneratePreviewResponse,
 } from "../lib/api";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 function isBusy(data: ImageNodeData): boolean {
   return data.status === "pending" || data.status === "reconciling";
@@ -68,6 +69,7 @@ function imageTransferLabelKey(mode: ImageTransferMode) {
 
 export function NodeInspector() {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [apiPreviewOpen, setApiPreviewOpen] = useState(false);
   const [serverPreview, setServerPreview] = useState<{
@@ -159,7 +161,7 @@ export function NodeInspector() {
     void importCurrentImageAsNode();
   };
 
-  if (selectedEdge && edgeParent && edgeChild) {
+  if (isMobile && selectedEdge && edgeParent && edgeChild) {
     const edgeData = normalizeEdgeTransferData(selectedEdge.data);
     const edgeState = getEdgeVisualState(edgeData);
     return (

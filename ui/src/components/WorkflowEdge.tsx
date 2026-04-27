@@ -6,8 +6,10 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import {
+  ANCESTOR_IMAGE_COUNT_OPTIONS,
   getEdgeVisualState,
   normalizeEdgeTransferData,
+  type AncestorImageCount,
   type ImageTransferMode,
   useAppStore,
   type GraphEdge,
@@ -41,15 +43,18 @@ function WorkflowEdgeImpl({
   const isMobile = useIsMobile();
   const nodes = useAppStore((s) => s.graphNodes);
   const selectedEdgeId = useAppStore((s) => s.selectedEdgeId);
+  const edgePopoverId = useAppStore((s) => s.edgePopoverId);
   const selectEdge = useAppStore((s) => s.selectEdge);
-  const updateEdgeTransfer = useAppStore((s) => s.updateEdgeTransfer);
-  const setEdgeImageTransfer = useAppStore((s) => s.setEdgeImageTransfer);
+  const openEdgePopover = useAppStore((s) => s.openEdgePopover);
+  const closeEdgePopover = useAppStore((s) => s.closeEdgePopover);
+  const updateEdgeTransferQuiet = useAppStore((s) => s.updateEdgeTransferQuiet);
+  const setEdgeImageTransferQuiet = useAppStore((s) => s.setEdgeImageTransferQuiet);
   const cycleEdgeImageTransferQuiet = useAppStore((s) => s.cycleEdgeImageTransferQuiet);
   const toggleEdgeTransferQuiet = useAppStore((s) => s.toggleEdgeTransferQuiet);
-  const detachSelectedEdge = useAppStore((s) => s.detachSelectedEdge);
+  const detachEdge = useAppStore((s) => s.detachEdge);
   const edgeData = normalizeEdgeTransferData(data);
-  const popoverOpen = selectedEdgeId === id;
-  const active = selected || popoverOpen;
+  const popoverOpen = edgePopoverId === id && !isMobile;
+  const active = selected || selectedEdgeId === id || edgePopoverId === id;
   const edgeState = getEdgeVisualState(edgeData);
   const parent = nodes.find((n) => n.id === source);
   const child = nodes.find((n) => n.id === target);
@@ -88,13 +93,15 @@ function WorkflowEdgeImpl({
 
   const select = (event: React.MouseEvent<HTMLDivElement>) => {
     event.stopPropagation();
-    selectEdge(id);
+    if (isMobile) selectEdge(id);
+    else openEdgePopover(id);
   };
 
   const selectWithKeyboard = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
-    selectEdge(id);
+    if (isMobile) selectEdge(id);
+    else openEdgePopover(id);
   };
 
   return (
@@ -143,7 +150,7 @@ function WorkflowEdgeImpl({
             {t("edgeBadge.settings")}
           </button>
         </div>
-        {popoverOpen && !isMobile ? (
+        {popoverOpen ? (
           <div
             className="workflow-edge-popover nodrag nopan"
             style={{
@@ -162,7 +169,7 @@ function WorkflowEdgeImpl({
                 type="checkbox"
                 checked={edgeData.transferContext}
                 onChange={(event) =>
-                  updateEdgeTransfer(id, { transferContext: event.target.checked })
+                  updateEdgeTransferQuiet(id, { transferContext: event.target.checked })
                 }
               />
             </label>
@@ -174,9 +181,33 @@ function WorkflowEdgeImpl({
                     key={mode}
                     type="button"
                     className={edgeData.imageTransfer === mode ? "is-selected" : ""}
-                    onClick={() => setEdgeImageTransfer(id, mode)}
+                    onClick={() => setEdgeImageTransferQuiet(id, mode)}
                   >
                     {t(imageTransferLabelKey(mode))}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="workflow-edge-popover__field">
+              <span>{t("nodeInspector.maxAncestorImages")}</span>
+              <div
+                className="workflow-edge-popover__segmented"
+                role="group"
+                aria-label={t("nodeInspector.maxAncestorImages")}
+              >
+                {ANCESTOR_IMAGE_COUNT_OPTIONS.map((count) => (
+                  <button
+                    key={count}
+                    type="button"
+                    disabled={edgeData.imageTransfer !== "ancestor"}
+                    className={edgeData.maxAncestorImages === count ? "is-selected" : ""}
+                    onClick={() =>
+                      updateEdgeTransferQuiet(id, {
+                        maxAncestorImages: count as AncestorImageCount,
+                      })
+                    }
+                  >
+                    {count}
                   </button>
                 ))}
               </div>
@@ -187,7 +218,7 @@ function WorkflowEdgeImpl({
                 type="checkbox"
                 checked={edgeData.transferSettings}
                 onChange={(event) =>
-                  updateEdgeTransfer(id, { transferSettings: event.target.checked })
+                  updateEdgeTransferQuiet(id, { transferSettings: event.target.checked })
                 }
               />
             </label>
@@ -196,8 +227,7 @@ function WorkflowEdgeImpl({
                 type="button"
                 className="workflow-edge-popover__danger"
                 onClick={() => {
-                  selectEdge(id);
-                  detachSelectedEdge();
+                  detachEdge(id);
                 }}
               >
                 {t("nodeInspector.detachConnection")}
@@ -205,7 +235,7 @@ function WorkflowEdgeImpl({
               <button
                 type="button"
                 className="workflow-edge-popover__confirm"
-                onClick={() => selectEdge(null)}
+                onClick={closeEdgePopover}
               >
                 {t("common.ok")}
               </button>
