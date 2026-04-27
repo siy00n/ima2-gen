@@ -4,6 +4,7 @@ import { UIModeSwitch } from "./UIModeSwitch";
 import { PromptComposer } from "./PromptComposer";
 import { GenerateButton } from "./GenerateButton";
 import { InFlightList } from "./InFlightList";
+import { SidebarPromptLibrary } from "./SidebarPromptLibrary";
 import { HistoryStrip } from "./HistoryStrip";
 import { SessionPicker } from "./SessionPicker";
 import { LanguageToggle } from "./LanguageToggle";
@@ -69,7 +70,7 @@ export function Sidebar() {
             {!isMobile ? <ProviderSelect /> : null}
             <PromptComposer />
             <GenerateButton />
-            <InFlightList />
+            {isMobile ? <InFlightList /> : <SidebarPromptLibrary />}
           </>
         ) : (
           <>
@@ -77,7 +78,7 @@ export function Sidebar() {
             <div className="sidebar__node-hint">
               {t("sidebar.nodeModeHint")}
             </div>
-            <InFlightList />
+            {isMobile ? <InFlightList /> : <SidebarPromptLibrary />}
           </>
         )}
       </div>

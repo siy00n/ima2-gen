@@ -768,6 +768,7 @@ type AppState = {
   promptLibraryLoading: boolean;
   promptLibrarySaving: boolean;
   promptLibraryError: string | null;
+  promptLibraryLastSavedId: string | null;
   openPromptLibrary: () => Promise<void>;
   closePromptLibrary: () => void;
   refreshPromptLibrary: () => Promise<void>;
@@ -1421,6 +1422,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   promptLibraryLoading: false,
   promptLibrarySaving: false,
   promptLibraryError: null,
+  promptLibraryLastSavedId: null,
   toast: null,
   rightPanelOpen: loadRightPanelOpen(),
   setRightPanelOpen: (rightPanelOpen) => {
@@ -2895,8 +2897,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((s) => ({
         promptLibraryItems: [prompt, ...s.promptLibraryItems],
         promptLibrarySaving: false,
+        promptLibraryLastSavedId: prompt.id,
       }));
       get().showToast(t("toast.promptSaved"));
+      window.setTimeout(() => {
+        if (get().promptLibraryLastSavedId === prompt.id) {
+          set({ promptLibraryLastSavedId: null });
+        }
+      }, 2600);
     } catch (err) {
       set({
         promptLibrarySaving: false,
@@ -2980,6 +2988,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const s = get();
     if (s.uiMode === "node" && s.selectedNodeId) {
       get().updateNodePrompt(s.selectedNodeId, item.text);
+    } else if (s.uiMode === "node") {
+      get().showToast(t("toast.selectNodeFirst"), true);
+      return;
     } else {
       set({ prompt: item.text });
     }
@@ -2991,6 +3002,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const node = s.graphNodes.find((n) => n.id === s.selectedNodeId);
       const next = [node?.data.prompt, item.text].filter(Boolean).join("\n\n");
       get().updateNodePrompt(s.selectedNodeId, next);
+    } else if (s.uiMode === "node") {
+      get().showToast(t("toast.selectNodeFirst"), true);
+      return;
     } else {
       set({ prompt: [s.prompt, item.text].filter(Boolean).join("\n\n") });
     }

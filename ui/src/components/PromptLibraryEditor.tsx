@@ -83,16 +83,17 @@ export function PromptLibraryEditor({
           required
         />
       </label>
-      <div className="prompt-library-editor__grid">
-        <label className="prompt-library-editor__field">
-          <span className="prompt-library-editor__label">{labels.tags || "Tags"}</span>
-          <input
-            className="prompt-library-editor__input"
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-            placeholder="product, portrait"
-          />
-        </label>
+      <label className="prompt-library-editor__field">
+        <span className="prompt-library-editor__label">{labels.tags || "Tags"}</span>
+        <input
+          className="prompt-library-editor__input"
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          placeholder="product, portrait"
+        />
+      </label>
+      <details className="prompt-library-editor__advanced">
+        <summary>{labels.mode || "Mode"}</summary>
         <label className="prompt-library-editor__field">
           <span className="prompt-library-editor__label">{labels.mode || "Mode"}</span>
           <select
@@ -105,7 +106,7 @@ export function PromptLibraryEditor({
             <option value="direct">Direct</option>
           </select>
         </label>
-      </div>
+      </details>
       <div className="prompt-library-editor__actions">
         <button
           type="button"

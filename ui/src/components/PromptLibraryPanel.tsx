@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -32,6 +33,12 @@ type PromptLibraryLabels = {
   unfavorite?: string;
   use?: string;
   insert?: string;
+  replacePrompt?: string;
+  appendPrompt?: string;
+  preview?: string;
+  target?: string;
+  noSelection?: string;
+  selectPrompt?: string;
   untitled?: string;
   addTitle?: string;
   editTitle?: string;
@@ -50,6 +57,9 @@ export type PromptLibraryPanelProps = {
   saving?: boolean;
   error?: string | null;
   labels?: PromptLibraryLabels;
+  targetLabel?: string;
+  targetAvailable?: boolean;
+  lastSavedId?: string | null;
   onClose?: () => void;
   onCreate?: (payload: PromptCreatePayload) => void | Promise<void>;
   onUpdate?: (id: string, payload: PromptUpdatePayload) => void | Promise<void>;
@@ -60,6 +70,11 @@ export type PromptLibraryPanelProps = {
   onInsert?: (prompt: PromptItem) => void;
 };
 
+function promptPreview(prompt: PromptItem | null, fallback: string) {
+  if (!prompt) return fallback;
+  return prompt.text.trim() || fallback;
+}
+
 export function PromptLibraryPanel({
   open = true,
   prompts,
@@ -67,6 +82,9 @@ export function PromptLibraryPanel({
   saving = false,
   error = null,
   labels = {},
+  targetLabel,
+  targetAvailable = true,
+  lastSavedId = null,
   onClose,
   onCreate,
   onUpdate,
@@ -80,6 +98,7 @@ export function PromptLibraryPanel({
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [editing, setEditing] = useState<PromptItem | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -95,6 +114,19 @@ export function PromptLibraryPanel({
       );
     });
   }, [favoritesOnly, prompts, search]);
+
+  const selectedPrompt = useMemo(() => {
+    return filtered.find((prompt) => prompt.id === selectedId) ?? filtered[0] ?? null;
+  }, [filtered, selectedId]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!selectedPrompt) {
+      setSelectedId(null);
+      return;
+    }
+    if (selectedPrompt.id !== selectedId) setSelectedId(selectedPrompt.id);
+  }, [open, selectedId, selectedPrompt]);
 
   if (!open) return null;
 
@@ -123,6 +155,14 @@ export function PromptLibraryPanel({
     setEditing(null);
   };
 
+  const openEditor = (prompt: PromptItem | null) => {
+    setEditing(prompt);
+    setEditorOpen(true);
+  };
+
+  const title = selectedPrompt?.name || labels.untitled || "Untitled prompt";
+  const canApplyPrompt = targetAvailable && !!selectedPrompt;
+
   return (
     <section
       className="prompt-library-panel"
@@ -142,20 +182,23 @@ export function PromptLibraryPanel({
           aria-label={labels.close || "Close"}
         />
       )}
-      <div className="prompt-library-panel__drawer">
+      <div className="prompt-library-panel__dialog" role="dialog" aria-modal="true">
         <header className="prompt-library-panel__header">
-          <h2 className="prompt-library-panel__title">
-            {labels.title || "Prompt library"}
-          </h2>
+          <div className="prompt-library-panel__heading">
+            <h2 className="prompt-library-panel__title">
+              {labels.title || "Prompt library"}
+            </h2>
+            <div className="prompt-library-panel__target">
+              <span>{labels.target || "Target"}</span>
+              <strong>{targetLabel || "-"}</strong>
+            </div>
+          </div>
           <div className="prompt-library-panel__actions">
             {onCreate && (
               <button
                 type="button"
                 className="prompt-library-panel__add"
-                onClick={() => {
-                  setEditing(null);
-                  setEditorOpen(true);
-                }}
+                onClick={() => openEditor(null)}
               >
                 {labels.add || "Add"}
               </button>
@@ -198,79 +241,152 @@ export function PromptLibraryPanel({
           </div>
         </header>
 
-        <div className="prompt-library-panel__filters">
-          <input
-            className="prompt-library-panel__search"
-            type="search"
-            value={search}
-            placeholder={labels.search || "Search prompts"}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <label className="prompt-library-panel__favorite-filter">
-            <input
-              type="checkbox"
-              checked={favoritesOnly}
-              onChange={(e) => setFavoritesOnly(e.target.checked)}
-            />
-            <span>{labels.favorites || "Favorites"}</span>
-          </label>
-        </div>
-
-        {error && <div className="prompt-library-panel__error">{error}</div>}
-
-        {editorOpen && (
-          <PromptLibraryEditor
-            prompt={editing}
-            saving={saving}
-            labels={labels}
-            onCancel={closeEditor}
-            onSave={async (payload) => {
-              if (editing) {
-                await onUpdate?.(editing.id, payload);
-              } else {
-                await onCreate?.(payload as PromptCreatePayload);
-              }
-              closeEditor();
-            }}
-          />
-        )}
-
-        <div className="prompt-library-panel__list">
-          {loading ? (
-            <div className="prompt-library-panel__loading">
-              {labels.loading || "Loading..."}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="prompt-library-panel__empty">
-              {labels.empty || "No prompts yet"}
-            </div>
-          ) : (
-            filtered.map((prompt) => (
-              <PromptLibraryRow
-                key={prompt.id}
-                prompt={prompt}
-                labels={labels}
-                onUse={onUse}
-                onInsert={onInsert}
-                onToggleFavorite={
-                  onToggleFavorite
-                    ? (item) => void onToggleFavorite(item.id, item)
-                    : undefined
-                }
-                onEdit={
-                  onUpdate
-                    ? (item) => {
-                        setEditing(item);
-                        setEditorOpen(true);
-                      }
-                    : undefined
-                }
-                onDelete={
-                  onDelete ? (item) => void onDelete(item.id, item) : undefined
-                }
+        <div className="prompt-library-panel__body">
+          <div className="prompt-library-panel__browser">
+            <div className="prompt-library-panel__filters">
+              <input
+                className="prompt-library-panel__search"
+                type="search"
+                value={search}
+                placeholder={labels.search || "Search prompts"}
+                onChange={(e) => setSearch(e.target.value)}
               />
-            ))
-          )}
+              <label className="prompt-library-panel__favorite-filter">
+                <input
+                  type="checkbox"
+                  checked={favoritesOnly}
+                  onChange={(e) => setFavoritesOnly(e.target.checked)}
+                />
+                <span>{labels.favorites || "Favorites"}</span>
+              </label>
+            </div>
+
+            {error && <div className="prompt-library-panel__error">{error}</div>}
+
+            <div className="prompt-library-panel__list">
+              {loading ? (
+                <div className="prompt-library-panel__loading">
+                  {labels.loading || "Loading..."}
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="prompt-library-panel__empty">
+                  {labels.empty || "No prompts yet"}
+                </div>
+              ) : (
+                filtered.map((prompt) => (
+                  <PromptLibraryRow
+                    key={prompt.id}
+                    prompt={prompt}
+                    selected={selectedPrompt?.id === prompt.id}
+                    highlighted={lastSavedId === prompt.id}
+                    labels={labels}
+                    onSelect={(item) => setSelectedId(item.id)}
+                    onToggleFavorite={
+                      onToggleFavorite
+                        ? (item) => void onToggleFavorite(item.id, item)
+                        : undefined
+                    }
+                  />
+                ))
+              )}
+            </div>
+          </div>
+
+          <aside className="prompt-library-panel__detail">
+            {editorOpen ? (
+              <PromptLibraryEditor
+                prompt={editing}
+                saving={saving}
+                labels={labels}
+                onCancel={closeEditor}
+                onSave={async (payload) => {
+                  if (editing) {
+                    await onUpdate?.(editing.id, payload);
+                    setSelectedId(editing.id);
+                  } else {
+                    await onCreate?.(payload as PromptCreatePayload);
+                  }
+                  closeEditor();
+                }}
+              />
+            ) : selectedPrompt ? (
+              <>
+                <div className="prompt-library-panel__detail-head">
+                  <span className="prompt-library-panel__detail-label">
+                    {labels.preview || "Preview"}
+                  </span>
+                  <h3>{title}</h3>
+                </div>
+                <div className="prompt-library-panel__preview">
+                  {promptPreview(selectedPrompt, labels.noSelection || "Select a prompt")}
+                </div>
+                {selectedPrompt.tags.length > 0 || selectedPrompt.mode ? (
+                  <div className="prompt-library-panel__meta">
+                    {selectedPrompt.mode ? (
+                      <span>{selectedPrompt.mode}</span>
+                    ) : null}
+                    {selectedPrompt.tags.map((tag) => (
+                      <span key={tag}>{tag}</span>
+                    ))}
+                  </div>
+                ) : null}
+                {!targetAvailable ? (
+                  <div className="prompt-library-panel__notice">
+                    {labels.noSelection || "Select a target first."}
+                  </div>
+                ) : null}
+                <div className="prompt-library-panel__detail-actions">
+                  {onInsert && (
+                    <button
+                      type="button"
+                      className="prompt-library-panel__primary"
+                      onClick={() => onInsert(selectedPrompt)}
+                      disabled={!canApplyPrompt}
+                    >
+                      {labels.appendPrompt || labels.insert || "Append to prompt"}
+                    </button>
+                  )}
+                  {onUse && (
+                    <button
+                      type="button"
+                      onClick={() => onUse(selectedPrompt)}
+                      disabled={!canApplyPrompt}
+                    >
+                      {labels.replacePrompt || labels.use || "Replace prompt"}
+                    </button>
+                  )}
+                  {onToggleFavorite && (
+                    <button
+                      type="button"
+                      onClick={() => void onToggleFavorite(selectedPrompt.id, selectedPrompt)}
+                    >
+                      {selectedPrompt.isFavorite
+                        ? labels.unfavorite || "Remove favorite"
+                        : labels.favorite || "Favorite"}
+                    </button>
+                  )}
+                  {onUpdate && (
+                    <button type="button" onClick={() => openEditor(selectedPrompt)}>
+                      {labels.edit || "Edit"}
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      type="button"
+                      className="prompt-library-panel__danger"
+                      onClick={() => void onDelete(selectedPrompt.id, selectedPrompt)}
+                    >
+                      {labels.delete || "Delete"}
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="prompt-library-panel__empty">
+                {labels.selectPrompt || labels.empty || "Select a prompt"}
+              </div>
+            )}
+          </aside>
         </div>
 
         {dragActive && onImport && (

@@ -17,12 +17,15 @@ export default function App() {
   const reconcileInflight = useAppStore((s) => s.reconcileInflight);
   const syncFromStorage = useAppStore((s) => s.syncFromStorage);
   const uiMode = useAppStore((s) => s.uiMode);
+  const graphNodes = useAppStore((s) => s.graphNodes);
+  const selectedNodeId = useAppStore((s) => s.selectedNodeId);
   const { t } = useI18n();
   const promptLibraryOpen = useAppStore((s) => s.promptLibraryOpen);
   const promptLibraryItems = useAppStore((s) => s.promptLibraryItems);
   const promptLibraryLoading = useAppStore((s) => s.promptLibraryLoading);
   const promptLibrarySaving = useAppStore((s) => s.promptLibrarySaving);
   const promptLibraryError = useAppStore((s) => s.promptLibraryError);
+  const promptLibraryLastSavedId = useAppStore((s) => s.promptLibraryLastSavedId);
   const closePromptLibrary = useAppStore((s) => s.closePromptLibrary);
   const createPromptLibraryItem = useAppStore((s) => s.createPromptLibraryItem);
   const updatePromptLibraryItem = useAppStore((s) => s.updatePromptLibraryItem);
@@ -31,6 +34,16 @@ export default function App() {
   const importPromptLibraryItems = useAppStore((s) => s.importPromptLibraryItems);
   const usePromptLibraryItem = useAppStore((s) => s.usePromptLibraryItem);
   const insertPromptLibraryItem = useAppStore((s) => s.insertPromptLibraryItem);
+  const selectedNode = selectedNodeId
+    ? graphNodes.find((node) => node.id === selectedNodeId)
+    : null;
+  const promptTargetAvailable = uiMode !== "node" || !!selectedNode;
+  const promptTargetLabel =
+    uiMode === "node"
+      ? selectedNode?.data.name?.trim() ||
+        selectedNode?.data.serverNodeId?.replace(/^n_/, "").slice(0, 8) ||
+        (selectedNode ? selectedNode.id.replace(/^n_/, "").slice(0, 8) : t("promptLibrary.targetSelectNode"))
+      : t("promptLibrary.targetClassic");
 
   useEffect(() => {
     hydrateHistory();
@@ -78,6 +91,9 @@ export default function App() {
         loading={promptLibraryLoading}
         saving={promptLibrarySaving}
         error={promptLibraryError}
+        targetLabel={promptTargetLabel}
+        targetAvailable={promptTargetAvailable}
+        lastSavedId={promptLibraryLastSavedId}
         labels={{
           title: t("promptLibrary.title"),
           add: t("promptLibrary.add"),
@@ -95,6 +111,12 @@ export default function App() {
           unfavorite: t("gallery.unfavoriteTitle"),
           use: t("promptLibrary.use"),
           insert: t("promptLibrary.insert"),
+          replacePrompt: t("promptLibrary.replacePrompt"),
+          appendPrompt: t("promptLibrary.appendPrompt"),
+          preview: t("promptLibrary.preview"),
+          target: t("promptLibrary.target"),
+          noSelection: t("promptLibrary.targetSelectNode"),
+          selectPrompt: t("promptLibrary.selectPrompt"),
           untitled: t("promptLibrary.untitled"),
           addTitle: t("promptLibrary.addTitle"),
           editTitle: t("promptLibrary.editTitle"),

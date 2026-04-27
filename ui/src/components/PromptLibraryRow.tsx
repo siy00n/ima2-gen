@@ -3,6 +3,8 @@ import type { PromptItem } from "../lib/promptLibrary";
 type PromptLibraryRowProps = {
   prompt: PromptItem;
   selected?: boolean;
+  highlighted?: boolean;
+  compact?: boolean;
   labels?: {
     favorite?: string;
     unfavorite?: string;
@@ -23,6 +25,8 @@ type PromptLibraryRowProps = {
 export function PromptLibraryRow({
   prompt,
   selected = false,
+  highlighted = false,
+  compact = false,
   labels = {},
   onSelect,
   onUse,
@@ -37,7 +41,7 @@ export function PromptLibraryRow({
 
   return (
     <article
-      className={`prompt-library-row${selected ? " prompt-library-row--selected" : ""}`}
+      className={`prompt-library-row${selected ? " prompt-library-row--selected" : ""}${highlighted ? " prompt-library-row--highlighted" : ""}${compact ? " prompt-library-row--compact" : ""}`}
       onClick={() => onSelect?.(prompt)}
     >
       <div className="prompt-library-row__main">

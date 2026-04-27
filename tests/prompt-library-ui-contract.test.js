@@ -12,6 +12,9 @@ function readSource(path) {
 describe("prompt library UI contract", () => {
   it("keeps prompt library modules standalone for later integration", () => {
     const panel = readSource("ui/src/components/PromptLibraryPanel.tsx");
+    const sidebar = readSource("ui/src/components/SidebarPromptLibrary.tsx");
+    const app = readSource("ui/src/App.tsx");
+    const css = readSource("ui/src/index.css");
     const client = readSource("ui/src/lib/promptLibrary.ts");
 
     assert.match(panel, /export type PromptLibraryPanelProps/);
@@ -22,8 +25,24 @@ describe("prompt library UI contract", () => {
     assert.match(panel, /onImport\?:/);
     assert.match(panel, /onUse\?:/);
     assert.match(panel, /onInsert\?:/);
+    assert.match(panel, /targetLabel\?:/);
+    assert.match(panel, /targetAvailable\?:/);
+    assert.match(panel, /replacePrompt/);
+    assert.match(panel, /appendPrompt/);
+    assert.match(panel, /prompt-library-panel__dialog/);
+    assert.doesNotMatch(panel, /prompt-library-panel__drawer/);
     assert.doesNotMatch(panel, /useAppStore/);
     assert.doesNotMatch(panel, /useI18n/);
+
+    assert.match(sidebar, /sidebar-workspace__tabs/);
+    assert.match(sidebar, /mini-library/);
+    assert.match(sidebar, /insertPromptLibraryItem/);
+    assert.match(sidebar, /InFlightList/);
+    assert.match(app, /targetLabel=\{promptTargetLabel\}/);
+    assert.match(app, /targetAvailable=\{promptTargetAvailable\}/);
+    assert.match(css, /\.prompt-library-panel__dialog/);
+    assert.match(css, /@media \(max-width: 800px\)[\s\S]*\.prompt-library-panel__dialog/);
+    assert.doesNotMatch(css, /\.prompt-library-panel__drawer/);
 
     assert.match(client, /export function getPromptLibrary/);
     assert.match(client, /export function createPrompt/);
