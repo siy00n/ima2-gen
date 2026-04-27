@@ -1531,6 +1531,7 @@ app.post("/api/node/generate/preview", async (req, res) => {
     });
   } catch (err) {
     console.error("[node/generate/preview] error:", err.message);
+    const normalized = normalizeGenerationFailure(err);
     res.status(normalized.status || err.status || 500).json({
       error: { code: err.code || "NODE_GEN_PREVIEW_FAILED", message: err.message },
       parentNodeId,

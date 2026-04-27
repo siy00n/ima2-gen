@@ -34,6 +34,7 @@ type FavoriteActions = {
 
 export function HistoryStrip() {
   const history = useAppStore((s) => s.history);
+  const historyTombstones = useAppStore((s) => s.historyTombstones);
   const currentImage = useAppStore((s) => s.currentImage);
   const selectHistory = useAppStore((s) => s.selectHistory);
   const openGallery = useAppStore((s) => s.openGallery);
@@ -41,12 +42,15 @@ export function HistoryStrip() {
   const { t } = useI18n();
   const [previewItem, setPreviewItem] = useState<GenerateItem | null>(null);
   const thumbRefs = useRef<Record<string, HTMLElement | null>>({});
+  const visibleHistory = history.filter(
+    (item) => item.kind !== "import" && !(item.filename && historyTombstones.includes(item.filename)),
+  );
   const activeKey = currentImage ? getGalleryItemKey(currentImage) : null;
 
   useEffect(() => {
     if (!activeKey) return;
     thumbRefs.current[activeKey]?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [activeKey, history]);
+  }, [activeKey, history, historyTombstones]);
 
   const openPreview = (item: GenerateItem) => {
     selectHistory(item);
@@ -82,7 +86,7 @@ export function HistoryStrip() {
             <rect x="14" y="14" width="7" height="7" rx="1" />
           </svg>
         </button>
-        {history.map((item) => {
+        {visibleHistory.map((item) => {
           const key = getGalleryItemKey(item);
           const active = activeKey === key;
           return (

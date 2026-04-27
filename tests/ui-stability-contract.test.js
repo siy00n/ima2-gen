@@ -1,0 +1,40 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const root = process.cwd();
+
+function readSource(path) {
+  return readFileSync(join(root, path), "utf8");
+}
+
+describe("UI stability contracts", () => {
+  it("keeps node attach state in the store and hides node-owned imports from gallery history", () => {
+    const store = readSource("ui/src/store/useAppStore.ts");
+    const inspector = readSource("ui/src/components/NodeInspector.tsx");
+    const imageNode = readSource("ui/src/components/ImageNode.tsx");
+
+    assert.match(store, /attachingNodeIds:/);
+    assert.match(store, /finally[\s\S]*attachingNodeIds:/);
+    assert.match(store, /function upsertHistoryItems/);
+    assert.match(store, /item\.kind === "import"/);
+    assert.doesNotMatch(store, /async attachImageToNode[\s\S]*get\(\)\.addHistoryItem\(\{[\s\S]*kind: "import"/);
+    assert.doesNotMatch(store, /async importHistoryItemAsNode[\s\S]*get\(\)\.addHistoryItem\(\{[\s\S]*kind: "import"/);
+    assert.match(inspector, /attachingNodeIds\.includes/);
+    assert.match(imageNode, /attachingNodeIds\.includes/);
+  });
+
+  it("removes the nonfunctional node menu placeholder and enables classic navigation", () => {
+    const imageNode = readSource("ui/src/components/ImageNode.tsx");
+    const canvas = readSource("ui/src/components/Canvas.tsx");
+    const css = readSource("ui/src/index.css");
+
+    assert.doesNotMatch(imageNode, /image-node__menu/);
+    assert.doesNotMatch(css, /\.image-node__menu/);
+    assert.match(canvas, /ArrowLeft/);
+    assert.match(canvas, /ArrowRight/);
+    assert.match(canvas, /isEditableTarget/);
+    assert.match(css, /\.result-nav\s*\{/);
+  });
+});

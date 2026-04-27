@@ -62,12 +62,19 @@ function previewMetaForItem(item: GenerateItem): string {
   ].filter((value): value is string => Boolean(value)).join(" · ");
 }
 
+function isVisibleGalleryItem(item: GenerateItem, tombstones: string[]): boolean {
+  if (item.kind === "import") return false;
+  if (item.filename && tombstones.includes(item.filename)) return false;
+  return true;
+}
+
 export function GalleryModal() {
   const { t } = useI18n();
   const open = useAppStore((s) => s.galleryOpen);
   const close = useAppStore((s) => s.closeGallery);
   const uiMode = useAppStore((s) => s.uiMode);
   const history = useAppStore((s) => s.history);
+  const historyTombstones = useAppStore((s) => s.historyTombstones);
   const selectHistory = useAppStore((s) => s.selectHistory);
   const currentImage = useAppStore((s) => s.currentImage);
   const removeFromHistory = useAppStore((s) => s.removeFromHistory);
@@ -135,10 +142,10 @@ export function GalleryModal() {
           page.sessions.map((s) => ({
             sessionId: s.sessionId,
             label: s.sessionId.slice(0, 8),
-            items: s.items.map(toItem),
-          })),
+            items: s.items.map(toItem).filter((item) => isVisibleGalleryItem(item, historyTombstones)),
+          })).filter((group) => group.items.length > 0),
         );
-        setLoose(page.loose.map(toItem));
+        setLoose(page.loose.map(toItem).filter((item) => isVisibleGalleryItem(item, historyTombstones)));
       } catch {
         // Fallback: use current history only.
       }
@@ -146,11 +153,12 @@ export function GalleryModal() {
     return () => {
       cancelled = true;
     };
-  }, [open, groupBy]);
+  }, [open, groupBy, historyTombstones]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase().normalize("NFC");
     return history.filter((h) => {
+      if (!isVisibleGalleryItem(h, historyTombstones)) return false;
       if (favoritesOnly && !h.isFavorite) return false;
       if (!q) return true;
       return (
@@ -158,7 +166,7 @@ export function GalleryModal() {
         (h.filename ?? "").toLowerCase().normalize("NFC").includes(q)
       );
     });
-  }, [history, query, favoritesOnly]);
+  }, [history, historyTombstones, query, favoritesOnly]);
 
   const visibleSessionGroups = useMemo(() => {
     if (!favoritesOnly) return sessionGroups;
@@ -248,7 +256,10 @@ export function GalleryModal() {
   function handleToggleFavorite(item: GenerateItem, e: MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
     if (!item.filename || !toggleGalleryFavorite) return;
-    const nextFavorite = !item.isFavorite;
+    if (historyTombstones.includes(item.filename)) return;
+    const storeItem = history.find((candidate) => candidate.filename === item.filename);
+    if (!storeItem) return;
+    const nextFavorite = !(storeItem.isFavorite ?? item.isFavorite ?? false);
     const updateItem = (candidate: GenerateItem): GenerateItem =>
       candidate.filename === item.filename ? { ...candidate, isFavorite: nextFavorite } : candidate;
     setSessionGroups((groups) =>

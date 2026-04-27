@@ -162,14 +162,19 @@ export function PromptLibraryPanel({
             )}
             {onImport && (
               <>
-                <button
-                  type="button"
-                  className="prompt-library-panel__import"
-                  onClick={() => fileInputRef.current?.click()}
-                  title={labels.importFiles || "Import files"}
-                >
-                  {labels.import || "Import"}
-                </button>
+                <div className="prompt-library-panel__import-wrap">
+                  <button
+                    type="button"
+                    className="prompt-library-panel__import"
+                    onClick={() => fileInputRef.current?.click()}
+                    title={labels.importFiles || "Import files"}
+                  >
+                    {labels.import || "Import"}
+                  </button>
+                  <span className="prompt-library-panel__import-hint">
+                    {labels.importFiles || "JSON, TXT, or MD files"}
+                  </span>
+                </div>
                 <input
                   ref={fileInputRef}
                   className="prompt-library-panel__file-input"

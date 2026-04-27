@@ -70,7 +70,6 @@ export function NodeInspector() {
   const { t } = useI18n();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [apiPreviewOpen, setApiPreviewOpen] = useState(false);
-  const [attachingImage, setAttachingImage] = useState(false);
   const [serverPreview, setServerPreview] = useState<{
     loading: boolean;
     data: NodeGeneratePreviewResponse | null;
@@ -103,6 +102,7 @@ export function NodeInspector() {
   const deleteNode = useAppStore((s) => s.deleteNode);
   const removeNodeImageReference = useAppStore((s) => s.removeNodeImageReference);
   const attachImageToNode = useAppStore((s) => s.attachImageToNode);
+  const attachingNodeIds = useAppStore((s) => s.attachingNodeIds);
   const importCurrentImageAsNode = useAppStore((s) => s.importCurrentImageAsNode);
   const currentImage = useAppStore((s) => s.currentImage);
   const showToast = useAppStore((s) => s.showToast);
@@ -112,6 +112,7 @@ export function NodeInspector() {
 
   const selected = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
   const data = selected?.data;
+  const attachingImage = selectedNodeId ? attachingNodeIds.includes(selectedNodeId) : false;
   const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) : null;
   const edgeParent = selectedEdge ? nodes.find((n) => n.id === selectedEdge.source) : null;
   const edgeChild = selectedEdge ? nodes.find((n) => n.id === selectedEdge.target) : null;
@@ -403,12 +404,7 @@ export function NodeInspector() {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file) return;
-    setAttachingImage(true);
-    try {
-      await attachImageToNode(selected.id, file);
-    } finally {
-      setAttachingImage(false);
-    }
+    await attachImageToNode(selected.id, file);
   };
 
   const generateLabel =

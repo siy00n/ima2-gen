@@ -791,6 +791,79 @@ function sameGenerateItem(a: GenerateItem | null | undefined, b: GenerateItem | 
   return a.image === b.image;
 }
 
+function historyItemKey(item: Pick<GenerateItem, "filename" | "url" | "image">): string {
+  return item.filename || item.url || item.image;
+}
+
+function normalizeGenerateItem(item: GenerateItem): GenerateItem {
+  const image = item.image || item.url || "";
+  const url = item.url ?? item.image;
+  return {
+    ...item,
+    image,
+    url,
+    thumb: item.thumb ?? url ?? image,
+    createdAt: item.createdAt || Date.now(),
+    kind: narrowGenerateKind(item.kind),
+  };
+}
+
+function isNodeOwnedImport(item: Pick<GenerateItem, "kind">): boolean {
+  return item.kind === "import";
+}
+
+function isHistoryTombstoned(item: GenerateItem, tombstones: string[]): boolean {
+  return !!item.filename && tombstones.includes(item.filename);
+}
+
+function mergeGenerateItem(existing: GenerateItem, incoming: GenerateItem): GenerateItem {
+  return {
+    ...existing,
+    ...incoming,
+    image: incoming.image || existing.image,
+    url: incoming.url ?? existing.url,
+    thumb: incoming.thumb ?? existing.thumb,
+    createdAt: incoming.createdAt ?? existing.createdAt,
+    isFavorite: incoming.isFavorite ?? existing.isFavorite,
+  };
+}
+
+function upsertHistoryItems(
+  history: GenerateItem[],
+  incoming: GenerateItem[],
+  tombstones: string[],
+  options: { includeNodeImports?: boolean; ignoreTombstones?: boolean } = {},
+): GenerateItem[] {
+  const next = history
+    .map(normalizeGenerateItem)
+    .filter((item) => options.includeNodeImports || !isNodeOwnedImport(item))
+    .filter((item) => options.ignoreTombstones || !isHistoryTombstoned(item, tombstones));
+
+  for (const raw of [...incoming].reverse()) {
+    const item = normalizeGenerateItem(raw);
+    if (!options.includeNodeImports && isNodeOwnedImport(item)) continue;
+    if (!options.ignoreTombstones && isHistoryTombstoned(item, tombstones)) continue;
+    const key = historyItemKey(item);
+    if (!key) continue;
+    const existingIndex = next.findIndex((candidate) => historyItemKey(candidate) === key);
+    const merged =
+      existingIndex >= 0 ? mergeGenerateItem(next[existingIndex], item) : item;
+    if (existingIndex >= 0) next.splice(existingIndex, 1);
+    next.unshift(merged);
+  }
+
+  return next.slice(0, HISTORY_LIMIT);
+}
+
+function currentImageFromHistory(
+  history: GenerateItem[],
+  currentImage: GenerateItem | null,
+): GenerateItem | null {
+  if (!currentImage) return history[0] ?? null;
+  const key = historyItemKey(currentImage);
+  return history.find((item) => historyItemKey(item) === key) ?? history[0] ?? null;
+}
+
 function currentHistoryIndex(history: GenerateItem[], currentImage: GenerateItem | null): number {
   if (!currentImage) return -1;
   return history.findIndex((item) => sameGenerateItem(item, currentImage));
@@ -826,6 +899,7 @@ type AppState = {
   syncFromStorage: () => void;
   currentImage: GenerateItem | null;
   history: GenerateItem[];
+  historyTombstones: string[];
   toggleGalleryFavorite: (filename: string) => Promise<void>;
   promptLibraryOpen: boolean;
   promptLibraryItems: PromptItem[];
@@ -865,6 +939,7 @@ type AppState = {
   canceledRequestIds: string[];
   branchGenerationRootId: ClientNodeId | null;
   branchGenerationRequestIds: string[];
+  attachingNodeIds: ClientNodeId[];
   selectedNodeId: ClientNodeId | null;
   selectedEdgeId: string | null;
   selectNode: (clientId: ClientNodeId | null) => void;
@@ -1646,20 +1721,14 @@ export const useAppStore = create<AppState>((set, get) => ({
             kind: narrowGenerateKind(it.kind),
             isFavorite: it.isFavorite ?? false,
           }));
-        const existing = get().history;
-        const fresh = arr.filter(
-          (a) => !existing.some((e) => e.filename === a.filename),
-        );
-        if (fresh.length > 0) {
+        if (arr.length > 0) {
           set((s) => {
-            const nextCurrent = s.currentImage ?? fresh[0];
-            if (!s.currentImage && fresh[0]?.filename) {
-              saveSelectedFilename(fresh[0].filename);
+            const history = upsertHistoryItems(s.history, arr, s.historyTombstones);
+            const currentImage = currentImageFromHistory(history, s.currentImage);
+            if (!s.currentImage && currentImage?.filename) {
+              saveSelectedFilename(currentImage.filename);
             }
-            return {
-              history: [...fresh, ...s.history].slice(0, HISTORY_LIMIT),
-              currentImage: nextCurrent,
-            };
+            return { history, currentImage };
           });
         }
         // Prune strategy: TTL-based only. Do not attempt to correlate
@@ -1726,6 +1795,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   currentImage: null,
   history: [],
+  historyTombstones: [],
   promptLibraryOpen: false,
   promptLibraryItems: [],
   promptLibraryLoading: false,
@@ -1768,6 +1838,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   canceledRequestIds: [],
   branchGenerationRootId: null,
   branchGenerationRequestIds: [],
+  attachingNodeIds: [],
   selectedNodeId: null,
   selectedEdgeId: null,
   selectNode: (selectedNodeId) => set({ selectedNodeId, selectedEdgeId: null }),
@@ -2748,6 +2819,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
+    set((s) => ({
+      attachingNodeIds: addUniqueRequestIds(s.attachingNodeIds, [clientId]),
+    }));
     try {
       const image = normalizeNodeAttachDataUrl(file, await readFileAsDataUrl(file));
       let restoredPrompt: string | null = null;
@@ -2832,28 +2906,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedNodeId: clientId,
         selectedEdgeId: null,
       });
-      get().addHistoryItem({
-        image: res.url,
-        url: res.url,
-        filename: res.filename,
-        prompt: promptForAttach,
-        provider: res.provider,
-        quality: res.quality ?? undefined,
-        size: res.size ?? undefined,
-        format: res.format ?? undefined,
-        moderation: res.moderation ?? undefined,
-        model: res.model ?? undefined,
-        thumb: res.url,
-        createdAt: res.createdAt,
-        sessionId,
-        nodeId: res.nodeId,
-        clientNodeId: clientId,
-        kind: "import",
-      });
       get().showToast(t("toast.nodeImageAttached"));
     } catch (err) {
       console.warn("[node] attach failed:", err);
       get().showToast(t("toast.nodeAttachFailed"), true);
+    } finally {
+      set((s) => ({
+        attachingNodeIds: s.attachingNodeIds.filter((id) => id !== clientId),
+      }));
     }
   },
 
@@ -3047,24 +3107,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectedEdgeId: null,
         rightPanelOpen: true,
       });
-      get().addHistoryItem({
-        image: res.url,
-        url: res.url,
-        filename: res.filename,
-        prompt: res.prompt,
-        provider: res.provider,
-        quality: res.quality ?? item.quality,
-        size: res.size ?? item.size,
-        format: res.format ?? item.format,
-        moderation: res.moderation ?? item.moderation,
-        model: res.model ?? item.model,
-        thumb: res.url,
-        createdAt: res.createdAt,
-        sessionId,
-        nodeId: res.nodeId,
-        clientNodeId: clientId,
-        kind: "import",
-      });
       saveRightPanelOpen(true);
       try { localStorage.setItem("ima2.uiMode", "node"); } catch {}
       get().scheduleGraphSave();
@@ -3113,32 +3155,40 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   removeFromHistory: (filename) => {
-    const s = get();
-    const history = s.history.filter((h) => h.filename !== filename);
-    const stillCurrent =
-      s.currentImage && s.currentImage.filename === filename ? null : s.currentImage;
-    set({ history, currentImage: stillCurrent });
-    if (stillCurrent === null) saveSelectedFilename(null);
+    set((s) => {
+      const historyTombstones = s.historyTombstones.includes(filename)
+        ? s.historyTombstones
+        : [...s.historyTombstones, filename].slice(-100);
+      const history = s.history.filter((h) => h.filename !== filename);
+      const currentImage =
+        s.currentImage?.filename === filename ? history[0] ?? null : s.currentImage;
+      saveSelectedFilename(currentImage?.filename ?? null);
+      return { history, historyTombstones, currentImage };
+    });
   },
 
   addHistoryItem: (item) => {
-    const s = get();
-    const exists = s.history.some(
-      (h) => item.filename && h.filename === item.filename,
-    );
-    if (exists) return;
-    const withDefaults: GenerateItem = {
-      ...item,
-      image: item.image || item.url || "",
-      url: item.url ?? item.image,
-      thumb: item.thumb ?? item.url ?? item.image,
-      createdAt: item.createdAt || Date.now(),
-    };
-    set({ history: [withDefaults, ...s.history].slice(0, HISTORY_LIMIT) });
+    const normalized = normalizeGenerateItem(item);
+    if (isNodeOwnedImport(normalized)) return;
+    set((s) => {
+      const historyTombstones = normalized.filename
+        ? s.historyTombstones.filter((filename) => filename !== normalized.filename)
+        : s.historyTombstones;
+      const history = upsertHistoryItems(s.history, [normalized], historyTombstones, {
+        ignoreTombstones: true,
+      });
+      return {
+        history,
+        historyTombstones,
+        currentImage: currentImageFromHistory(history, s.currentImage),
+      };
+    });
   },
 
   toggleGalleryFavorite: async (filename) => {
+    if (get().historyTombstones.includes(filename)) return;
     const current = get().history.find((item) => item.filename === filename);
+    if (!current) return;
     const nextFavorite = !(current?.isFavorite ?? false);
     const applyFavorite = (favorite: boolean) =>
       set((s) => ({
@@ -3186,11 +3236,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         promptLibraryItems: [prompt, ...s.promptLibraryItems],
         promptLibrarySaving: false,
       }));
+      get().showToast(t("toast.promptSaved"));
     } catch (err) {
       set({
         promptLibrarySaving: false,
         promptLibraryError: err instanceof Error ? err.message : "Prompt save failed",
       });
+      get().showToast(t("toast.promptSaveFailed"), true);
     }
   },
   updatePromptLibraryItem: async (id, payload) => {
@@ -3392,7 +3444,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     void (async () => {
       try {
         const res = await getHistory({ limit: HISTORY_LIMIT });
-        const history: GenerateItem[] = res.items.map((it) => ({
+        const historyItems: GenerateItem[] = res.items.map((it) => ({
           image: it.url,
           url: it.url,
           filename: it.filename,
@@ -3409,6 +3461,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           kind: narrowGenerateKind(it.kind),
           isFavorite: it.isFavorite ?? false,
         }));
+        const history = upsertHistoryItems([], historyItems, get().historyTombstones);
         if (history.length > 0) {
           const selected = loadSelectedFilename();
           const matched = selected
@@ -3694,7 +3747,14 @@ async function addHistory(
     url,
     createdAt: item.createdAt || Date.now(),
   };
-  const history = [withThumb, ...get().history].slice(0, HISTORY_LIMIT);
-  saveSelectedFilename(withThumb.filename ?? null);
-  set({ history, currentImage: withThumb });
+  const s = get();
+  const historyTombstones = withThumb.filename
+    ? s.historyTombstones.filter((filename) => filename !== withThumb.filename)
+    : s.historyTombstones;
+  const history = upsertHistoryItems(s.history, [withThumb], historyTombstones, {
+    ignoreTombstones: true,
+  });
+  const currentImage = history.find((candidate) => sameGenerateItem(candidate, withThumb)) ?? withThumb;
+  saveSelectedFilename(currentImage.filename ?? null);
+  set({ history, historyTombstones, currentImage });
 }

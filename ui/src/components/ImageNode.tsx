@@ -19,10 +19,10 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
   const duplicateBranchRoot = useAppStore((s) => s.duplicateBranchRoot);
   const deleteNode = useAppStore((s) => s.deleteNode);
   const attachImageToNode = useAppStore((s) => s.attachImageToNode);
+  const attachingImage = useAppStore((s) => s.attachingNodeIds.includes(id));
   const hasParentEdge = useAppStore((s) => s.graphEdges.some((edge) => edge.target === id));
   const updateNodeInternals = useUpdateNodeInternals();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [attachingImage, setAttachingImage] = useState(false);
   const attachInputRef = useRef<HTMLInputElement>(null);
 
   const onPromptChange = useCallback(
@@ -63,12 +63,7 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
       const file = e.currentTarget.files?.[0];
       e.currentTarget.value = "";
       if (!file) return;
-      setAttachingImage(true);
-      try {
-        await attachImageToNode(id, file);
-      } finally {
-        setAttachingImage(false);
-      }
+      await attachImageToNode(id, file);
     },
     [attachImageToNode, id],
   );
@@ -144,7 +139,6 @@ function ImageNodeImpl({ id, data, selected }: NodeProps<GraphNode>) {
           <span className={`image-node__status-pill image-node__status-pill--${d.status}`}>
             {statusLabel}
           </span>
-          <span className="image-node__menu">...</span>
         </div>
       </div>
       <div className="image-node__preview">

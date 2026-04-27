@@ -2,13 +2,19 @@ import { useEffect, useRef, useState, type TouchEvent } from "react";
 import { useAppStore } from "../store/useAppStore";
 import { ResultActions } from "./ResultActions";
 import { useI18n } from "../i18n";
-import { useIsMobile } from "../hooks/useIsMobile";
 import { copyTextToClipboard } from "../lib/clipboard";
 
 function sameImage(a: { filename?: string; image: string } | null, b: { filename?: string; image: string } | null) {
   if (!a || !b) return false;
   if (a.filename && b.filename) return a.filename === b.filename;
   return a.image === b.image;
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
 }
 
 export function Canvas() {
@@ -21,7 +27,6 @@ export function Canvas() {
   const getResolvedSize = useAppStore((s) => s.getResolvedSize);
   const showToast = useAppStore((s) => s.showToast);
   const { t } = useI18n();
-  const isMobile = useIsMobile();
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
   const imageKey = currentImage?.filename ?? currentImage?.url ?? currentImage?.image ?? "";
@@ -45,9 +50,27 @@ export function Canvas() {
   const displayQuality = currentImage?.quality ?? quality;
   const displaySize = currentImage?.size ?? getResolvedSize();
   const currentIndex = history.findIndex((item) => sameImage(item, currentImage));
-  const showNav = isMobile && history.length > 1 && currentIndex >= 0;
+  const showNav = history.length > 1 && currentIndex >= 0;
   const canPrevious = currentIndex > 0;
   const canNext = currentIndex >= 0 && currentIndex < history.length - 1;
+
+  useEffect(() => {
+    if (!showNav) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (event.key === "ArrowLeft" && canPrevious) {
+        event.preventDefault();
+        selectPreviousImage();
+      }
+      if (event.key === "ArrowRight" && canNext) {
+        event.preventDefault();
+        selectNextImage();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canNext, canPrevious, selectNextImage, selectPreviousImage, showNav]);
 
   const onTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     const t0 = e.touches[0];
