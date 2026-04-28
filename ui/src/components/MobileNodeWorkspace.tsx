@@ -38,7 +38,8 @@ import {
 } from "../lib/size";
 import type { Format, ImageModel, Moderation, Quality, SizePreset } from "../types";
 
-type MobileNodeView = "node" | "branches" | "map" | "connection";
+type MobileNodeView = "all" | "node" | "branches" | "map" | "connection";
+type MobileNodeTab = "all" | "node" | "branches";
 type ConnectionReturnView = "node" | "branches";
 type NodeListSort = "graphAsc" | "graphDesc";
 type NodeStatusFilter = "all" | ReturnType<typeof statusTone>;
@@ -235,7 +236,7 @@ function EdgeChips({
 
 export function MobileNodeWorkspace() {
   const { t } = useI18n();
-  const [activeView, setActiveView] = useState<MobileNodeView>("node");
+  const [activeView, setActiveView] = useState<MobileNodeView>("all");
   const [connectionEdgeId, setConnectionEdgeId] = useState<string | null>(null);
   const [connectionReturnView, setConnectionReturnView] = useState<ConnectionReturnView>("branches");
   const [sessionSheetOpen, setSessionSheetOpen] = useState(false);
@@ -547,8 +548,7 @@ export function MobileNodeWorkspace() {
 
   const showAllNodes = () => {
     setLastFocusedNodeId(selectedNodeId ?? lastFocusedNodeId);
-    selectNode(null);
-    setActiveView("node");
+    setActiveView("all");
   };
 
   const toggleLaneCollapsed = (rootId: string) => {
@@ -580,7 +580,7 @@ export function MobileNodeWorkspace() {
     const titleText = nodeName || promptText || t("mobileNode.noPromptYet");
     const showPromptPreview = Boolean(nodeName && promptText);
     const thumbnailSrc = item.node.data.imageUrl;
-    const isCurrent = item.node.id === lastFocusedNodeId;
+    const isCurrent = item.node.id === (selectedNodeId ?? lastFocusedNodeId);
     return (
       <div
         key={item.node.id}
@@ -692,7 +692,7 @@ export function MobileNodeWorkspace() {
     }, 50);
   };
 
-  const handleTabChange = (view: Exclude<MobileNodeView, "connection">) => {
+  const handleTabChange = (view: MobileNodeTab) => {
     setSessionSheetOpen(false);
     setLightboxOpen(false);
     setActiveView(view);
@@ -737,14 +737,14 @@ export function MobileNodeWorkspace() {
     link.click();
   };
 
-  const renderSelectedNode = () => {
-    if (!selected || !data) {
-      if (nodes.length) {
-        return (
-          <section className="mobile-node-empty mobile-node-empty--navigator">
-            <div className="mobile-node-list-heading">
-              <div>
-                <span>{t("mobileNode.nodeListTitle")}</span>
+  const renderAllNodes = () => {
+    if (nodes.length) {
+      return (
+        <section className="mobile-node-empty mobile-node-empty--navigator">
+          <div className="mobile-node-list-heading">
+            <div>
+              <span>{t("mobileNode.nodeListTitle")}</span>
+              <div className="mobile-node-list-heading__actions">
                 <button
                   type="button"
                   className="mobile-node-sort-toggle"
@@ -753,101 +753,125 @@ export function MobileNodeWorkspace() {
                 >
                   {nodeListSort === "graphAsc" ? t("mobileNode.nodeSortAsc") : t("mobileNode.nodeSortDesc")}
                 </button>
+                <button type="button" className="mobile-node-sort-toggle" onClick={() => setActiveView("map")}>
+                  {t("mobileNode.openMapShort")}
+                </button>
               </div>
-              <small>{t("mobileNode.nodeListHelp")}</small>
             </div>
-            <div className="mobile-node-node-filters" role="search">
-              <input
-                type="search"
-                className="mobile-node-node-search"
-                value={nodeSearchQuery}
-                onChange={(event) => setNodeSearchQuery(event.currentTarget.value)}
-                placeholder={t("mobileNode.nodeSearchPlaceholder")}
-                aria-label={t("mobileNode.nodeSearchLabel")}
-              />
-              <div className="mobile-node-status-filters" aria-label={t("mobileNode.statusFilterLabel")}>
-                {NODE_STATUS_FILTERS.map((filter) => (
+            <small>{t("mobileNode.nodeListHelp")}</small>
+          </div>
+          <div className="mobile-node-node-filters" role="search">
+            <input
+              type="search"
+              className="mobile-node-node-search"
+              value={nodeSearchQuery}
+              onChange={(event) => setNodeSearchQuery(event.currentTarget.value)}
+              placeholder={t("mobileNode.nodeSearchPlaceholder")}
+              aria-label={t("mobileNode.nodeSearchLabel")}
+            />
+            <div className="mobile-node-status-filters" aria-label={t("mobileNode.statusFilterLabel")}>
+              {NODE_STATUS_FILTERS.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  className={`mobile-node-status-filter${nodeStatusFilter === filter ? " is-active" : ""}`}
+                  onClick={() => setNodeStatusFilter(filter)}
+                  aria-pressed={nodeStatusFilter === filter}
+                >
+                  {getStatusFilterLabel(t, filter)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mobile-node-branch-lanes">
+            {visibleBranchLanes.length === 0 ? (
+              <div className="mobile-node-no-results">{t("mobileNode.nodeNoResults")}</div>
+            ) : null}
+            {visibleBranchLanes.map((lane) => {
+              const collapsed = !nodeFiltersActive && collapsedLaneIds.has(lane.rootId);
+              const summary = laneStatusSummary(t, lane.statusCounts);
+              return (
+                <section
+                  key={lane.rootId}
+                  className={`mobile-node-branch-lane${collapsed ? " is-collapsed" : ""}`}
+                  style={{ "--node-tree-color": lane.treeColor } as CSSProperties}
+                >
                   <button
-                    key={filter}
                     type="button"
-                    className={`mobile-node-status-filter${nodeStatusFilter === filter ? " is-active" : ""}`}
-                    onClick={() => setNodeStatusFilter(filter)}
-                    aria-pressed={nodeStatusFilter === filter}
+                    className="mobile-node-branch-lane__header"
+                    onClick={() => toggleLaneCollapsed(lane.rootId)}
+                    aria-expanded={!collapsed}
+                    aria-label={t(collapsed ? "mobileNode.laneExpand" : "mobileNode.laneCollapse", {
+                      name: nodeLabel(lane.root),
+                    })}
                   >
-                    {getStatusFilterLabel(t, filter)}
+                    <span className="mobile-node-branch-lane__marker" aria-hidden="true" />
+                    <span className="mobile-node-branch-lane__title">
+                      <strong>{nodeLabel(lane.root)}</strong>
+                      <small>
+                        {nodeFiltersActive
+                          ? t("mobileNode.laneMatches", { count: lane.matchCount })
+                          : `${t("mobileNode.laneNodes", { count: lane.itemCount })} · ${t("mobileNode.laneLeaves", { count: lane.leafCount })}`}
+                      </small>
+                    </span>
+                    {summary ? <span className="mobile-node-branch-lane__summary">{summary}</span> : null}
+                    <span className="mobile-node-branch-lane__chevron" aria-hidden="true">
+                      {collapsed ? "▸" : "▾"}
+                    </span>
                   </button>
-                ))}
-              </div>
-            </div>
-            <div className="mobile-node-branch-lanes">
-              {visibleBranchLanes.length === 0 ? (
-                <div className="mobile-node-no-results">{t("mobileNode.nodeNoResults")}</div>
-              ) : null}
-              {visibleBranchLanes.map((lane) => {
-                const collapsed = !nodeFiltersActive && collapsedLaneIds.has(lane.rootId);
-                const summary = laneStatusSummary(t, lane.statusCounts);
-                return (
-                  <section
-                    key={lane.rootId}
-                    className={`mobile-node-branch-lane${collapsed ? " is-collapsed" : ""}`}
-                    style={{ "--node-tree-color": lane.treeColor } as CSSProperties}
-                  >
-                    <button
-                      type="button"
-                      className="mobile-node-branch-lane__header"
-                      onClick={() => toggleLaneCollapsed(lane.rootId)}
-                      aria-expanded={!collapsed}
-                      aria-label={t(collapsed ? "mobileNode.laneExpand" : "mobileNode.laneCollapse", {
-                        name: nodeLabel(lane.root),
-                      })}
-                    >
-                      <span className="mobile-node-branch-lane__marker" aria-hidden="true" />
-                      <span className="mobile-node-branch-lane__title">
-                        <strong>{nodeLabel(lane.root)}</strong>
-                        <small>
-                          {nodeFiltersActive
-                            ? t("mobileNode.laneMatches", { count: lane.matchCount })
-                            : `${t("mobileNode.laneNodes", { count: lane.itemCount })} · ${t("mobileNode.laneLeaves", { count: lane.leafCount })}`}
-                        </small>
-                      </span>
-                      {summary ? <span className="mobile-node-branch-lane__summary">{summary}</span> : null}
-                      <span className="mobile-node-branch-lane__chevron" aria-hidden="true">
-                        {collapsed ? "▸" : "▾"}
-                      </span>
-                    </button>
-                    {!collapsed ? (
-                      <div className="mobile-node-branch-lane__body">
-                        {lane.tree ? renderBranchTreeItem(lane.tree, lane) : null}
-                      </div>
-                    ) : null}
-                  </section>
-                );
-              })}
-            </div>
-          </section>
-        );
-      }
+                  {!collapsed ? (
+                    <div className="mobile-node-branch-lane__body">
+                      {lane.tree ? renderBranchTreeItem(lane.tree, lane) : null}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
+          </div>
+        </section>
+      );
+    }
 
+    return (
+      <section className="mobile-node-empty">
+        <div className="mobile-node-empty__mark">NODE</div>
+        <h1>{t("mobileNode.startTitle")}</h1>
+        <p>{t("mobileNode.startDescription")}</p>
+        <div className="mobile-node-empty__actions">
+          <button type="button" className="mobile-node-primary" onClick={addRoot}>
+            {t("mobileNode.addFirst")}
+          </button>
+          <button
+            type="button"
+            className="mobile-node-button"
+            onClick={importCurrent}
+            disabled={!currentImage?.filename}
+          >
+            {t("mobileNode.importCurrentResult")}
+          </button>
+        </div>
+        <small className="mobile-node-empty__hint">{t("mobileNode.importCurrentHelp")}</small>
+        <small className="mobile-node-empty__hint">{t("mobileNode.sessionHint")}</small>
+      </section>
+    );
+  };
+
+  const renderSelectedNode = () => {
+    if (!selected || !data) {
       return (
-        <section className="mobile-node-empty">
-          <div className="mobile-node-empty__mark">NODE</div>
-          <h1>{t("mobileNode.startTitle")}</h1>
-          <p>{t("mobileNode.startDescription")}</p>
+        <section className="mobile-node-empty mobile-node-empty--compact">
+          <h2>{t("mobileNode.noSelectionTitle")}</h2>
+          <p>{t("mobileNode.noSelectionDescription")}</p>
           <div className="mobile-node-empty__actions">
             <button type="button" className="mobile-node-primary" onClick={addRoot}>
-              {t("mobileNode.addFirst")}
+              {t(nodes.length ? "mobileNode.addRootShort" : "mobileNode.addFirst")}
             </button>
-            <button
-              type="button"
-              className="mobile-node-button"
-              onClick={importCurrent}
-              disabled={!currentImage?.filename}
-            >
-              {t("mobileNode.importCurrentResult")}
-            </button>
+            {nodes.length ? (
+              <button type="button" className="mobile-node-button" onClick={showAllNodes}>
+                {t("mobileNode.allNodes")}
+              </button>
+            ) : null}
           </div>
-          <small className="mobile-node-empty__hint">{t("mobileNode.importCurrentHelp")}</small>
-          <small className="mobile-node-empty__hint">{t("mobileNode.sessionHint")}</small>
         </section>
       );
     }
@@ -1267,8 +1291,8 @@ export function MobileNodeWorkspace() {
         <section className="mobile-node-panel">
           <h2>{t("mobileNode.branchesTitle")}</h2>
           <p>{t("mobileNode.noSelectionDescription")}</p>
-          <button type="button" className="mobile-node-primary" onClick={() => setActiveView("map")}>
-            {t("mobileNode.openMap")}
+          <button type="button" className="mobile-node-primary" onClick={showAllNodes}>
+            {t("mobileNode.allNodes")}
           </button>
         </section>
       );
@@ -1407,7 +1431,9 @@ export function MobileNodeWorkspace() {
             <h2>{t("mobileNode.mapTitle")}</h2>
             <p>{t("mobileNode.mapSubtitle")}</p>
           </div>
-          <span>{nodes.length}</span>
+          <button type="button" onClick={showAllNodes}>
+            {t("mobileNode.backToAll")}
+          </button>
         </div>
         {nodes.length ? (
           <div className="mobile-node-map">
@@ -1572,7 +1598,9 @@ export function MobileNodeWorkspace() {
   };
 
   const activeViewContent =
-    activeView === "branches"
+    activeView === "all"
+      ? renderAllNodes()
+      : activeView === "branches"
       ? renderBranches()
       : activeView === "map"
         ? renderMap()
@@ -1589,11 +1617,6 @@ export function MobileNodeWorkspace() {
             <span>{activeSession?.title ?? t("session.loading")}</span>
             <small>{nodes.length} {t("uiMode.node")}</small>
           </button>
-          {nodes.length ? (
-            <button type="button" className="mobile-node-brand__all-nodes" onClick={showAllNodes}>
-              {t("mobileNode.allNodes")}
-            </button>
-          ) : null}
         </div>
         <div className="mobile-node-topbar__actions">
           <button type="button" onClick={() => setUIMode("classic")}>
@@ -1697,11 +1720,17 @@ export function MobileNodeWorkspace() {
       ) : null}
       <div className="mobile-node-view">{activeViewContent}</div>
       <nav className="mobile-node-tabs" aria-label={t("mobileNode.tabsLabel")}>
-        {(["node", "branches", "map"] as const).map((view) => (
+        {(["all", "node", "branches"] as const).map((view) => (
           <button
             key={view}
             type="button"
-            className={activeView === view || (view === "branches" && activeView === "connection") ? "is-active" : ""}
+            className={
+              activeView === view ||
+              (view === "all" && activeView === "map") ||
+              (view === "branches" && activeView === "connection")
+                ? "is-active"
+                : ""
+            }
             onClick={() => handleTabChange(view)}
           >
             {t(`mobileNode.tabs.${view}`)}

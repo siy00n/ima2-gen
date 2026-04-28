@@ -413,6 +413,7 @@
     "title": "Node Workspace",
     "tabsLabel": "Mobile node views",
     "tabs": {
+      "all": "All",
       "node": "Node",
       "branches": "Branches",
       "map": "Map"
@@ -420,7 +421,7 @@
     "startTitle": "Start with a node",
     "startDescription": "On mobile, edit the workflow one selected node at a time: prompt, generate, branch, then inspect the result.",
     "noSelectionTitle": "Select a node",
-    "noSelectionDescription": "Pick a node from the map or list to edit its prompt, generation settings, and branch actions.",
+    "noSelectionDescription": "Pick a node from All to edit its prompt, generation settings, and branch actions.",
     "addFirst": "Add first node",
     "addRootShort": "+ Root",
     "allNodes": "All nodes",
@@ -471,6 +472,8 @@
     "duplicateRoot": "Duplicate as root",
     "openConnection": "Connection settings",
     "openMap": "Open map",
+    "openMapShort": "Map",
+    "backToAll": "Back to All",
     "mapTitle": "Workflow map",
     "mapSubtitle": "Read-only navigation map. Tap a node to edit it.",
     "noConnection": "No connection is selected.",

@@ -413,6 +413,7 @@
     "title": "노드 작업공간",
     "tabsLabel": "모바일 노드 화면",
     "tabs": {
+      "all": "전체",
       "node": "노드",
       "branches": "브랜치",
       "map": "맵"
@@ -420,7 +421,7 @@
     "startTitle": "첫 노드로 시작",
     "startDescription": "모바일에서는 그래프를 직접 끌기보다 노드를 하나씩 선택해 프롬프트, 생성, 브랜치를 편집합니다.",
     "noSelectionTitle": "노드를 선택하세요",
-    "noSelectionDescription": "맵이나 목록에서 노드를 선택하면 프롬프트, 생성 설정, 브랜치 액션을 바로 편집할 수 있습니다.",
+    "noSelectionDescription": "전체에서 노드를 선택하면 프롬프트, 생성 설정, 브랜치 액션을 바로 편집할 수 있습니다.",
     "addFirst": "첫 노드 추가",
     "addRootShort": "+ Root",
     "allNodes": "전체 노드",
@@ -471,6 +472,8 @@
     "duplicateRoot": "루트로 복제",
     "openConnection": "연결 설정",
     "openMap": "맵 열기",
+    "openMapShort": "맵",
+    "backToAll": "전체로 돌아가기",
     "mapTitle": "워크플로우 맵",
     "mapSubtitle": "읽기/선택용 맵입니다. 노드를 탭하면 편집 화면으로 이동합니다.",
     "noConnection": "선택한 연결이 없습니다.",
