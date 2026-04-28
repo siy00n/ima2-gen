@@ -9,12 +9,25 @@ function readSource(path) {
   return readFileSync(join(root, path), "utf8");
 }
 
+function readCssBundle() {
+  return [
+    "ui/src/index.css",
+    "ui/src/styles/base-layout.css",
+    "ui/src/styles/classic-canvas.css",
+    "ui/src/styles/gallery-history.css",
+    "ui/src/styles/prompt-library.css",
+    "ui/src/styles/overlays.css",
+    "ui/src/styles/mobile.css",
+    "ui/src/styles/node.css",
+  ].map(readSource).join("\n");
+}
+
 describe("prompt library UI contract", () => {
   it("keeps prompt library modules standalone for later integration", () => {
     const panel = readSource("ui/src/components/PromptLibraryPanel.tsx");
     const sidebar = readSource("ui/src/components/SidebarPromptLibrary.tsx");
     const app = readSource("ui/src/App.tsx");
-    const css = readSource("ui/src/index.css");
+    const css = readCssBundle();
     const client = readSource("ui/src/lib/promptLibrary.ts");
 
     assert.match(panel, /export type PromptLibraryPanelProps/);

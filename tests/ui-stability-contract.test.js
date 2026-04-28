@@ -9,6 +9,19 @@ function readSource(path) {
   return readFileSync(join(root, path), "utf8");
 }
 
+function readCssBundle() {
+  return [
+    "ui/src/index.css",
+    "ui/src/styles/base-layout.css",
+    "ui/src/styles/classic-canvas.css",
+    "ui/src/styles/gallery-history.css",
+    "ui/src/styles/prompt-library.css",
+    "ui/src/styles/overlays.css",
+    "ui/src/styles/mobile.css",
+    "ui/src/styles/node.css",
+  ].map(readSource).join("\n");
+}
+
 describe("UI stability contracts", () => {
   it("keeps node attach state in the store and hides node-owned imports from gallery history", () => {
     const store = readSource("ui/src/store/useAppStore.ts");
@@ -30,7 +43,7 @@ describe("UI stability contracts", () => {
   it("removes the nonfunctional node menu placeholder and enables classic navigation", () => {
     const imageNode = readSource("ui/src/components/ImageNode.tsx");
     const canvas = readSource("ui/src/components/Canvas.tsx");
-    const css = readSource("ui/src/index.css");
+    const css = readCssBundle();
 
     assert.doesNotMatch(imageNode, /image-node__menu/);
     assert.doesNotMatch(css, /\.image-node__menu/);
@@ -67,7 +80,7 @@ describe("UI stability contracts", () => {
     const canvas = readSource("ui/src/components/Canvas.tsx");
     const dock = readSource("ui/src/components/ClassicFloatingComposer.tsx");
     const rightPanel = readSource("ui/src/components/RightPanel.tsx");
-    const css = readSource("ui/src/index.css");
+    const css = readCssBundle();
 
     assert.match(store, /classicComposerExpanded: boolean/);
     assert.match(store, /classicRailDrawer: "library" \| "activity" \| null/);
