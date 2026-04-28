@@ -15,6 +15,7 @@ import {
 } from "../lib/promptLibrary";
 import { PromptLibraryEditor } from "./PromptLibraryEditor";
 import { PromptLibraryRow } from "./PromptLibraryRow";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 type PromptLibraryLabels = {
   title?: string;
@@ -99,8 +100,10 @@ export function PromptLibraryPanel({
   const [editing, setEditing] = useState<PromptItem | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -120,7 +123,10 @@ export function PromptLibraryPanel({
   }, [filtered, selectedId]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setMobileDetailOpen(false);
+      return;
+    }
     if (!selectedPrompt) {
       setSelectedId(null);
       return;
@@ -158,10 +164,17 @@ export function PromptLibraryPanel({
   const openEditor = (prompt: PromptItem | null) => {
     setEditing(prompt);
     setEditorOpen(true);
+    if (isMobile) setMobileDetailOpen(true);
+  };
+
+  const selectPrompt = (prompt: PromptItem) => {
+    setSelectedId(prompt.id);
+    if (isMobile) setMobileDetailOpen(true);
   };
 
   const title = selectedPrompt?.name || labels.untitled || "Untitled prompt";
   const canApplyPrompt = targetAvailable && !!selectedPrompt;
+  const showMobileDetail = isMobile && (mobileDetailOpen || editorOpen);
 
   return (
     <section
@@ -242,6 +255,7 @@ export function PromptLibraryPanel({
         </header>
 
         <div className="prompt-library-panel__body">
+          {(!isMobile || !showMobileDetail) ? (
           <div className="prompt-library-panel__browser">
             <div className="prompt-library-panel__filters">
               <input
@@ -280,7 +294,7 @@ export function PromptLibraryPanel({
                     selected={selectedPrompt?.id === prompt.id}
                     highlighted={lastSavedId === prompt.id}
                     labels={labels}
-                    onSelect={(item) => setSelectedId(item.id)}
+                    onSelect={selectPrompt}
                     onToggleFavorite={
                       onToggleFavorite
                         ? (item) => void onToggleFavorite(item.id, item)
@@ -291,8 +305,22 @@ export function PromptLibraryPanel({
               )}
             </div>
           </div>
+          ) : null}
 
+          {(!isMobile || showMobileDetail) ? (
           <aside className="prompt-library-panel__detail">
+            {isMobile ? (
+              <button
+                type="button"
+                className="prompt-library-panel__back"
+                onClick={() => {
+                  closeEditor();
+                  setMobileDetailOpen(false);
+                }}
+              >
+                {"<"} {labels.title || "Prompt library"}
+              </button>
+            ) : null}
             {editorOpen ? (
               <PromptLibraryEditor
                 prompt={editing}
@@ -387,6 +415,7 @@ export function PromptLibraryPanel({
               </div>
             )}
           </aside>
+          ) : null}
         </div>
 
         {dragActive && onImport && (

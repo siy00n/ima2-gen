@@ -189,7 +189,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`sidebar${isClassicDesktop ? " sidebar--classic-expanded" : ""}${isMobile && uiMode === "classic" ? " sidebar--mobile-composer" : ""}${collapsed ? " sidebar--prompt-collapsed" : ""}`}
+      className={`sidebar${isClassicDesktop ? " sidebar--classic-expanded" : ""}${isMobile && uiMode === "classic" ? " sidebar--mobile-composer" : ""}${isMobile && uiMode === "node" ? " sidebar--mobile-node" : ""}${collapsed ? " sidebar--prompt-collapsed" : ""}`}
     >
       {collapsed ? (
         <button

@@ -57,6 +57,7 @@ function NodeCanvasInner() {
   const openEdgePopover = useAppStore((s) => s.openEdgePopover);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
   const detachNodeFromParent = useAppStore((s) => s.detachNodeFromParent);
+  const setRightPanelOpen = useAppStore((s) => s.setRightPanelOpen);
   const sessionLoading = useAppStore((s) => s.sessionLoading);
   const undoGraph = useAppStore((s) => (s as typeof s & GraphHistorySurface).undoGraph);
   const redoGraph = useAppStore((s) => (s as typeof s & GraphHistorySurface).redoGraph);
@@ -220,7 +221,10 @@ function NodeCanvasInner() {
             onConnectEnd={onConnectEnd}
             onNodesDelete={onNodesDelete}
             onEdgesDelete={onEdgesDelete}
-            onNodeClick={(_, node) => selectNode(node.id)}
+            onNodeClick={(_, node) => {
+              selectNode(node.id);
+              if (isMobile) setRightPanelOpen(true);
+            }}
             onEdgeClick={(_, edge) => {
               if (isMobile) selectEdge(edge.id);
               else openEdgePopover(edge.id);
@@ -231,6 +235,9 @@ function NodeCanvasInner() {
             connectionRadius={isMobile ? 20 : 48}
             connectionDragThreshold={isMobile ? 1 : 3}
             fitView
+            fitViewOptions={{ padding: isMobile ? 0.08 : 0.2 }}
+            minZoom={isMobile ? 0.18 : 0.2}
+            maxZoom={isMobile ? 0.95 : 1.5}
             deleteKeyCode={["Delete", "Backspace"]}
             proOptions={{ hideAttribution: true }}
           >

@@ -41,6 +41,7 @@ export function RightPanel() {
   const setModeration = useAppStore((s) => s.setModeration);
   const count = useAppStore((s) => s.count);
   const setCount = useAppStore((s) => s.setCount);
+  const resolvedSize = useAppStore((s) => s.getResolvedSize());
 
   const QUALITY_ITEMS = [
     { value: "low" as const, label: t("quality.lowLabel"), sub: t("quality.lowSub") },
@@ -112,31 +113,69 @@ export function RightPanel() {
                 value={quality}
                 onChange={setQuality}
               />
-              <SizePicker />
-              <OptionGroup<Format>
-                title={t("format.title")}
-                items={FORMAT_ITEMS}
-                value={format}
-                onChange={setFormat}
-              />
-              <OptionGroup<Moderation>
-                title={t("moderation.title")}
-                items={MOD_ITEMS}
-                value={moderation}
-                onChange={setModeration}
-              />
-              <p className="option-help">
-                {t("moderation.explain")}
-              </p>
-              {uiMode === "classic" ? (
-                <OptionGroup<string>
-                  title={t("count.title")}
-                  items={COUNT_ITEMS}
-                  value={String(count)}
-                  onChange={(v) => setCount(Number(v) as Count)}
-                />
-              ) : null}
-              <CostEstimate />
+              {isMobile ? (
+                <details className="mobile-settings-advanced">
+                  <summary>
+                    <span>{t("size.title")} / {t("format.title")}</span>
+                    <small>{resolvedSize} · {format}</small>
+                  </summary>
+                  <div className="mobile-settings-advanced__body">
+                    <SizePicker />
+                    <OptionGroup<Format>
+                      title={t("format.title")}
+                      items={FORMAT_ITEMS}
+                      value={format}
+                      onChange={setFormat}
+                    />
+                    <OptionGroup<Moderation>
+                      title={t("moderation.title")}
+                      items={MOD_ITEMS}
+                      value={moderation}
+                      onChange={setModeration}
+                    />
+                    <p className="option-help">
+                      {t("moderation.explain")}
+                    </p>
+                    {uiMode === "classic" ? (
+                      <OptionGroup<string>
+                        title={t("count.title")}
+                        items={COUNT_ITEMS}
+                        value={String(count)}
+                        onChange={(v) => setCount(Number(v) as Count)}
+                      />
+                    ) : null}
+                    <CostEstimate />
+                  </div>
+                </details>
+              ) : (
+                <>
+                  <SizePicker />
+                  <OptionGroup<Format>
+                    title={t("format.title")}
+                    items={FORMAT_ITEMS}
+                    value={format}
+                    onChange={setFormat}
+                  />
+                  <OptionGroup<Moderation>
+                    title={t("moderation.title")}
+                    items={MOD_ITEMS}
+                    value={moderation}
+                    onChange={setModeration}
+                  />
+                  <p className="option-help">
+                    {t("moderation.explain")}
+                  </p>
+                  {uiMode === "classic" ? (
+                    <OptionGroup<string>
+                      title={t("count.title")}
+                      items={COUNT_ITEMS}
+                      value={String(count)}
+                      onChange={(v) => setCount(Number(v) as Count)}
+                    />
+                  ) : null}
+                  <CostEstimate />
+                </>
+              )}
             </>
           )}
         </div>

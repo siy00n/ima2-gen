@@ -431,12 +431,11 @@ export function GalleryModal() {
               </div>
             </div>
             <input
-              type="text"
+              type="search"
               className="gallery__search"
               placeholder={showSessions ? t("gallery.searchDisabledPlaceholder") : t("gallery.searchPlaceholder")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              autoFocus
               disabled={showSessions}
             />
             <button

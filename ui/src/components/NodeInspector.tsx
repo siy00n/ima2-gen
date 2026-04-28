@@ -340,6 +340,11 @@ export function NodeInspector() {
   const imageSrc = data.imageUrl ?? null;
   const parent = selected ? nodes.find((n) => edges.some((e) => e.source === n.id && e.target === selected.id)) : null;
   const hasParent = !!parent;
+  const incomingEdge = selected && parent
+    ? edges.find((edge) => edge.source === parent.id && edge.target === selected.id)
+    : null;
+  const incomingEdgeData = incomingEdge ? normalizeEdgeTransferData(incomingEdge.data) : null;
+  const incomingEdgeState = incomingEdgeData ? getEdgeVisualState(incomingEdgeData) : null;
   const selectedMeta = graphMeta.get(selected.id) ?? {
     level: 0,
     isolated: true,
@@ -606,6 +611,16 @@ export function NodeInspector() {
           />
         </label>
         {data.error ? <div className="node-inspector__error">{data.error}</div> : null}
+        <button
+          type="button"
+          className={`node-inspector__generate-now ${busy ? "node-inspector__danger" : "node-inspector__primary"}`}
+          onClick={() =>
+            busy ? void cancelNodeGeneration(selected.id) : void generateNode(selected.id)
+          }
+          disabled={busy ? !data.pendingRequestId : !canGenerate}
+        >
+          {generateLabel}
+        </button>
         {hasParent ? (
           <div className="node-inspector__actions node-inspector__actions--parent">
             <button
@@ -626,7 +641,123 @@ export function NodeInspector() {
             </button>
           </div>
         ) : null}
-        <details className="node-inspector__settings" open>
+        {isMobile && parent && incomingEdge && incomingEdgeData && incomingEdgeState ? (
+          <details className="node-inspector__settings node-inspector__mobile-transfer" open>
+            <summary className="node-inspector__settings-summary">
+              <span>{t("nodeInspector.connectionTitle")}</span>
+              <small>
+                {nodeLabel(parent)} -&gt; {nodeLabel(selected)}
+              </small>
+            </summary>
+            <div className="node-inspector__settings-body">
+              <div className="node-inspector__edge-state" data-state={incomingEdgeState}>
+                <span
+                  className={`node-inspector__edge-chip node-inspector__edge-chip--image${incomingEdgeData.imageTransfer !== "off" ? " is-on" : ""}`}
+                  data-image-transfer={incomingEdgeData.imageTransfer}
+                  title={t("edgeBadge.imageTitle")}
+                >
+                  {t(imageTransferLabelKey(incomingEdgeData.imageTransfer))}
+                </span>
+                <span className={`node-inspector__edge-chip node-inspector__edge-chip--context${incomingEdgeData.transferContext ? " is-on" : ""}`}>
+                  {t("edgeBadge.context")}
+                </span>
+                <span className={`node-inspector__edge-chip node-inspector__edge-chip--settings${incomingEdgeData.transferSettings ? " is-on" : ""}`}>
+                  {t("edgeBadge.settings")}
+                </span>
+              </div>
+              <div className="node-inspector__toggles">
+                <label className="node-inspector__toggle-row">
+                  <span>
+                    {t("nodeInspector.transferContext")}
+                    <small>
+                      {t(
+                        incomingEdgeData.transferContext
+                          ? "nodeInspector.transferContextOn"
+                          : "nodeInspector.transferContextOff",
+                      )}
+                    </small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={incomingEdgeData.transferContext}
+                    onChange={(event) =>
+                      updateEdgeTransfer(incomingEdge.id, { transferContext: event.target.checked })
+                    }
+                  />
+                </label>
+                <div className="node-inspector__toggle-row node-inspector__toggle-row--stacked">
+                  <span>
+                    {t("nodeInspector.imageTransfer")}
+                    <small>{t(`nodeInspector.imageTransfer${incomingEdgeData.imageTransfer[0].toUpperCase()}${incomingEdgeData.imageTransfer.slice(1)}`)}</small>
+                  </span>
+                  <div className="node-inspector__segmented" role="group" aria-label={t("nodeInspector.imageTransfer")}>
+                    {IMAGE_TRANSFER_OPTIONS.map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        className={incomingEdgeData.imageTransfer === mode ? "is-selected" : ""}
+                        onClick={() => setEdgeImageTransfer(incomingEdge.id, mode)}
+                      >
+                        {t(imageTransferLabelKey(mode))}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="node-inspector__toggle-row node-inspector__toggle-row--stacked">
+                  <span>
+                    {t("nodeInspector.maxAncestorImages")}
+                    <small>
+                      {incomingEdgeData.imageTransfer === "ancestor"
+                        ? t("nodeInspector.maxAncestorImagesHelp")
+                        : t("nodeInspector.maxAncestorImagesDisabled")}
+                    </small>
+                  </span>
+                  <div
+                    className="node-inspector__segmented node-inspector__segmented--ancestor-count"
+                    role="group"
+                    aria-label={t("nodeInspector.maxAncestorImages")}
+                  >
+                    {ANCESTOR_IMAGE_COUNT_OPTIONS.map((count) => (
+                      <button
+                        key={count}
+                        type="button"
+                        disabled={incomingEdgeData.imageTransfer !== "ancestor"}
+                        className={incomingEdgeData.maxAncestorImages === count ? "is-selected" : ""}
+                        onClick={() =>
+                          updateEdgeTransfer(incomingEdge.id, {
+                            maxAncestorImages: count as AncestorImageCount,
+                          })
+                        }
+                      >
+                        {count}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="node-inspector__toggle-row">
+                  <span>
+                    {t("nodeInspector.transferSettings")}
+                    <small>
+                      {t(
+                        incomingEdgeData.transferSettings
+                          ? "nodeInspector.transferSettingsOn"
+                          : "nodeInspector.transferSettingsOff",
+                      )}
+                    </small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={incomingEdgeData.transferSettings}
+                    onChange={(event) =>
+                      updateEdgeTransfer(incomingEdge.id, { transferSettings: event.target.checked })
+                    }
+                  />
+                </label>
+              </div>
+            </div>
+          </details>
+        ) : null}
+        <details className="node-inspector__settings" open={!isMobile}>
           <summary className="node-inspector__settings-summary">
             <span>{t("nodeInspector.nodeSettings")}</span>
             <small>{settingsSummary}</small>
@@ -728,16 +859,6 @@ export function NodeInspector() {
           </div>
         </details>
         <div className="node-inspector__action-panel">
-          <button
-            type="button"
-            className={busy ? "node-inspector__danger" : "node-inspector__primary"}
-            onClick={() =>
-              busy ? void cancelNodeGeneration(selected.id) : void generateNode(selected.id)
-            }
-            disabled={busy ? !data.pendingRequestId : !canGenerate}
-          >
-            {generateLabel}
-          </button>
           <details
             className="node-inspector__api-preview"
             open={apiPreviewOpen}
