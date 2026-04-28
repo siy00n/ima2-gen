@@ -527,10 +527,10 @@ body {
   height: 100dvh;
 }
 .canvas--classic-floating {
-  padding-bottom: 112px;
+  padding-bottom: 136px;
 }
 .app--classic-composer-open .canvas--classic-floating {
-  padding-bottom: 214px;
+  padding-bottom: 196px;
 }
 
 .classic-composer-dock {
@@ -747,10 +747,10 @@ body {
   object-fit: contain;
 }
 .canvas--classic-floating .result-img {
-  max-height: calc(100dvh - 285px);
+  max-height: calc(100dvh - 320px);
 }
 .app--classic-composer-open .canvas--classic-floating .result-img {
-  max-height: calc(100dvh - 410px);
+  max-height: calc(100dvh - 370px);
 }
 
 .result-prompt {
