@@ -1326,215 +1326,305 @@ function buildPreviewContentOrder(content, images) {
   });
 }
 
-app.post("/api/node/generate/preview", async (req, res) => {
-  const body = req.body || {};
+function nodeGenerateRequestError(code, message, status = 400, parentNodeId = null) {
+  const err = new Error(message);
+  err.code = code;
+  err.status = status;
+  err.parentNodeId = parentNodeId;
+  return err;
+}
+
+function nodeGenerateTools(kind, quality, size, moderation) {
+  return kind === "edit"
+    ? [{ type: "image_generation", quality, size, moderation }]
+    : [
+        { type: "web_search" },
+        { type: "image_generation", quality, size, moderation },
+      ];
+}
+
+function buildNodeGeneratePreviewImages({
+  parentNodeId,
+  parentImage,
+  parentVisualContext,
+  ancestorImages,
+  externalSrc,
+  refInputs,
+}) {
+  if (parentNodeId && parentImage) {
+    return [
+      ...ancestorImages.map((image, index) => ({
+        order: index + 1,
+        relation: "ancestor",
+        nodeId: image.visualContext?.nodeId ?? image.filename.replace(/\.[^.]+$/, ""),
+        filename: image.filename,
+        mime: image.mime,
+        labelText: image.visualContext ? formatVisualImageLabel(image.visualContext, index + 1) : null,
+        visualContext: image.visualContext ?? null,
+      })),
+      {
+        order: ancestorImages.length + 1,
+        relation: "parent",
+        nodeId: parentNodeId,
+        filename: parentImage.filename,
+        mime: parentImage.mime,
+        labelText: parentVisualContext
+          ? formatVisualImageLabel(parentVisualContext, ancestorImages.length + 1)
+          : null,
+        visualContext: parentVisualContext,
+      },
+    ];
+  }
+
+  if (externalSrc && parentImage) {
+    return [{
+      order: 1,
+      relation: "external",
+      nodeId: null,
+      filename: externalSrc,
+      mime: parentImage.mime,
+      labelText: null,
+      visualContext: null,
+      sourceMeta: parentImage.meta,
+    }];
+  }
+
+  return refInputs.map((ref, index) => ({
+    order: index + 1,
+    relation: "reference",
+    nodeId: null,
+    filename: null,
+    mime: ref.mime || "image/png",
+    labelText: null,
+    visualContext: null,
+  }));
+}
+
+async function prepareNodeGenerateDelivery(
+  body,
+  {
+    rootDir,
+    loadNodeImageInput,
+    loadExternalImageInput,
+  },
+) {
   const parentNodeId = body.parentNodeId ?? null;
+  const {
+    prompt,
+    quality = "low",
+    size = "1024x1024",
+    format = "png",
+    moderation = "low",
+    model: rawModel,
+    references = [],
+    ancestorNodeIds = [],
+    externalSrc = null,
+  } = body;
+  const { provider = "oauth" } = body;
+  const requestId = typeof body.requestId === "string" ? body.requestId : null;
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId : null;
+  const clientNodeId = typeof body.clientNodeId === "string" ? body.clientNodeId : null;
+  const displayPrompt =
+    typeof body.displayPrompt === "string" && body.displayPrompt.trim()
+      ? body.displayPrompt
+      : prompt;
+  const effectivePrompt =
+    typeof body.effectivePrompt === "string" && body.effectivePrompt.trim()
+      ? body.effectivePrompt
+      : prompt;
 
-  try {
-    const {
-      prompt,
-      quality = "low",
-      size = "1024x1024",
-      format = "png",
-      moderation = "low",
-      model: rawModel,
-      references = [],
-      ancestorNodeIds = [],
-      externalSrc = null,
-    } = body;
-    const { provider = "oauth" } = body;
-    const displayPrompt =
-      typeof body.displayPrompt === "string" && body.displayPrompt.trim()
-        ? body.displayPrompt
-        : prompt;
-    const effectivePrompt =
-      typeof body.effectivePrompt === "string" && body.effectivePrompt.trim()
-        ? body.effectivePrompt
-        : prompt;
+  if (provider === "api") {
+    throw nodeGenerateRequestError(
+      "APIKEY_DISABLED",
+      "API key provider is disabled. Use OAuth.",
+      403,
+      parentNodeId,
+    );
+  }
+  if (!prompt || typeof prompt !== "string") {
+    throw nodeGenerateRequestError("INVALID_PROMPT", "Prompt is required", 400, parentNodeId);
+  }
+  if (!Array.isArray(references) || references.length > 5) {
+    throw nodeGenerateRequestError(
+      "INVALID_REFS",
+      "references must be an array of up to 5 base64 strings",
+      400,
+      parentNodeId,
+    );
+  }
+  if (
+    !Array.isArray(ancestorNodeIds) ||
+    ancestorNodeIds.length > MAX_NODE_ANCESTOR_IMAGES ||
+    ancestorNodeIds.some((id) => typeof id !== "string")
+  ) {
+    throw nodeGenerateRequestError(
+      "INVALID_ANCESTORS",
+      `ancestorNodeIds must be an array of up to ${MAX_NODE_ANCESTOR_IMAGES} node ids`,
+      400,
+      parentNodeId,
+    );
+  }
 
-    if (provider === "api") {
-      return res.status(403).json({
-        error: { code: "APIKEY_DISABLED", message: "API key provider is disabled. Use OAuth." },
-        parentNodeId,
-      });
-    }
-    if (!prompt || typeof prompt !== "string") {
-      return res.status(400).json({
-        error: { code: "INVALID_PROMPT", message: "Prompt is required" },
-        parentNodeId,
-      });
-    }
-    if (!Array.isArray(references) || references.length > 5) {
-      return res.status(400).json({
-        error: { code: "INVALID_REFS", message: "references must be an array of up to 5 base64 strings" },
-        parentNodeId,
-      });
-    }
-    if (
-      !Array.isArray(ancestorNodeIds) ||
-      ancestorNodeIds.length > MAX_NODE_ANCESTOR_IMAGES ||
-      ancestorNodeIds.some((id) => typeof id !== "string")
-    ) {
-      return res.status(400).json({
-        error: {
-          code: "INVALID_ANCESTORS",
-          message: `ancestorNodeIds must be an array of up to ${MAX_NODE_ANCESTOR_IMAGES} node ids`,
-        },
-        parentNodeId,
-      });
-    }
-    const visualContextCheck = normalizeVisualContext(body.visualContext);
-    if (visualContextCheck.error) {
-      return res.status(400).json({
-        error: { code: "INVALID_VISUAL_CONTEXT", message: visualContextCheck.error },
-        parentNodeId,
-      });
-    }
-    const refCheck = validateAndNormalizeRefs(references);
-    if (refCheck.error) {
-      return res.status(400).json({
-        error: { code: "INVALID_REFS", message: refCheck.error },
-        parentNodeId,
-      });
-    }
-    const refInputs = await compressReferenceInputs(refCheck.refs);
-    const moderationCheck = validateModeration(moderation);
-    if (moderationCheck.error) {
-      return res.status(400).json({
-        error: { code: "INVALID_MODERATION", message: moderationCheck.error },
-        parentNodeId,
-      });
-    }
-    const modelCheck = normalizeImageModel(rawModel);
-    if (modelCheck.error) {
-      return res.status(400).json({
-        error: { code: "INVALID_MODEL", message: modelCheck.error },
-        parentNodeId,
-      });
-    }
-    const model = modelCheck.model;
+  const visualContextCheck = normalizeVisualContext(body.visualContext);
+  if (visualContextCheck.error) {
+    throw nodeGenerateRequestError(
+      "INVALID_VISUAL_CONTEXT",
+      visualContextCheck.error,
+      400,
+      parentNodeId,
+    );
+  }
+  const refCheck = validateAndNormalizeRefs(references);
+  if (refCheck.error) {
+    throw nodeGenerateRequestError("INVALID_REFS", refCheck.error, 400, parentNodeId);
+  }
+  const moderationCheck = validateModeration(moderation);
+  if (moderationCheck.error) {
+    throw nodeGenerateRequestError(
+      "INVALID_MODERATION",
+      moderationCheck.error,
+      400,
+      parentNodeId,
+    );
+  }
+  const modelCheck = normalizeImageModel(rawModel);
+  if (modelCheck.error) {
+    throw nodeGenerateRequestError("INVALID_MODEL", modelCheck.error, 400, parentNodeId);
+  }
 
-    let kind = "generate";
-    let userContent = null;
-    let images = [];
-    let parentImage = null;
-    let parentVisualContext = null;
-    let ancestorImages = [];
+  const model = modelCheck.model;
+  const refInputs = await compressReferenceInputs(refCheck.refs);
+  let kind = "generate";
+  let parentImage = null;
+  let parentVisualContext = null;
+  let ancestorImages = [];
 
-    if (parentNodeId) {
-      kind = "edit";
-      parentImage = await loadNodeImagePreview(__dirname, parentNodeId);
-      parentVisualContext = await resolveNodeVisualContext(
-        __dirname,
-        parentNodeId,
-        "parent",
-        visualContextCheck.items,
-      );
-      ancestorImages = await Promise.all(
-        ancestorNodeIds
-          .filter((nodeId) => nodeId !== parentNodeId)
-          .slice(0, MAX_NODE_ANCESTOR_IMAGES)
-          .map(async (nodeId) => ({
-            ...(await loadNodeImagePreview(__dirname, nodeId)),
-            visualContext: await resolveNodeVisualContext(
-              __dirname,
-              nodeId,
-              "ancestor",
-              visualContextCheck.items,
-            ),
-          })),
-      );
+  if (parentNodeId) {
+    kind = "edit";
+    parentImage = await loadNodeImageInput(rootDir, parentNodeId);
+    parentVisualContext = await resolveNodeVisualContext(
+      rootDir,
+      parentNodeId,
+      "parent",
+      visualContextCheck.items,
+    );
+    ancestorImages = await Promise.all(
+      ancestorNodeIds
+        .filter((nodeId) => nodeId !== parentNodeId)
+        .slice(0, MAX_NODE_ANCESTOR_IMAGES)
+        .map(async (nodeId) => ({
+          ...(await loadNodeImageInput(rootDir, nodeId)),
+          visualContext: await resolveNodeVisualContext(
+            rootDir,
+            nodeId,
+            "ancestor",
+            visualContextCheck.items,
+          ),
+        })),
+    );
+  } else if (typeof externalSrc === "string" && externalSrc.length > 0) {
+    kind = "edit";
+    parentImage = await loadExternalImageInput(rootDir, externalSrc);
+  }
 
-      userContent = buildEditUserContent(
+  const userContent = parentImage
+    ? buildEditUserContent(
         effectivePrompt,
         parentImage.b64,
         parentImage.mime,
         ancestorImages,
         parentVisualContext,
-      );
-      images = [
-        ...ancestorImages.map((image, index) => ({
-          order: index + 1,
-          relation: "ancestor",
-          nodeId: image.visualContext?.nodeId ?? image.filename.replace(/\.[^.]+$/, ""),
-          filename: image.filename,
-          mime: image.mime,
-          labelText: image.visualContext ? formatVisualImageLabel(image.visualContext, index + 1) : null,
-          visualContext: image.visualContext ?? null,
-        })),
-        {
-          order: ancestorImages.length + 1,
-          relation: "parent",
-          nodeId: parentNodeId,
-          filename: parentImage.filename,
-          mime: parentImage.mime,
-          labelText: parentVisualContext
-            ? formatVisualImageLabel(parentVisualContext, ancestorImages.length + 1)
-            : null,
-          visualContext: parentVisualContext,
-        },
-      ];
-    } else if (typeof externalSrc === "string" && externalSrc.length > 0) {
-      kind = "edit";
-      parentImage = await loadAssetPreview(__dirname, externalSrc);
-      userContent = buildEditUserContent(effectivePrompt, parentImage.b64, parentImage.mime);
-      images = [{
-        order: 1,
-        relation: "external",
-        nodeId: null,
-        filename: externalSrc,
-        mime: parentImage.mime,
-        labelText: null,
-        visualContext: null,
-        sourceMeta: parentImage.meta,
-      }];
-    } else {
-      userContent = buildGenerateUserContent(effectivePrompt, refInputs);
-      images = refInputs.map((ref, index) => ({
-        order: index + 1,
-        relation: "reference",
-        nodeId: null,
-        filename: null,
-        mime: ref.mime || "image/png",
-        labelText: null,
-        visualContext: null,
-      }));
-    }
+      )
+    : buildGenerateUserContent(effectivePrompt, refInputs);
+  const images = buildNodeGeneratePreviewImages({
+    parentNodeId,
+    parentImage,
+    parentVisualContext,
+    ancestorImages,
+    externalSrc,
+    refInputs,
+  });
+  const resolvedAncestorNodeIds = parentImage
+    ? ancestorImages.map((image) => image.filename.replace(/\.[^.]+$/, ""))
+    : [];
+  const visualContext = parentImage
+    ? [
+        ...ancestorImages.map((image) => image.visualContext).filter(Boolean),
+        parentVisualContext,
+      ].filter(Boolean)
+    : [];
 
-    const redactedContent = redactOpenAiImageContent(userContent);
-    const tools = kind === "edit"
-      ? [{ type: "image_generation", quality, size, moderation }]
-      : [
-          { type: "web_search" },
-          { type: "image_generation", quality, size, moderation },
-        ];
+  return {
+    parentNodeId,
+    requestId,
+    sessionId,
+    clientNodeId,
+    prompt,
+    displayPrompt,
+    effectivePrompt,
+    quality,
+    size,
+    format,
+    moderation,
+    model,
+    provider,
+    refInputs,
+    kind,
+    parentImage,
+    parentVisualContext,
+    ancestorImages,
+    ancestorNodeIds: resolvedAncestorNodeIds,
+    visualContext,
+    images,
+    userContent,
+    redactedContent: redactOpenAiImageContent(userContent),
+    tools: nodeGenerateTools(kind, quality, size, moderation),
+  };
+}
+
+app.post("/api/node/generate/preview", async (req, res) => {
+  const body = req.body || {};
+  const parentNodeId = body.parentNodeId ?? null;
+
+  try {
+    const delivery = await prepareNodeGenerateDelivery(body, {
+      rootDir: __dirname,
+      loadNodeImageInput: loadNodeImagePreview,
+      loadExternalImageInput: loadAssetPreview,
+    });
 
     res.json({
       ok: true,
-      kind,
-      parentNodeId,
-      ancestorNodeIds: parentImage ? ancestorImages.map((image) => image.filename.replace(/\.[^.]+$/, "")) : [],
-      prompt: displayPrompt,
-      displayPrompt,
-      effectivePrompt,
-      options: { quality, size, format, moderation, model },
+      kind: delivery.kind,
+      parentNodeId: delivery.parentNodeId,
+      ancestorNodeIds: delivery.ancestorNodeIds,
+      prompt: delivery.displayPrompt,
+      displayPrompt: delivery.displayPrompt,
+      effectivePrompt: delivery.effectivePrompt,
+      options: {
+        quality: delivery.quality,
+        size: delivery.size,
+        format: delivery.format,
+        moderation: delivery.moderation,
+        model: delivery.model,
+      },
       provider: "oauth",
-      images,
+      images: delivery.images,
       openAi: {
-        model,
-        input: [{ role: "user", content: redactedContent }],
-        tools,
-        tool_choice: kind === "edit" ? "required" : "auto",
+        model: delivery.model,
+        input: [{ role: "user", content: delivery.redactedContent }],
+        tools: delivery.tools,
+        tool_choice: delivery.kind === "edit" ? "required" : "auto",
         stream: true,
       },
-      contentOrder: buildPreviewContentOrder(redactedContent, images),
+      contentOrder: buildPreviewContentOrder(delivery.redactedContent, delivery.images),
     });
   } catch (err) {
     console.error("[node/generate/preview] error:", err.message);
     const normalized = normalizeGenerationFailure(err);
-    res.status(normalized.status || err.status || 500).json({
+    res.status(err.status || normalized.status || 500).json({
       error: { code: err.code || "NODE_GEN_PREVIEW_FAILED", message: err.message },
-      parentNodeId,
+      parentNodeId: err.parentNodeId ?? parentNodeId,
     });
   }
 });
@@ -1562,127 +1652,31 @@ app.post("/api/node/generate", async (req, res) => {
     controller,
   });
   try {
+    const delivery = await prepareNodeGenerateDelivery(body, {
+      rootDir: __dirname,
+      loadNodeImageInput: async (rootDir, nodeId) =>
+        compressLoadedImageForOAuth(await loadNodeImage(rootDir, nodeId)),
+      loadExternalImageInput: async (rootDir, externalSrc) =>
+        compressLoadedImageForOAuth({
+          b64: await loadAssetB64(rootDir, externalSrc),
+          filename: externalSrc,
+          mime: mimeForPreviewFilename(externalSrc),
+        }),
+    });
     const {
-      prompt,
-      quality = "low",
-      size = "1024x1024",
-      format = "png",
-      moderation = "low",
-      model: rawModel,
-      references = [],
-      ancestorNodeIds = [],
-      externalSrc = null,
-    } = body;
-    const { provider = "oauth" } = body;
-    const displayPrompt =
-      typeof body.displayPrompt === "string" && body.displayPrompt.trim()
-        ? body.displayPrompt
-        : prompt;
-    const effectivePrompt =
-      typeof body.effectivePrompt === "string" && body.effectivePrompt.trim()
-        ? body.effectivePrompt
-        : prompt;
-
-    if (provider === "api") {
-      return res.status(403).json({
-        error: { code: "APIKEY_DISABLED", message: "API key provider is disabled. Use OAuth." },
-        parentNodeId,
-      });
-    }
-    if (!prompt || typeof prompt !== "string") {
-      return res.status(400).json({
-        error: { code: "INVALID_PROMPT", message: "Prompt is required" },
-        parentNodeId,
-      });
-    }
-    if (!Array.isArray(references) || references.length > 5) {
-      return res.status(400).json({
-        error: { code: "INVALID_REFS", message: "references must be an array of up to 5 base64 strings" },
-        parentNodeId,
-      });
-    }
-    if (
-      !Array.isArray(ancestorNodeIds) ||
-      ancestorNodeIds.length > MAX_NODE_ANCESTOR_IMAGES ||
-      ancestorNodeIds.some((id) => typeof id !== "string")
-    ) {
-      return res.status(400).json({
-        error: {
-          code: "INVALID_ANCESTORS",
-          message: `ancestorNodeIds must be an array of up to ${MAX_NODE_ANCESTOR_IMAGES} node ids`,
-        },
-        parentNodeId,
-      });
-    }
-    const visualContextCheck = normalizeVisualContext(body.visualContext);
-    if (visualContextCheck.error) {
-      return res.status(400).json({
-        error: { code: "INVALID_VISUAL_CONTEXT", message: visualContextCheck.error },
-        parentNodeId,
-      });
-    }
-    const refCheck = validateAndNormalizeRefs(references);
-    if (refCheck.error) {
-      return res.status(400).json({
-        error: { code: "INVALID_REFS", message: refCheck.error },
-        parentNodeId,
-      });
-    }
-    const moderationCheck = validateModeration(moderation);
-    if (moderationCheck.error) {
-      return res.status(400).json({
-        error: { code: "INVALID_MODERATION", message: moderationCheck.error },
-        parentNodeId,
-      });
-    }
-    const modelCheck = normalizeImageModel(rawModel);
-    if (modelCheck.error) {
-      return res.status(400).json({
-        error: { code: "INVALID_MODEL", message: modelCheck.error },
-        parentNodeId,
-      });
-    }
-    const model = modelCheck.model;
-    const refInputs = await compressReferenceInputs(refCheck.refs);
-
+      parentImage,
+      parentVisualContext,
+      ancestorImages,
+      effectivePrompt,
+      displayPrompt,
+      quality,
+      size,
+      format,
+      moderation,
+      model,
+      refInputs,
+    } = delivery;
     const startTime = Date.now();
-    let parentImage = null;
-    let parentVisualContext = null;
-    let ancestorImages = [];
-    if (parentNodeId) {
-      parentImage = await compressLoadedImageForOAuth(await loadNodeImage(__dirname, parentNodeId));
-      parentVisualContext = await resolveNodeVisualContext(
-        __dirname,
-        parentNodeId,
-        "parent",
-        visualContextCheck.items,
-      );
-      ancestorImages = await Promise.all(
-        ancestorNodeIds
-          .filter((nodeId) => nodeId !== parentNodeId)
-          .slice(0, MAX_NODE_ANCESTOR_IMAGES)
-          .map(async (nodeId) => {
-            const image = await compressLoadedImageForOAuth(await loadNodeImage(__dirname, nodeId));
-            return {
-              ...image,
-              visualContext: await resolveNodeVisualContext(
-                __dirname,
-                nodeId,
-                "ancestor",
-                visualContextCheck.items,
-              ),
-            };
-          }),
-      );
-    } else if (typeof externalSrc === "string" && externalSrc.length > 0) {
-      // TODO(0.09 D4): history promotion should materialize imported assets into a
-      // node-owned file path. This stub allows controlled reads from generated/
-      // so promotion can fail gracefully instead of assuming <nodeId>.png only.
-      parentImage = await compressLoadedImageForOAuth({
-        b64: await loadAssetB64(__dirname, externalSrc),
-        mime: mimeForPreviewFilename(externalSrc),
-      });
-    }
 
     let b64, usage, webSearchCalls = 0;
     const MAX_RETRIES = 1;
@@ -1747,7 +1741,7 @@ app.post("/api/node/generate", async (req, res) => {
       });
       return res.status(normalized.status || statusForErrorCode(normalized.code, 422)).json({
         error: { code: normalized.code || "NODE_GEN_FAILED", message: normalized.message },
-        parentNodeId,
+        parentNodeId: delivery.parentNodeId,
       });
     }
 
@@ -1756,17 +1750,12 @@ app.post("/api/node/generate", async (req, res) => {
     const elapsed = +((Date.now() - startTime) / 1000).toFixed(1);
     const meta = {
       nodeId,
-      parentNodeId,
-      ancestorNodeIds: parentImage ? ancestorImages.map((image) => image.filename.replace(/\.[^.]+$/, "")) : [],
-      visualContext: parentImage
-        ? [
-            ...ancestorImages.map((image) => image.visualContext).filter(Boolean),
-            parentVisualContext,
-          ].filter(Boolean)
-        : [],
-      sessionId,
-      clientNodeId,
-      requestId,
+      parentNodeId: delivery.parentNodeId,
+      ancestorNodeIds: delivery.ancestorNodeIds,
+      visualContext: delivery.visualContext,
+      sessionId: delivery.sessionId,
+      clientNodeId: delivery.clientNodeId,
+      requestId: delivery.requestId,
       prompt: displayPrompt,
       displayPrompt,
       effectivePrompt,
@@ -1777,7 +1766,7 @@ app.post("/api/node/generate", async (req, res) => {
       usage: usage || null,
       webSearchCalls,
       provider: "oauth",
-      kind: parentImage ? "edit" : "generate",
+      kind: delivery.kind,
       refsCount: parentImage ? ancestorImages.length + 1 : refInputs.length,
       // Fields consumed by /api/history flat scan (so node images appear in history too)
       quality, size, format, moderation, model,
@@ -1789,8 +1778,8 @@ app.post("/api/node/generate", async (req, res) => {
     throwIfCanceled(requestId, controller.signal);
     res.json({
       nodeId,
-      parentNodeId,
-      requestId,
+      parentNodeId: delivery.parentNodeId,
+      requestId: delivery.requestId,
       image: `data:image/${format === "jpeg" ? "jpeg" : format};base64,${b64}`,
       filename,
       url: `/generated/${filename}`,
@@ -1805,12 +1794,12 @@ app.post("/api/node/generate", async (req, res) => {
     console.error("[node/generate] error:", err.message);
     const normalized =
       err?.code === "NODE_GEN_CANCELED" ? err : normalizeGenerationFailure(err);
-    res.status(err.status || 500).json({
+    res.status(err.status || normalized.status || 500).json({
       error: {
         code: normalized.code || err.code || "NODE_GEN_FAILED",
         message: normalized.message || err.message,
       },
-      parentNodeId,
+      parentNodeId: err.parentNodeId ?? parentNodeId,
     });
   } finally {
     finishJob(requestId);
