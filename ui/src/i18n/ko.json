@@ -332,7 +332,8 @@
     "collapseClassic": "사이드바 접기",
     "expandClassic": "사이드바 펼치기",
     "railLibrary": "빠른 라이브러리 열기",
-    "railActivity": "생성 작업 보기"
+    "railActivity": "생성 작업 보기",
+    "closeDrawer": "서랍 닫기"
   },
   "nodeCanvas": {
     "loading": "세션 불러오는 중...",

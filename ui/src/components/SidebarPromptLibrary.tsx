@@ -9,6 +9,7 @@ type SidebarPromptLibraryProps = {
   tab?: SidebarWorkspaceTab;
   defaultTab?: SidebarWorkspaceTab;
   onTabChange?: (tab: SidebarWorkspaceTab) => void;
+  compactTabs?: boolean;
 };
 
 function compactPrompt(text: string, max = 74) {
@@ -20,6 +21,7 @@ export function SidebarPromptLibrary({
   tab: controlledTab,
   defaultTab = "library",
   onTabChange,
+  compactTabs = false,
 }: SidebarPromptLibraryProps = {}) {
   const { t } = useI18n();
   const [internalTab, setInternalTab] = useState<SidebarWorkspaceTab>(defaultTab);
@@ -60,25 +62,27 @@ export function SidebarPromptLibrary({
 
   return (
     <section className="sidebar-workspace" aria-label={t("promptLibrary.workspace")}>
-      <div className="sidebar-workspace__tabs" role="tablist">
-        <button
-          type="button"
-          className={tab === "library" ? "is-active" : ""}
-          onClick={() => setTab("library")}
-        >
-          {t("promptLibrary.short")}
-        </button>
-        <button
-          type="button"
-          className={tab === "activity" ? "is-active" : ""}
-          onClick={() => setTab("activity")}
-        >
-          <span>{t("promptLibrary.activity")}</span>
-          {inFlight.length > 0 ? (
-            <span className="sidebar-workspace__badge">{inFlight.length}</span>
-          ) : null}
-        </button>
-      </div>
+      {!compactTabs ? (
+        <div className="sidebar-workspace__tabs" role="tablist">
+          <button
+            type="button"
+            className={tab === "library" ? "is-active" : ""}
+            onClick={() => setTab("library")}
+          >
+            {t("promptLibrary.short")}
+          </button>
+          <button
+            type="button"
+            className={tab === "activity" ? "is-active" : ""}
+            onClick={() => setTab("activity")}
+          >
+            <span>{t("promptLibrary.activity")}</span>
+            {inFlight.length > 0 ? (
+              <span className="sidebar-workspace__badge">{inFlight.length}</span>
+            ) : null}
+          </button>
+        </div>
+      ) : null}
 
       {tab === "activity" ? (
         <div className="sidebar-workspace__activity">

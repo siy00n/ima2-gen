@@ -2,7 +2,7 @@ import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 
 type GenerateButtonProps = {
-  variant?: "default" | "dock";
+  variant?: "default" | "dock" | "compact";
 };
 
 export function GenerateButton({ variant = "default" }: GenerateButtonProps = {}) {
@@ -18,7 +18,7 @@ export function GenerateButton({ variant = "default" }: GenerateButtonProps = {}
   return (
     <button
       type="button"
-      className={`generate-btn${variant === "dock" ? " generate-btn--dock" : ""}${loading ? " loading" : ""}`}
+      className={`generate-btn${variant === "dock" ? " generate-btn--dock" : ""}${variant === "compact" ? " generate-btn--compact" : ""}${loading ? " loading" : ""}`}
       onClick={() => void generate()}
     >
       {label}

@@ -332,7 +332,8 @@
     "collapseClassic": "Collapse sidebar",
     "expandClassic": "Expand sidebar",
     "railLibrary": "Open quick library",
-    "railActivity": "Show generation activity"
+    "railActivity": "Show generation activity",
+    "closeDrawer": "Close drawer"
   },
   "nodeCanvas": {
     "loading": "Loading session...",

@@ -12,7 +12,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const PORT = String(3900 + Math.floor(Math.random() * 100));
+const PORT = String(20000 + Math.floor(Math.random() * 2000));
 const FAKE_HOME = mkdtempSync(join(tmpdir(), "ima2-b9-home-"));
 const GEN_DIR = join(process.cwd(), "generated");
 const TEST_PREFIX = `b9test_${Date.now()}_`;

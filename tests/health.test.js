@@ -9,11 +9,24 @@ import { tmpdir } from "node:os";
 // Integration-ish: boot the real server on a random port, hit /api/health,
 // verify advertisement file lifecycle, kill, verify cleanup.
 
-const PORT = String(3500 + Math.floor(Math.random() * 400));
-const OAUTH_PORT = String(10532 + Math.floor(Math.random() * 400));
+let PORT;
+let OAUTH_PORT;
 const FAKE_HOME = mkdtempSync(join(tmpdir(), "ima2-test-home-"));
 
 const HEALTH_TIMEOUT = process.platform === "win32" ? 30000 : 8000;
+
+async function pickFreePort() {
+  const server = createServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : null;
+  await new Promise((resolve) => server.close(resolve));
+  if (!port) throw new Error("failed to reserve a free port");
+  return String(port);
+}
 
 async function waitForHealth(base, timeoutMs = HEALTH_TIMEOUT) {
   const deadline = Date.now() + timeoutMs;
@@ -35,6 +48,8 @@ describe("Server: /api/health + advertisement", () => {
   let slowOAuthClosed = false;
 
   before(async () => {
+    PORT = await pickFreePort();
+    OAUTH_PORT = await pickFreePort();
     oauthServer = createServer((req, res) => {
       if (req.method === "POST" && req.url === "/v1/responses") {
         let body = "";

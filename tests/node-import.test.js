@@ -12,7 +12,7 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const PORT = String(4100 + Math.floor(Math.random() * 100));
+const PORT = String(22000 + Math.floor(Math.random() * 2000));
 const FAKE_HOME = mkdtempSync(join(tmpdir(), "ima2-node-import-home-"));
 const GEN_DIR = join(process.cwd(), "generated");
 const TEST_PREFIX = `node_import_${Date.now()}_`;

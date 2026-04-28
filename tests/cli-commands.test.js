@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const PORT = String(3900 + Math.floor(Math.random() * 80));
+const PORT = String(18000 + Math.floor(Math.random() * 2000));
 const FAKE_HOME = mkdtempSync(join(tmpdir(), "ima2-cmd-home-"));
 
 function runCLI(args, extraEnv = {}) {

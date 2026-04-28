@@ -801,6 +801,10 @@ type AppState = {
   toggleRightPanel: () => void;
   classicSidebarCollapsed: boolean;
   setClassicSidebarCollapsed: (collapsed: boolean) => void;
+  classicComposerExpanded: boolean;
+  setClassicComposerExpanded: (open: boolean) => void;
+  classicRailDrawer: "library" | "activity" | null;
+  setClassicRailDrawer: (drawer: "library" | "activity" | null) => void;
   galleryOpen: boolean;
   openGallery: () => void;
   closeGallery: () => void;
@@ -1458,6 +1462,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     saveClassicSidebarCollapsed(classicSidebarCollapsed);
     set({ classicSidebarCollapsed });
   },
+  classicComposerExpanded: false,
+  setClassicComposerExpanded: (classicComposerExpanded) => set({ classicComposerExpanded }),
+  classicRailDrawer: null,
+  setClassicRailDrawer: (classicRailDrawer) => set({ classicRailDrawer }),
   galleryOpen: false,
   openGallery: () => set({ galleryOpen: true }),
   closeGallery: () => set({ galleryOpen: false }),
