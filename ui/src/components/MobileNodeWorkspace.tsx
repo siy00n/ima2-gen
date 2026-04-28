@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -245,6 +246,8 @@ export function MobileNodeWorkspace() {
   const [lastFocusedNodeId, setLastFocusedNodeId] = useState<string | null>(null);
   const [collapsedLaneIds, setCollapsedLaneIds] = useState<Set<string>>(() => new Set());
   const [collapsedTreeNodeIds, setCollapsedTreeNodeIds] = useState<Set<string>>(() => new Set());
+  const laneCollapseSessionRef = useRef<string | null>(null);
+  const knownLaneRootIdsRef = useRef<Set<string>>(new Set());
   const settingsRef = useRef<HTMLDetailsElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
 
@@ -402,6 +405,44 @@ export function MobileNodeWorkspace() {
         tree: nodeById.has(lane.rootId) ? buildTreeItem(lane.root, null, lane, new Set()) : null,
       }));
   }, [edges, graphMeta, nodeListSort, nodes]);
+
+  useEffect(() => {
+    const sessionKey = activeSessionId ?? "__no_session__";
+    const currentRootIds = branchLanes.map((lane) => lane.rootId);
+    const currentRootIdSet = new Set(currentRootIds);
+
+    if (laneCollapseSessionRef.current !== sessionKey) {
+      laneCollapseSessionRef.current = sessionKey;
+      knownLaneRootIdsRef.current = currentRootIdSet;
+      setCollapsedLaneIds(new Set(currentRootIds));
+      return;
+    }
+
+    const knownRootIds = knownLaneRootIdsRef.current;
+    knownLaneRootIdsRef.current = currentRootIdSet;
+    setCollapsedLaneIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+
+      for (const rootId of current) {
+        if (currentRootIdSet.has(rootId)) {
+          next.add(rootId);
+        } else {
+          changed = true;
+        }
+      }
+
+      for (const rootId of currentRootIds) {
+        if (!knownRootIds.has(rootId)) {
+          next.add(rootId);
+          changed = true;
+        }
+      }
+
+      return changed || next.size !== current.size ? next : current;
+    });
+  }, [activeSessionId, branchLanes]);
+
   const nodeFiltersActive = nodeSearchQuery.trim().length > 0 || nodeStatusFilter !== "all";
   const visibleBranchLanes = useMemo<VisibleBranchLane[]>(() => {
     const search = nodeSearchQuery.trim().toLocaleLowerCase();
