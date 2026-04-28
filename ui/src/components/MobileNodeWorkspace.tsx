@@ -314,20 +314,6 @@ export function MobileNodeWorkspace() {
         }),
       }));
   }, [graphMeta, nodes]);
-  const expandedTreeNodeIds = useMemo(() => {
-    const focusNodeId = lastFocusedNodeId ?? selectedNodeId;
-    const expanded = new Set<string>();
-    if (!focusNodeId) return expanded;
-    const parentByTarget = new Map(edges.map((edge) => [edge.target, edge.source]));
-    const visited = new Set<string>();
-    let current: string | undefined = focusNodeId;
-    while (current && !visited.has(current)) {
-      expanded.add(current);
-      visited.add(current);
-      current = parentByTarget.get(current);
-    }
-    return expanded;
-  }, [edges, lastFocusedNodeId, selectedNodeId]);
   const branchLanes = useMemo<BranchLane[]>(() => {
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     const childrenBySource = new Map<string, GraphNode[]>();
@@ -476,8 +462,7 @@ export function MobileNodeWorkspace() {
   const renderBranchTreeItem = (item: BranchTreeItem, lane: BranchLane) => {
     const level = item.meta.level ?? 0;
     const hasChildren = item.childNodes.length > 0;
-    const forceOpen = expandedTreeNodeIds.has(item.node.id);
-    const collapsed = hasChildren && collapsedTreeNodeIds.has(item.node.id) && !forceOpen;
+    const collapsed = hasChildren && collapsedTreeNodeIds.has(item.node.id);
     const cardTone = item.meta.treeColor ?? lane.treeColor;
     const nodeName = item.node.data.name?.trim();
     const promptText = item.node.data.prompt.trim();
@@ -502,10 +487,6 @@ export function MobileNodeWorkspace() {
             <span className="mobile-node-list-card__content">
               <span className="mobile-node-list-card__title-row">
                 <strong>{titleText}</strong>
-                <span className="mobile-node-list-card__level">L{level}</span>
-                <span className={`mobile-node-list-card__status mobile-node-list-card__status--${statusTone(item.node.data.status)}`}>
-                  {getStatusLabel(t, item.node.data.status)}
-                </span>
               </span>
               {showPromptPreview ? (
                 <span className="mobile-node-list-card__prompt">{promptText}</span>
@@ -526,21 +507,25 @@ export function MobileNodeWorkspace() {
               </span>
             ) : null}
           </button>
-          {hasChildren ? (
-            <button
-              type="button"
-              className="mobile-node-list-card__tree-toggle"
-              onClick={(event) => toggleTreeNodeCollapsed(event, item.node.id)}
-              aria-expanded={!collapsed}
-              aria-label={t(collapsed ? "mobileNode.expandNode" : "mobileNode.collapseNode", {
-                name: nodeLabel(item.node),
-              })}
-            >
-              {collapsed ? "▸" : "▾"}
-            </button>
-          ) : (
-            null
-          )}
+          <div className="mobile-node-list-card__meta-cluster">
+            <span className="mobile-node-list-card__level">L{level}</span>
+            <span className={`mobile-node-list-card__status mobile-node-list-card__status--${statusTone(item.node.data.status)}`}>
+              {getStatusLabel(t, item.node.data.status)}
+            </span>
+            {hasChildren ? (
+              <button
+                type="button"
+                className="mobile-node-list-card__tree-toggle"
+                onClick={(event) => toggleTreeNodeCollapsed(event, item.node.id)}
+                aria-expanded={!collapsed}
+                aria-label={t(collapsed ? "mobileNode.expandNode" : "mobileNode.collapseNode", {
+                  name: nodeLabel(item.node),
+                })}
+              >
+                {collapsed ? "▸" : "▾"}
+              </button>
+            ) : null}
+          </div>
         </div>
         {hasChildren && !collapsed ? (
           <div className="mobile-node-tree-children">
@@ -639,12 +624,9 @@ export function MobileNodeWorkspace() {
 
   const renderSelectedNode = () => {
     if (!selected || !data) {
-      return (
-        <section className="mobile-node-empty">
-          <div className="mobile-node-empty__mark">NODE</div>
-          <h1>{nodes.length ? t("mobileNode.noSelectionTitle") : t("mobileNode.startTitle")}</h1>
-          <p>{nodes.length ? t("mobileNode.noSelectionDescription") : t("mobileNode.startDescription")}</p>
-          {nodes.length ? (
+      if (nodes.length) {
+        return (
+          <section className="mobile-node-empty mobile-node-empty--navigator">
             <div className="mobile-node-list-heading">
               <div>
                 <span>{t("mobileNode.nodeListTitle")}</span>
@@ -659,22 +641,6 @@ export function MobileNodeWorkspace() {
               </div>
               <small>{t("mobileNode.nodeListHelp")}</small>
             </div>
-          ) : null}
-          <div className="mobile-node-empty__actions">
-            <button type="button" className="mobile-node-primary" onClick={addRoot}>
-              {nodes.length ? t("nodeCanvas.addRootTitle") : t("mobileNode.addFirst")}
-            </button>
-            <button
-              type="button"
-              className="mobile-node-button"
-              onClick={importCurrent}
-              disabled={!currentImage?.filename}
-            >
-              {t("mobileNode.importCurrentResult")}
-            </button>
-          </div>
-          <small className="mobile-node-empty__hint">{t("mobileNode.importCurrentHelp")}</small>
-          {nodes.length ? (
             <div className="mobile-node-branch-lanes">
               {branchLanes.map((lane) => {
                 const focusNodeId = lastFocusedNodeId ?? selectedNodeId;
@@ -717,9 +683,30 @@ export function MobileNodeWorkspace() {
                 );
               })}
             </div>
-          ) : (
-            <small className="mobile-node-empty__hint">{t("mobileNode.sessionHint")}</small>
-          )}
+          </section>
+        );
+      }
+
+      return (
+        <section className="mobile-node-empty">
+          <div className="mobile-node-empty__mark">NODE</div>
+          <h1>{t("mobileNode.startTitle")}</h1>
+          <p>{t("mobileNode.startDescription")}</p>
+          <div className="mobile-node-empty__actions">
+            <button type="button" className="mobile-node-primary" onClick={addRoot}>
+              {t("mobileNode.addFirst")}
+            </button>
+            <button
+              type="button"
+              className="mobile-node-button"
+              onClick={importCurrent}
+              disabled={!currentImage?.filename}
+            >
+              {t("mobileNode.importCurrentResult")}
+            </button>
+          </div>
+          <small className="mobile-node-empty__hint">{t("mobileNode.importCurrentHelp")}</small>
+          <small className="mobile-node-empty__hint">{t("mobileNode.sessionHint")}</small>
         </section>
       );
     }

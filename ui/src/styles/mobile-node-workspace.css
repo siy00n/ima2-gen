@@ -937,6 +937,13 @@
   text-align: left;
 }
 
+.mobile-node-empty--navigator {
+  min-height: calc(100dvh - 152px);
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 12px 14px 10px;
+}
+
 .mobile-node-empty--compact {
   min-height: 240px;
 }
@@ -1017,6 +1024,10 @@
 
 .mobile-node-branch-lanes {
   max-height: 48dvh;
+}
+
+.mobile-node-empty--navigator .mobile-node-branch-lanes {
+  max-height: calc(100dvh - 250px);
 }
 
 .mobile-node-branch-lane {
@@ -1129,8 +1140,7 @@
 }
 
 .mobile-node-list-card--tree {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+  display: block;
   padding: 0;
   overflow: hidden;
 }
@@ -1151,8 +1161,9 @@
   border: 0;
   background: transparent;
   color: inherit;
-  padding: 10px 0 10px 11px;
+  padding: 30px 10px 10px 11px;
   text-align: left;
+  width: 100%;
 }
 
 .mobile-node-list-card__body.has-thumbnail {
@@ -1177,18 +1188,17 @@
 .mobile-node-list-card__content {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .mobile-node-list-card__title-row {
   min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: block;
 }
 
 .mobile-node-list-card__title-row strong {
   min-width: 0;
+  display: block;
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1199,7 +1209,6 @@
 }
 
 .mobile-node-list-card__status {
-  flex: 0 0 auto;
   max-width: 74px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1269,7 +1278,7 @@
 .mobile-node-list-card__thumb {
   width: 44px;
   height: 44px;
-  align-self: center;
+  align-self: end;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 11px;
@@ -1283,23 +1292,31 @@
   object-fit: cover;
 }
 
-.mobile-node-list-card__tree-toggle {
-  align-self: center;
-  margin-right: 8px;
+.mobile-node-list-card__meta-cluster {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: calc(100% - 18px);
 }
 
 .mobile-node-list-card__tree-toggle {
-  width: 34px;
-  height: 34px;
+  width: 24px;
+  height: 22px;
   display: grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--node-tree-color, #a78bfa) 42%, rgba(255, 255, 255, 0.1));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 12%, rgba(255, 255, 255, 0.04));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 8%, rgba(255, 255, 255, 0.025));
   color: #f6f4ff;
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 900;
+  padding: 0;
 }
 
 .mobile-node-list-card__tree-toggle:active {
