@@ -69,6 +69,8 @@ describe("UI stability contracts", () => {
 
     assert.match(store, /classicComposerExpanded: boolean/);
     assert.match(store, /classicRailDrawer: "library" \| "activity" \| null/);
+    assert.doesNotMatch(store, /classicSidebarCollapsed/);
+    assert.doesNotMatch(store, /ima2\.classicSidebarCollapsed/);
     assert.match(app, /app--classic-rail/);
     assert.match(app, /app--classic-composer-open/);
     assert.match(sidebar, /sidebar--classic-rail/);

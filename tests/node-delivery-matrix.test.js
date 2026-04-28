@@ -220,7 +220,7 @@ describe("Node delivery matrix", () => {
       }
     }
 
-    console.table(rows);
+    if (process.env.DEBUG_TEST) console.table(rows);
     assert.strictEqual(rows.length, IMAGE_MODES.length * 2 * 2 * MAX_ANCESTOR_COUNTS.length);
   });
 

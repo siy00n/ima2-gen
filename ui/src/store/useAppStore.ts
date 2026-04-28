@@ -105,22 +105,6 @@ function saveRightPanelOpen(open: boolean): void {
   } catch {}
 }
 
-function loadClassicSidebarCollapsed(): boolean {
-  try {
-    const raw = localStorage.getItem("ima2.classicSidebarCollapsed");
-    if (raw === null) return true;
-    return JSON.parse(raw) === true;
-  } catch {
-    return true;
-  }
-}
-
-function saveClassicSidebarCollapsed(collapsed: boolean): void {
-  try {
-    localStorage.setItem("ima2.classicSidebarCollapsed", JSON.stringify(collapsed));
-  } catch {}
-}
-
 function loadUIMode(): UIMode {
   try {
     const raw = localStorage.getItem("ima2.uiMode");
@@ -799,8 +783,6 @@ type AppState = {
   rightPanelOpen: boolean;
   setRightPanelOpen: (open: boolean) => void;
   toggleRightPanel: () => void;
-  classicSidebarCollapsed: boolean;
-  setClassicSidebarCollapsed: (collapsed: boolean) => void;
   classicComposerExpanded: boolean;
   setClassicComposerExpanded: (open: boolean) => void;
   classicRailDrawer: "library" | "activity" | null;
@@ -1457,11 +1439,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       saveRightPanelOpen(next);
       return { rightPanelOpen: next };
     }),
-  classicSidebarCollapsed: loadClassicSidebarCollapsed(),
-  setClassicSidebarCollapsed: (classicSidebarCollapsed) => {
-    saveClassicSidebarCollapsed(classicSidebarCollapsed);
-    set({ classicSidebarCollapsed });
-  },
   classicComposerExpanded: false,
   setClassicComposerExpanded: (classicComposerExpanded) => set({ classicComposerExpanded }),
   classicRailDrawer: null,
