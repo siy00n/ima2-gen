@@ -12,13 +12,15 @@ function readSource(path) {
 describe("UI stability contracts", () => {
   it("keeps node attach state in the store and hides node-owned imports from gallery history", () => {
     const store = readSource("ui/src/store/useAppStore.ts");
+    const historyHelpers = readSource("ui/src/store/historyHelpers.ts");
     const inspector = readSource("ui/src/components/NodeInspector.tsx");
     const imageNode = readSource("ui/src/components/ImageNode.tsx");
 
     assert.match(store, /attachingNodeIds:/);
     assert.match(store, /finally[\s\S]*attachingNodeIds:/);
-    assert.match(store, /function upsertHistoryItems/);
-    assert.match(store, /item\.kind === "import"/);
+    assert.match(store, /upsertHistoryItems/);
+    assert.match(historyHelpers, /function upsertHistoryItems/);
+    assert.match(historyHelpers, /item\.kind === "import"/);
     assert.doesNotMatch(store, /async attachImageToNode[\s\S]*get\(\)\.addHistoryItem\(\{[\s\S]*kind: "import"/);
     assert.doesNotMatch(store, /async importHistoryItemAsNode[\s\S]*get\(\)\.addHistoryItem\(\{[\s\S]*kind: "import"/);
     assert.match(inspector, /attachingNodeIds\.includes/);

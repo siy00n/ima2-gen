@@ -32,41 +32,95 @@ import {
   type SessionGraphEdge,
   type SessionGraphNode,
   type SessionSummary,
-  type SessionFull,
 } from "../lib/api";
-import {
-  createPrompt,
-  deletePrompt,
-  getPromptLibrary,
-  importPromptLibrary,
-  togglePromptFavorite,
-  updatePrompt,
-  type PromptCreatePayload,
-  type PromptItem,
-  type PromptLibraryImportPayload,
-  type PromptUpdatePayload,
+import type {
+  PromptCreatePayload,
+  PromptItem,
+  PromptLibraryImportPayload,
+  PromptUpdatePayload,
 } from "../lib/promptLibrary";
 import { compressImage } from "../lib/image";
 import { compressToBase64, hasAlphaChannel, isHeic } from "../lib/compress";
 import { snap16 } from "../lib/size";
 import { newClientNodeId, initialPos, type ClientNodeId } from "../lib/graph";
 import {
-  DEFAULT_EDGE_TRANSFER,
+  applyEdgeTransferPatch,
+  applyNodeHistoryResult,
+  buildNodeGenerateDelivery,
+  canAttachImageToNodeData,
+  canRemoveNodeImageReference,
+  canUseNodeAsBranchParent,
+  collectBranchNodeLevels,
+  createChildEdge,
+  createGraphEdge,
+  currentNodeSettings,
+  findNearbyFreeNodePosition,
+  findNodeHistoryResult,
+  findParentNodeFor,
+  isSupportedNodeAttachFile,
+  joinParentPrompt,
+  mapSessionToGraph,
+  nextNodeName,
+  nodeSettingsFromEmbeddedMetadata,
+  normalizeGraphParentPointers,
+  normalizeNodeAttachDataUrl,
+  normalizeNodeSettings,
+  parseSizeSetting,
+  preferredChildPosition,
+  promptFromEmbeddedMetadata,
+  readFileAsDataUrl,
+  wouldCreateCycle,
+  type GenerateNodeOptions,
+  type GraphEdge,
+  type GraphNode,
+  type ImageNodeData,
+  type ImageNodeStatus,
+} from "./nodeGraphHelpers";
+import {
+  HISTORY_LIMIT,
+  currentHistoryIndex,
+  currentImageFromHistory,
+  isNodeOwnedImport,
+  narrowGenerateKind,
+  normalizeGenerateItem,
+  selectHistoryItem,
+  sameGenerateItem,
+  upsertHistoryItems,
+} from "./historyHelpers";
+import {
+  GRAPH_HISTORY_LIMIT,
+  clearGraphHistoryPatch,
+  commitUserGraphChange,
+  graphHistoryPatch,
+  hasPendingGraphNodes,
+  restoreGraphSnapshot,
+  takeGraphSnapshot,
+  type GraphSnapshot,
+} from "./graphHistoryHelpers";
+import { createPromptLibrarySlice } from "./promptLibrarySlice";
+import {
+  INFLIGHT_TTL_MS,
+  loadInFlight,
+  loadRightPanelOpen,
+  loadSelectedFilename,
+  loadUIMode,
+  saveInFlight as saveInFlightToStorage,
+  saveRightPanelOpen,
+  saveSelectedFilename,
+  saveUIMode,
+  type PersistedInFlight,
+} from "./storage";
+import {
   DEFAULT_IMAGE_MODEL,
-  FALLBACK_NODE_SETTINGS,
-  TEXT_ONLY_EDGE_TRANSFER,
-  buildNodeGenerateDelivery as buildNodeGenerateDeliveryCore,
   cloneNodeSettings,
   nextImageTransferMode,
   normalizeEdgeTransferData,
-  sameNodeSettings,
   syncEffectiveNodeSettings,
   type EdgeTransferData,
   type ImageTransferMode,
   type NodeGenerateDelivery,
   type NodeSettings,
 } from "../lib/nodeDelivery";
-import type { Node as FlowNode, Edge as FlowEdge } from "@xyflow/react";
 import { t, loadLocale, saveLocale, type Locale } from "../i18n";
 
 export {
@@ -83,78 +137,21 @@ export type {
   NodeGenerateDeliveryIssue,
   NodeSettings,
 } from "../lib/nodeDelivery";
-
-function loadRightPanelOpen(): boolean {
-  try {
-    const raw = localStorage.getItem("ima2.rightPanelOpen");
-    if (raw === null) {
-      if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
-        return !window.matchMedia("(max-width: 800px)").matches;
-      }
-      return true;
-    }
-    return JSON.parse(raw) === true;
-  } catch {
-    return true;
-  }
-}
-
-function saveRightPanelOpen(open: boolean): void {
-  try {
-    localStorage.setItem("ima2.rightPanelOpen", JSON.stringify(open));
-  } catch {}
-}
-
-function loadUIMode(): UIMode {
-  try {
-    const raw = localStorage.getItem("ima2.uiMode");
-    if (raw === "node" || raw === "classic") return raw;
-  } catch {}
-  return "classic";
-}
-
-type PersistedInFlight = {
-  id: string;
-  prompt: string;
-  startedAt: number;
-  phase?: string;
-  sessionId?: string | null;
-  clientNodeId?: string | null;
-  kind?: "classic" | "node";
-};
-const INFLIGHT_TTL_MS = 180_000;
-
-function loadInFlight(): PersistedInFlight[] {
-  try {
-    const raw = localStorage.getItem("ima2.inFlight");
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    const now = Date.now();
-    return arr
-      .filter(
-        (x) =>
-          x && typeof x.id === "string" && typeof x.prompt === "string" &&
-          typeof x.startedAt === "number" && now - x.startedAt < INFLIGHT_TTL_MS,
-      )
-      .map((x) => ({
-        id: x.id,
-        prompt: x.prompt,
-        startedAt: x.startedAt,
-        phase: typeof x.phase === "string" ? x.phase : undefined,
-        sessionId: typeof x.sessionId === "string" ? x.sessionId : null,
-        clientNodeId: typeof x.clientNodeId === "string" ? x.clientNodeId : null,
-        kind: x.kind === "classic" || x.kind === "node" ? x.kind : undefined,
-      }));
-  } catch {
-    return [];
-  }
-}
+export {
+  IMAGE_MODEL_VALUES,
+  canAttachImageToNodeData,
+  canRemoveNodeImageReference,
+  canUseNodeAsBranchParent,
+} from "./nodeGraphHelpers";
+export type {
+  GraphEdge,
+  GraphNode,
+  ImageNodeData,
+  ImageNodeStatus,
+} from "./nodeGraphHelpers";
 
 function saveInFlight(list: PersistedInFlight[]): void {
-  try {
-    localStorage.setItem("ima2.inFlight", JSON.stringify(list));
-  } catch (err) {
+  saveInFlightToStorage(list, (err) => {
     // Quota exceeded or storage disabled. Notify the user once per tab.
     const w = window as unknown as { __ima2QuotaWarned?: boolean };
     if (!w.__ima2QuotaWarned) {
@@ -164,579 +161,12 @@ function saveInFlight(list: PersistedInFlight[]): void {
         useAppStore.getState().showToast(t("toast.localStorageFull"), true);
       } catch {}
     }
-  }
-}
-
-function loadSelectedFilename(): string | null {
-  try {
-    const raw = localStorage.getItem("ima2.selectedFilename");
-    return typeof raw === "string" && raw.length > 0 ? raw : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveSelectedFilename(filename: string | null): void {
-  try {
-    if (filename) localStorage.setItem("ima2.selectedFilename", filename);
-    else localStorage.removeItem("ima2.selectedFilename");
-  } catch {}
-}
-
-const HISTORY_LIMIT = 500;
-
-function narrowGenerateKind(k?: string | null): GenerateItem["kind"] {
-  return k === "classic" || k === "edit" || k === "generate" || k === "import" ? k : null;
-}
-
-const QUALITY_VALUES: Quality[] = ["low", "medium", "high"];
-const FORMAT_VALUES: Format[] = ["png", "jpeg", "webp"];
-const MODERATION_VALUES: Moderation[] = ["low", "auto"];
-const SIZE_PRESET_VALUES: SizePreset[] = [
-  "1024x1024",
-  "1536x1024",
-  "1024x1536",
-  "1360x1024",
-  "1024x1360",
-  "1824x1024",
-  "1024x1824",
-  "2048x2048",
-  "2048x1152",
-  "1152x2048",
-  "3824x2160",
-  "2160x3824",
-  "auto",
-  "custom",
-];
-export const IMAGE_MODEL_VALUES: ImageModel[] = ["gpt-5.4-mini", "gpt-5.4", "gpt-5.5"];
-
-function hasStringValue<T extends string>(values: readonly T[], value: unknown): value is T {
-  return typeof value === "string" && values.includes(value as T);
-}
-
-function parseSizeSetting(size: unknown): Pick<NodeSettings, "sizePreset" | "customW" | "customH"> | null {
-  if (hasStringValue(SIZE_PRESET_VALUES, size)) {
-    return {
-      sizePreset: size,
-      customW: FALLBACK_NODE_SETTINGS.customW,
-      customH: FALLBACK_NODE_SETTINGS.customH,
-    };
-  }
-  if (typeof size !== "string") return null;
-  const match = size.match(/^(\d+)x(\d+)$/);
-  if (!match) return null;
-  return {
-    sizePreset: "custom",
-    customW: snap16(Number(match[1])),
-    customH: snap16(Number(match[2])),
-  };
-}
-
-function createGraphEdge(
-  source: ClientNodeId,
-  target: ClientNodeId,
-  data: Partial<EdgeTransferData> = DEFAULT_EDGE_TRANSFER,
-): GraphEdge {
-  return {
-    id: `${source}->${target}`,
-    source,
-    target,
-    type: "workflowEdge",
-    data: normalizeEdgeTransferData(data),
-  };
-}
-
-function currentNodeSettings(s: AppState): NodeSettings {
-  return {
-    model: s.model,
-    quality: s.quality,
-    sizePreset: s.sizePreset,
-    customW: s.customW,
-    customH: s.customH,
-    format: s.format,
-    moderation: s.moderation,
-  };
-}
-
-function normalizeNodeSettings(raw: unknown, fallback: NodeSettings = FALLBACK_NODE_SETTINGS): NodeSettings {
-  const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  return {
-    model: hasStringValue(IMAGE_MODEL_VALUES, obj.model) ? obj.model : fallback.model,
-    quality: hasStringValue(QUALITY_VALUES, obj.quality) ? obj.quality : fallback.quality,
-    sizePreset: hasStringValue(SIZE_PRESET_VALUES, obj.sizePreset)
-      ? obj.sizePreset
-      : fallback.sizePreset,
-    customW: typeof obj.customW === "number" ? snap16(obj.customW) : fallback.customW,
-    customH: typeof obj.customH === "number" ? snap16(obj.customH) : fallback.customH,
-    format: hasStringValue(FORMAT_VALUES, obj.format) ? obj.format : fallback.format,
-    moderation: hasStringValue(MODERATION_VALUES, obj.moderation)
-      ? obj.moderation
-      : fallback.moderation,
-  };
-}
-
-function settingsFromNodeData(d: Partial<ImageNodeData>): NodeSettings {
-  const legacySize = parseSizeSetting(d.size);
-  const legacyFallback: NodeSettings = {
-    model: hasStringValue(IMAGE_MODEL_VALUES, d.model) ? d.model : FALLBACK_NODE_SETTINGS.model,
-    quality: hasStringValue(QUALITY_VALUES, d.quality) ? d.quality : FALLBACK_NODE_SETTINGS.quality,
-    sizePreset: legacySize?.sizePreset ?? FALLBACK_NODE_SETTINGS.sizePreset,
-    customW: legacySize?.customW ?? FALLBACK_NODE_SETTINGS.customW,
-    customH: legacySize?.customH ?? FALLBACK_NODE_SETTINGS.customH,
-    format: hasStringValue(FORMAT_VALUES, d.format) ? d.format : FALLBACK_NODE_SETTINGS.format,
-    moderation: hasStringValue(MODERATION_VALUES, d.moderation)
-      ? d.moderation
-      : FALLBACK_NODE_SETTINGS.moderation,
-  };
-  return normalizeNodeSettings(d.settings, legacyFallback);
-}
-
-function nextNodeName(nodes: GraphNode[]): string {
-  const used = new Set(
-    nodes
-      .map((node) => node.data.name?.trim())
-      .filter((name): name is string => Boolean(name)),
-  );
-  for (let index = 1; ; index += 1) {
-    const name = `Node ${index}`;
-    if (!used.has(name)) return name;
-  }
-}
-
-export type ImageNodeStatus =
-  | "empty"
-  | "pending"
-  | "reconciling"
-  | "ready"
-  | "canceled"
-  | "stale"
-  | "asset-missing"
-  | "error";
-
-export type ImageNodeData = {
-  clientId: ClientNodeId;
-  serverNodeId: string | null;
-  parentServerNodeId: string | null;
-  name?: string;
-  prompt: string;
-  imageUrl: string | null;
-  status: ImageNodeStatus;
-  pendingRequestId: string | null;
-  pendingPhase?: string | null;
-  pendingStartedAt?: number | null;
-  error?: string;
-  elapsed?: number;
-  webSearchCalls?: number;
-  filename?: string;
-  provider?: string;
-  quality?: string;
-  size?: string;
-  format?: string;
-  moderation?: string;
-  model?: string;
-  assetSource?: "upload";
-  imageReferenceDetached?: true;
-  settings: NodeSettings;
-  usage?: GenerateItem["usage"];
-  createdAt?: number;
-  graphLevel?: number;
-  graphIsolated?: boolean;
-  graphTreeRootId?: string;
-  graphTreeIndex?: number;
-  graphTreeColor?: string;
-};
-
-export type GraphNode = FlowNode<ImageNodeData>;
-export type GraphEdge = FlowEdge<EdgeTransferData>;
-
-export function canUseNodeAsBranchParent(data: Pick<ImageNodeData, "status">): boolean {
-  return data.status !== "pending" && data.status !== "reconciling";
-}
-
-export function canAttachImageToNodeData(
-  data: Pick<ImageNodeData, "status" | "serverNodeId" | "imageUrl">,
-): boolean {
-  return data.status === "empty" && !data.serverNodeId && !data.imageUrl;
-}
-
-export function canRemoveNodeImageReference(
-  data: Pick<ImageNodeData, "status" | "serverNodeId" | "imageUrl" | "filename">,
-): boolean {
-  if (data.status === "pending" || data.status === "reconciling") return false;
-  return !!data.serverNodeId || !!data.imageUrl || !!data.filename;
-}
-
-function hasReadyNodeImage(data: Pick<ImageNodeData, "status" | "serverNodeId">): boolean {
-  return data.status === "ready" && !!data.serverNodeId;
-}
-
-function edgeTransferForParent(parent: GraphNode): EdgeTransferData {
-  return hasReadyNodeImage(parent.data) ? DEFAULT_EDGE_TRANSFER : TEXT_ONLY_EDGE_TRANSFER;
-}
-
-function createChildEdge(parent: GraphNode, target: ClientNodeId): GraphEdge {
-  return createGraphEdge(parent.id as ClientNodeId, target, edgeTransferForParent(parent));
-}
-
-const SUPPORTED_NODE_ATTACH_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-
-function nodeAttachMimeForFile(file: File): string | null {
-  if (SUPPORTED_NODE_ATTACH_TYPES.has(file.type)) return file.type;
-  if (/\.png$/i.test(file.name)) return "image/png";
-  if (/\.jpe?g$/i.test(file.name)) return "image/jpeg";
-  if (/\.webp$/i.test(file.name)) return "image/webp";
-  return null;
-}
-
-function isSupportedNodeAttachFile(file: File): boolean {
-  return nodeAttachMimeForFile(file) !== null;
-}
-
-function normalizeNodeAttachDataUrl(file: File, dataUrl: string): string {
-  const mime = nodeAttachMimeForFile(file);
-  if (!mime) return dataUrl;
-  return dataUrl.replace(/^data:[^;]*;base64,/i, `data:${mime};base64,`);
-}
-
-function nodeSettingsFromEmbeddedMetadata(
-  metadata: Record<string, unknown> | null | undefined,
-  fallback: NodeSettings,
-): NodeSettings | null {
-  if (!metadata) return null;
-  const parsedSize = parseSizeSetting(metadata.size);
-  const settings = normalizeNodeSettings(
-    {
-      model: metadata.model,
-      quality: metadata.quality,
-      sizePreset: parsedSize?.sizePreset,
-      customW: parsedSize?.customW,
-      customH: parsedSize?.customH,
-      format: metadata.format,
-      moderation: metadata.moderation,
-    },
-    fallback,
-  );
-  return sameNodeSettings(settings, fallback) ? null : settings;
-}
-
-function promptFromEmbeddedMetadata(metadata: Record<string, unknown> | null | undefined): string | null {
-  if (!metadata) return null;
-  for (const key of ["userPrompt", "prompt"]) {
-    const value = metadata[key];
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return null;
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("File read failed"));
-      }
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("File read failed"));
-    reader.readAsDataURL(file);
   });
-}
-
-type NodePosition = { x: number; y: number };
-type GenerateNodeOptions = { selectOnComplete?: boolean; branchRootId?: ClientNodeId };
-
-const NODE_PLACEMENT_WIDTH = 282;
-const NODE_PLACEMENT_HEIGHT = 260;
-const NODE_PLACEMENT_MARGIN = 24;
-const NODE_CHILD_X_OFFSET = NODE_PLACEMENT_WIDTH + NODE_PLACEMENT_MARGIN * 2 + 8;
-const NODE_PLACEMENT_ROW_STEP = NODE_PLACEMENT_HEIGHT + NODE_PLACEMENT_MARGIN * 2;
-const NODE_PLACEMENT_COL_STEP = NODE_CHILD_X_OFFSET;
-
-function placementRect(position: NodePosition) {
-  return {
-    left: position.x - NODE_PLACEMENT_MARGIN,
-    top: position.y - NODE_PLACEMENT_MARGIN,
-    right: position.x + NODE_PLACEMENT_WIDTH + NODE_PLACEMENT_MARGIN,
-    bottom: position.y + NODE_PLACEMENT_HEIGHT + NODE_PLACEMENT_MARGIN,
-  };
-}
-
-function rectsOverlap(a: ReturnType<typeof placementRect>, b: ReturnType<typeof placementRect>): boolean {
-  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-}
-
-function isNodePositionFree(position: NodePosition, nodes: GraphNode[]): boolean {
-  const candidate = placementRect(position);
-  return !nodes.some((node) => rectsOverlap(candidate, placementRect(node.position)));
-}
-
-function findNearbyFreeNodePosition(preferred: NodePosition, nodes: GraphNode[]): NodePosition {
-  const rowOffsets = [0];
-  for (let row = 1; row <= 10; row += 1) {
-    rowOffsets.push(row * NODE_PLACEMENT_ROW_STEP, -row * NODE_PLACEMENT_ROW_STEP);
-  }
-
-  for (let col = 0; col <= 10; col += 1) {
-    for (const yOffset of rowOffsets) {
-      const candidate = {
-        x: preferred.x + col * NODE_PLACEMENT_COL_STEP,
-        y: preferred.y + yOffset,
-      };
-      if (isNodePositionFree(candidate, nodes)) return candidate;
-    }
-  }
-
-  return {
-    x: preferred.x + NODE_PLACEMENT_COL_STEP * 11,
-    y: preferred.y,
-  };
-}
-
-function preferredChildPosition(parent: GraphNode): NodePosition {
-  return {
-    x: parent.position.x + NODE_CHILD_X_OFFSET,
-    y: parent.position.y,
-  };
-}
-
-function normalizeGraphParentPointers(nodes: GraphNode[], edges: GraphEdge[]): GraphNode[] {
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const incomingByTarget = new Map(edges.map((edge) => [edge.target, edge]));
-
-  return nodes.map((node) => {
-    const incoming = incomingByTarget.get(node.id);
-    const parent = incoming ? nodeById.get(incoming.source) : null;
-    const incomingData = incoming ? normalizeEdgeTransferData(incoming.data) : null;
-    const nextParentServerNodeId =
-      incomingData?.imageTransfer === "off" ? null : parent?.data.serverNodeId ?? null;
-    if (node.data.parentServerNodeId === nextParentServerNodeId) return node;
-    return {
-      ...node,
-      data: {
-        ...node.data,
-        parentServerNodeId: nextParentServerNodeId,
-      },
-    };
-  });
-}
-
-function findNodeHistoryResult(
-  items: HistoryItem[],
-  sessionId: string,
-  node: GraphNode,
-  canceledRequestIds: string[] = [],
-): HistoryItem | null {
-  const startedAt = node.data.pendingStartedAt ?? 0;
-  if (!startedAt) return null;
-  const canceled = new Set(canceledRequestIds);
-  return (
-    items.find(
-      (item) =>
-        (item.sessionId ?? null) === sessionId &&
-        (item.clientNodeId ?? null) === node.id &&
-        !canceled.has(item.requestId ?? "") &&
-        (item.createdAt ?? 0) >= startedAt &&
-        !!item.nodeId &&
-        !!item.url,
-    ) ?? null
-  );
-}
-
-function applyNodeHistoryResult(node: GraphNode, item: HistoryItem): GraphNode {
-  const importedSize = parseSizeSetting(item.size);
-  return {
-    ...node,
-    data: {
-      ...node.data,
-      serverNodeId: item.nodeId ?? node.data.serverNodeId,
-      imageUrl: item.url,
-      status: "ready" as const,
-      pendingRequestId: null,
-      pendingPhase: null,
-      pendingStartedAt: null,
-      filename: item.filename,
-      provider: item.provider,
-      quality: item.quality ?? node.data.quality,
-      size: item.size ?? node.data.size,
-      format: item.format ?? node.data.format,
-      moderation: item.moderation ?? node.data.moderation,
-      model: item.model ?? node.data.model,
-      settings: normalizeNodeSettings(
-        {
-          quality: item.quality,
-          sizePreset: importedSize?.sizePreset,
-          customW: importedSize?.customW,
-          customH: importedSize?.customH,
-          format: item.format,
-          moderation: item.moderation,
-          model: item.model,
-        },
-        node.data.settings,
-      ),
-      createdAt: item.createdAt,
-      imageReferenceDetached: undefined,
-      error: undefined,
-    },
-  };
-}
-
-function mapSessionToGraph(session: SessionFull): {
-  graphNodes: GraphNode[];
-  graphEdges: GraphEdge[];
-  graphVersion: number;
-} {
-  const graphNodes: GraphNode[] = session.nodes.map((n) => {
-    const d = (n.data ?? {}) as Partial<ImageNodeData>;
-    const explicitImageUrl =
-      typeof d.imageUrl === "string" && d.imageUrl.length > 0 ? d.imageUrl : null;
-    const fallbackImageUrl =
-      typeof d.serverNodeId === "string" && d.serverNodeId.length > 0
-        ? `/generated/${d.serverNodeId}.png`
-        : null;
-    const imageUrl = explicitImageUrl ?? fallbackImageUrl;
-    const data: ImageNodeData = {
-      clientId: n.id as ClientNodeId,
-      serverNodeId: (d.serverNodeId ?? null) as string | null,
-      parentServerNodeId: (d.parentServerNodeId ?? null) as string | null,
-      name: typeof d.name === "string" ? d.name : undefined,
-      prompt: typeof d.prompt === "string" ? d.prompt : "",
-      imageUrl,
-      status: (d.status ?? (imageUrl ? "ready" : "empty")) as ImageNodeStatus,
-      pendingRequestId: (d.pendingRequestId ?? null) as string | null,
-      pendingPhase: (d.pendingPhase ?? null) as string | null,
-      pendingStartedAt:
-        typeof d.pendingStartedAt === "number" ? d.pendingStartedAt : null,
-      error: d.error as string | undefined,
-      elapsed: d.elapsed as number | undefined,
-      webSearchCalls: d.webSearchCalls as number | undefined,
-      filename: d.filename as string | undefined,
-      provider: d.provider as string | undefined,
-      quality: d.quality as string | undefined,
-      size: d.size as string | undefined,
-      format: d.format as string | undefined,
-      moderation: d.moderation as string | undefined,
-      model: d.model as string | undefined,
-      assetSource: d.assetSource === "upload" ? "upload" : undefined,
-      imageReferenceDetached: d.imageReferenceDetached === true ? true : undefined,
-      settings: settingsFromNodeData(d),
-      usage: d.usage as GenerateItem["usage"] | undefined,
-      createdAt: d.createdAt as number | undefined,
-    };
-    return {
-      id: n.id,
-      type: "imageNode",
-      position: { x: n.x, y: n.y },
-      data,
-    };
-  });
-  const graphEdges: GraphEdge[] = session.edges.map((e) => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    type: "workflowEdge",
-    data: normalizeEdgeTransferData(e.data),
-  }));
-  const normalizedNodes = normalizeGraphParentPointers(graphNodes, graphEdges);
-  return {
-    graphNodes: syncEffectiveNodeSettings(normalizedNodes, graphEdges),
-    graphEdges,
-    graphVersion: session.graphVersion,
-  };
 }
 
 type ToastState = { message: string; error: boolean; id: number } | null;
 
-function sameGenerateItem(a: GenerateItem | null | undefined, b: GenerateItem | null | undefined): boolean {
-  if (!a || !b) return false;
-  if (a.filename && b.filename) return a.filename === b.filename;
-  return a.image === b.image;
-}
-
-function historyItemKey(item: Pick<GenerateItem, "filename" | "url" | "image">): string {
-  return item.filename || item.url || item.image;
-}
-
-function normalizeGenerateItem(item: GenerateItem): GenerateItem {
-  const image = item.image || item.url || "";
-  const url = item.url ?? item.image;
-  return {
-    ...item,
-    image,
-    url,
-    thumb: item.thumb ?? url ?? image,
-    createdAt: item.createdAt || Date.now(),
-    kind: narrowGenerateKind(item.kind),
-  };
-}
-
-function isNodeOwnedImport(item: Pick<GenerateItem, "kind">): boolean {
-  return item.kind === "import";
-}
-
-function isHistoryTombstoned(item: GenerateItem, tombstones: string[]): boolean {
-  return !!item.filename && tombstones.includes(item.filename);
-}
-
-function mergeGenerateItem(existing: GenerateItem, incoming: GenerateItem): GenerateItem {
-  return {
-    ...existing,
-    ...incoming,
-    image: incoming.image || existing.image,
-    url: incoming.url ?? existing.url,
-    thumb: incoming.thumb ?? existing.thumb,
-    createdAt: incoming.createdAt ?? existing.createdAt,
-    isFavorite: incoming.isFavorite ?? existing.isFavorite,
-  };
-}
-
-function upsertHistoryItems(
-  history: GenerateItem[],
-  incoming: GenerateItem[],
-  tombstones: string[],
-  options: { includeNodeImports?: boolean; ignoreTombstones?: boolean } = {},
-): GenerateItem[] {
-  const next = history
-    .map(normalizeGenerateItem)
-    .filter((item) => options.includeNodeImports || !isNodeOwnedImport(item))
-    .filter((item) => options.ignoreTombstones || !isHistoryTombstoned(item, tombstones));
-
-  for (const raw of [...incoming].reverse()) {
-    const item = normalizeGenerateItem(raw);
-    if (!options.includeNodeImports && isNodeOwnedImport(item)) continue;
-    if (!options.ignoreTombstones && isHistoryTombstoned(item, tombstones)) continue;
-    const key = historyItemKey(item);
-    if (!key) continue;
-    const existingIndex = next.findIndex((candidate) => historyItemKey(candidate) === key);
-    const merged =
-      existingIndex >= 0 ? mergeGenerateItem(next[existingIndex], item) : item;
-    if (existingIndex >= 0) next.splice(existingIndex, 1);
-    next.unshift(merged);
-  }
-
-  return next.slice(0, HISTORY_LIMIT);
-}
-
-function currentImageFromHistory(
-  history: GenerateItem[],
-  currentImage: GenerateItem | null,
-): GenerateItem | null {
-  if (!currentImage) return history[0] ?? null;
-  const key = historyItemKey(currentImage);
-  return history.find((item) => historyItemKey(item) === key) ?? history[0] ?? null;
-}
-
-function currentHistoryIndex(history: GenerateItem[], currentImage: GenerateItem | null): number {
-  if (!currentImage) return -1;
-  return history.findIndex((item) => sameGenerateItem(item, currentImage));
-}
-
-function selectHistoryItem(item: GenerateItem, set: (patch: Partial<AppState>) => void): void {
-  saveSelectedFilename(item.filename ?? null);
-  set({ currentImage: item });
-}
-
-type AppState = {
+export type AppState = {
   provider: Provider;
   model: ImageModel;
   quality: Quality;
@@ -886,46 +316,6 @@ type AppState = {
   getResolvedSize: () => string;
 };
 
-const GRAPH_HISTORY_LIMIT = 50;
-
-type GraphSnapshot = {
-  graphNodes: GraphNode[];
-  graphEdges: GraphEdge[];
-  selectedNodeId: ClientNodeId | null;
-  selectedEdgeId: string | null;
-};
-
-function cloneGraphNodeForSnapshot(node: GraphNode): GraphNode {
-  return {
-    ...node,
-    position: { ...node.position },
-    data: {
-      ...node.data,
-      settings: cloneNodeSettings(node.data.settings),
-    },
-  };
-}
-
-function cloneGraphEdgeForSnapshot(edge: GraphEdge): GraphEdge {
-  return {
-    ...edge,
-    data: normalizeEdgeTransferData(edge.data),
-  };
-}
-
-function takeGraphSnapshot(s: Pick<AppState, "graphNodes" | "graphEdges" | "selectedNodeId" | "selectedEdgeId">): GraphSnapshot {
-  return {
-    graphNodes: s.graphNodes.map(cloneGraphNodeForSnapshot),
-    graphEdges: s.graphEdges.map(cloneGraphEdgeForSnapshot),
-    selectedNodeId: s.selectedNodeId,
-    selectedEdgeId: s.selectedEdgeId,
-  };
-}
-
-function hasPendingGraphNodes(nodes: GraphNode[]): boolean {
-  return nodes.some((node) => node.data.status === "pending" || node.data.status === "reconciling");
-}
-
 function isNodeGeneratingStatus(status: ImageNodeStatus): boolean {
   return status === "pending" || status === "reconciling";
 }
@@ -974,206 +364,6 @@ function removeImageReferenceFromNodeData(data: ImageNodeData): ImageNodeData {
     createdAt: undefined,
     imageReferenceDetached: true,
   };
-}
-
-function clearGraphHistoryPatch(): Pick<
-  AppState,
-  "graphUndoPast" | "graphUndoFuture" | "canUndoGraph" | "canRedoGraph"
-> {
-  return {
-    graphUndoPast: [],
-    graphUndoFuture: [],
-    canUndoGraph: false,
-    canRedoGraph: false,
-  };
-}
-
-function graphHistoryPatch(
-  graphUndoPast: GraphSnapshot[],
-  graphUndoFuture: GraphSnapshot[],
-): Pick<AppState, "graphUndoPast" | "graphUndoFuture" | "canUndoGraph" | "canRedoGraph"> {
-  return {
-    graphUndoPast,
-    graphUndoFuture,
-    canUndoGraph: graphUndoPast.length > 0,
-    canRedoGraph: graphUndoFuture.length > 0,
-  };
-}
-
-function pushGraphUndoPatch(s: AppState): Pick<
-  AppState,
-  "graphUndoPast" | "graphUndoFuture" | "canUndoGraph" | "canRedoGraph"
-> {
-  if (hasPendingGraphNodes(s.graphNodes)) {
-    return graphHistoryPatch(s.graphUndoPast, []);
-  }
-  const graphUndoPast = [...s.graphUndoPast, takeGraphSnapshot(s)].slice(-GRAPH_HISTORY_LIMIT);
-  return graphHistoryPatch(graphUndoPast, []);
-}
-
-function commitUserGraphChange(
-  get: () => AppState,
-  set: (patch: Partial<AppState>) => void,
-  patch: Partial<AppState>,
-): void {
-  set({
-    ...patch,
-    ...pushGraphUndoPatch(get()),
-  });
-  get().scheduleGraphSave();
-}
-
-const NODE_RUNTIME_DATA_KEYS: Array<keyof ImageNodeData> = [
-  "serverNodeId",
-  "imageUrl",
-  "status",
-  "pendingRequestId",
-  "pendingPhase",
-  "pendingStartedAt",
-  "error",
-  "elapsed",
-  "webSearchCalls",
-  "filename",
-  "provider",
-  "quality",
-  "size",
-  "format",
-  "moderation",
-  "model",
-  "usage",
-  "createdAt",
-];
-
-function mergeCurrentRuntimeData(snapshotNode: GraphNode, currentNode: GraphNode | undefined): GraphNode {
-  const next = cloneGraphNodeForSnapshot(snapshotNode);
-  if (!currentNode) return next;
-  if (snapshotNode.data.imageReferenceDetached || currentNode.data.imageReferenceDetached) {
-    return next;
-  }
-  if (snapshotNode.data.assetSource === "upload" || currentNode.data.assetSource === "upload") {
-    return next;
-  }
-  const data = { ...next.data };
-  for (const key of NODE_RUNTIME_DATA_KEYS) {
-    (data as Record<string, unknown>)[key] = (currentNode.data as Record<string, unknown>)[key];
-  }
-  return {
-    ...next,
-    data,
-  };
-}
-
-function restoreGraphSnapshot(snapshot: GraphSnapshot, currentNodes: GraphNode[]): GraphSnapshot {
-  const currentById = new Map(currentNodes.map((node) => [node.id, node]));
-  const graphEdges = snapshot.graphEdges.map(cloneGraphEdgeForSnapshot);
-  const restoredNodes = snapshot.graphNodes.map((node) =>
-    mergeCurrentRuntimeData(node, currentById.get(node.id)),
-  );
-  const graphNodes = syncEffectiveNodeSettings(
-    normalizeGraphParentPointers(restoredNodes, graphEdges),
-    graphEdges,
-  );
-  return {
-    graphNodes,
-    graphEdges,
-    selectedNodeId: snapshot.selectedNodeId,
-    selectedEdgeId: snapshot.selectedEdgeId,
-  };
-}
-
-function findParentNodeFor(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-  clientId: ClientNodeId,
-): GraphNode | null {
-  const incoming = edges.find((e) => e.target === clientId);
-  if (!incoming) return null;
-  return nodes.find((n) => n.id === incoming.source) ?? null;
-}
-
-function buildNodeGenerateDelivery(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-  clientId: ClientNodeId,
-  options: { requestId?: string; sessionId?: string | null } = {},
-): NodeGenerateDelivery<GraphNode> | null {
-  return buildNodeGenerateDeliveryCore(nodes, edges, clientId, {
-    ...options,
-    promptRequiredMessage: t("toast.promptRequired"),
-    parentRequiredMessage: t("toast.nodeParentRequired"),
-  });
-}
-
-function applyEdgeTransferPatch(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
-  edgeId: string,
-  patch: Partial<EdgeTransferData>,
-): { graphNodes: GraphNode[]; graphEdges: GraphEdge[] } | null {
-  const edge = edges.find((e) => e.id === edgeId);
-  if (!edge) return null;
-  const nextEdges = edges.map((e) =>
-    e.id === edgeId
-      ? {
-          ...e,
-          data: normalizeEdgeTransferData({ ...e.data, ...patch }),
-        }
-      : e,
-  );
-  const nextNodes =
-    typeof patch.transferSettings === "boolean"
-      ? syncEffectiveNodeSettings(nodes, nextEdges)
-      : nodes;
-  return {
-    graphNodes: normalizeGraphParentPointers(nextNodes, nextEdges),
-    graphEdges: nextEdges,
-  };
-}
-
-function wouldCreateCycle(
-  edges: GraphEdge[],
-  sourceClientId: ClientNodeId,
-  targetClientId: ClientNodeId,
-): boolean {
-  if (sourceClientId === targetClientId) return true;
-  const stack = [targetClientId];
-  const seen = new Set<ClientNodeId>();
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (!current || seen.has(current)) continue;
-    if (current === sourceClientId) return true;
-    seen.add(current);
-    for (const edge of edges) {
-      if (edge.source === current) stack.push(edge.target as ClientNodeId);
-    }
-  }
-  return false;
-}
-
-function collectBranchNodeLevels(edges: GraphEdge[], rootId: ClientNodeId): ClientNodeId[][] {
-  const levels: ClientNodeId[][] = [];
-  const queue: Array<{ id: ClientNodeId; depth: number }> = [{ id: rootId, depth: 0 }];
-  const seen = new Set<ClientNodeId>();
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current || seen.has(current.id)) continue;
-    seen.add(current.id);
-    if (!levels[current.depth]) levels[current.depth] = [];
-    levels[current.depth].push(current.id);
-    for (const edge of edges) {
-      if (edge.source === current.id) queue.push({ id: edge.target as ClientNodeId, depth: current.depth + 1 });
-    }
-  }
-  return levels;
-}
-
-function joinParentPrompt(parentPrompt: string, childPrompt: string): string {
-  const parent = parentPrompt.trim();
-  const child = childPrompt.trim();
-  if (!parent) return childPrompt;
-  if (!child) return parent;
-  if (child.startsWith(parent)) return childPrompt;
-  return `${parent}\n\n${child}`;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -1421,12 +611,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentImage: null,
   history: [],
   historyTombstones: [],
-  promptLibraryOpen: false,
-  promptLibraryItems: [],
-  promptLibraryLoading: false,
-  promptLibrarySaving: false,
-  promptLibraryError: null,
-  promptLibraryLastSavedId: null,
+  ...createPromptLibrarySlice(set, get),
   toast: null,
   rightPanelOpen: loadRightPanelOpen(),
   setRightPanelOpen: (rightPanelOpen) => {
@@ -1449,7 +634,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   uiMode: loadUIMode(),
   setUIMode: (m) => {
-    try { localStorage.setItem("ima2.uiMode", m); } catch {}
+    saveUIMode(m);
     set({ uiMode: m });
   },
 
@@ -2778,7 +1963,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         rightPanelOpen: true,
       });
       saveRightPanelOpen(true);
-      try { localStorage.setItem("ima2.uiMode", "node"); } catch {}
+      saveUIMode("node");
       get().scheduleGraphSave();
       get().showToast(t("toast.nodeImported"));
     } catch (err) {
@@ -2879,144 +2064,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       applyFavorite(!nextFavorite);
       get().showToast(err instanceof Error ? err.message : t("toast.generateFailed"), true);
     }
-  },
-
-  openPromptLibrary: async () => {
-    set({ promptLibraryOpen: true });
-    await get().refreshPromptLibrary();
-  },
-  closePromptLibrary: () => set({ promptLibraryOpen: false }),
-  refreshPromptLibrary: async () => {
-    set({ promptLibraryLoading: true, promptLibraryError: null });
-    try {
-      const { prompts } = await getPromptLibrary();
-      set({ promptLibraryItems: prompts, promptLibraryLoading: false });
-    } catch (err) {
-      set({
-        promptLibraryLoading: false,
-        promptLibraryError: err instanceof Error ? err.message : "Prompt library failed",
-      });
-    }
-  },
-  createPromptLibraryItem: async (payload) => {
-    set({ promptLibrarySaving: true, promptLibraryError: null });
-    try {
-      const { prompt } = await createPrompt(payload);
-      set((s) => ({
-        promptLibraryItems: [prompt, ...s.promptLibraryItems],
-        promptLibrarySaving: false,
-        promptLibraryLastSavedId: prompt.id,
-      }));
-      get().showToast(t("toast.promptSaved"));
-      window.setTimeout(() => {
-        if (get().promptLibraryLastSavedId === prompt.id) {
-          set({ promptLibraryLastSavedId: null });
-        }
-      }, 2600);
-    } catch (err) {
-      set({
-        promptLibrarySaving: false,
-        promptLibraryError: err instanceof Error ? err.message : "Prompt save failed",
-      });
-      get().showToast(t("toast.promptSaveFailed"), true);
-    }
-  },
-  updatePromptLibraryItem: async (id, payload) => {
-    set({ promptLibrarySaving: true, promptLibraryError: null });
-    try {
-      const { prompt } = await updatePrompt(id, payload);
-      set((s) => ({
-        promptLibraryItems: s.promptLibraryItems.map((item) =>
-          item.id === id ? prompt : item,
-        ),
-        promptLibrarySaving: false,
-      }));
-    } catch (err) {
-      set({
-        promptLibrarySaving: false,
-        promptLibraryError: err instanceof Error ? err.message : "Prompt update failed",
-      });
-    }
-  },
-  deletePromptLibraryItem: async (id) => {
-    set({ promptLibrarySaving: true, promptLibraryError: null });
-    try {
-      await deletePrompt(id);
-      set((s) => ({
-        promptLibraryItems: s.promptLibraryItems.filter((item) => item.id !== id),
-        promptLibrarySaving: false,
-      }));
-    } catch (err) {
-      set({
-        promptLibrarySaving: false,
-        promptLibraryError: err instanceof Error ? err.message : "Prompt delete failed",
-      });
-    }
-  },
-  togglePromptLibraryFavorite: async (id) => {
-    const current = get().promptLibraryItems.find((item) => item.id === id);
-    if (!current) return;
-    const optimistic = { ...current, isFavorite: !current.isFavorite };
-    set((s) => ({
-      promptLibraryItems: s.promptLibraryItems.map((item) =>
-        item.id === id ? optimistic : item,
-      ),
-    }));
-    try {
-      const result = await togglePromptFavorite(id);
-      set((s) => ({
-        promptLibraryItems: s.promptLibraryItems.map((item) =>
-          item.id === id
-            ? { ...item, isFavorite: result.isFavorite, favoritedAt: result.favoritedAt }
-            : item,
-        ),
-      }));
-    } catch {
-      set((s) => ({
-        promptLibraryItems: s.promptLibraryItems.map((item) =>
-          item.id === id ? current : item,
-        ),
-      }));
-    }
-  },
-  importPromptLibraryItems: async (payload) => {
-    set({ promptLibrarySaving: true, promptLibraryError: null });
-    try {
-      await importPromptLibrary(payload);
-      set({ promptLibrarySaving: false });
-      await get().refreshPromptLibrary();
-    } catch (err) {
-      set({
-        promptLibrarySaving: false,
-        promptLibraryError: err instanceof Error ? err.message : "Prompt import failed",
-      });
-    }
-  },
-  usePromptLibraryItem: (item) => {
-    const s = get();
-    if (s.uiMode === "node" && s.selectedNodeId) {
-      get().updateNodePrompt(s.selectedNodeId, item.text);
-    } else if (s.uiMode === "node") {
-      get().showToast(t("toast.selectNodeFirst"), true);
-      return;
-    } else {
-      set({ prompt: item.text });
-    }
-    get().closePromptLibrary();
-  },
-  insertPromptLibraryItem: (item) => {
-    const s = get();
-    if (s.uiMode === "node" && s.selectedNodeId) {
-      const node = s.graphNodes.find((n) => n.id === s.selectedNodeId);
-      const next = [node?.data.prompt, item.text].filter(Boolean).join("\n\n");
-      get().updateNodePrompt(s.selectedNodeId, next);
-    } else if (s.uiMode === "node") {
-      get().showToast(t("toast.selectNodeFirst"), true);
-      return;
-    } else {
-      set({ prompt: [s.prompt, item.text].filter(Boolean).join("\n\n") });
-    }
-    get().closePromptLibrary();
   },
 
   getResolvedSize: () => {
