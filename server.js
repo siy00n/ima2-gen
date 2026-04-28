@@ -992,7 +992,7 @@ app.post("/api/generate", async (req, res) => {
       typeof req.body?.sessionId === "string" ? req.body.sessionId : null;
     const clientNodeId =
       typeof req.body?.clientNodeId === "string" ? req.body.clientNodeId : null;
-    const { prompt, quality = "low", size = "1024x1024", format = "png", moderation = "low", provider = "auto", n = 1, references = [], model: rawModel } =
+    const { prompt, quality = "low", size = "auto", format = "png", moderation = "low", provider = "auto", n = 1, references = [], model: rawModel } =
       req.body;
 
     if (!prompt) return res.status(400).json({ error: "Prompt is required" });
@@ -1255,7 +1255,7 @@ async function editViaOAuth(
 // ── Edit image (inpainting) ──
 app.post("/api/edit", async (req, res) => {
   try {
-    const { prompt, image: imageB64, mask: maskB64, quality = "low", size = "1024x1024", moderation = "low", provider = "oauth", model: rawModel } =
+    const { prompt, image: imageB64, mask: maskB64, quality = "low", size = "auto", moderation = "low", provider = "oauth", model: rawModel } =
       req.body;
 
     if (!prompt || !imageB64)
@@ -1412,7 +1412,7 @@ async function prepareNodeGenerateDelivery(
   const {
     prompt,
     quality = "low",
-    size = "1024x1024",
+    size = "auto",
     format = "png",
     moderation = "low",
     model: rawModel,

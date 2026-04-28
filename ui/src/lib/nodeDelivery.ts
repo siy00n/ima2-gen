@@ -40,7 +40,7 @@ export const TEXT_ONLY_EDGE_TRANSFER: EdgeTransferData = {
 export const FALLBACK_NODE_SETTINGS: NodeSettings = {
   model: DEFAULT_IMAGE_MODEL,
   quality: "low",
-  sizePreset: "1024x1024",
+  sizePreset: "auto",
   customW: 1920,
   customH: 1088,
   format: "png",
