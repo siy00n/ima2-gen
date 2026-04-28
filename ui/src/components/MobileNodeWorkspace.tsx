@@ -39,6 +39,7 @@ import type { Format, ImageModel, Moderation, Quality, SizePreset } from "../typ
 
 type MobileNodeView = "node" | "branches" | "map" | "connection";
 type ConnectionReturnView = "node" | "branches";
+type NodeListSort = "graphAsc" | "graphDesc";
 
 const IMAGE_TRANSFER_OPTIONS: ImageTransferMode[] = ["off", "parent", "ancestor"];
 
@@ -111,6 +112,26 @@ function edgeTransferText(t: (key: string) => string, edge: GraphEdge): string {
   ].join(" · ");
 }
 
+function compareGraphNodes(
+  a: GraphNode,
+  b: GraphNode,
+  graphMeta: ReturnType<typeof deriveGraphMeta>,
+): number {
+  const ma = graphMeta.get(a.id);
+  const mb = graphMeta.get(b.id);
+  if ((ma?.level ?? 0) !== (mb?.level ?? 0)) return (ma?.level ?? 0) - (mb?.level ?? 0);
+  if ((ma?.treeIndex ?? 0) !== (mb?.treeIndex ?? 0)) {
+    return (ma?.treeIndex ?? 0) - (mb?.treeIndex ?? 0);
+  }
+  const ax = a.position?.x ?? 0;
+  const bx = b.position?.x ?? 0;
+  if (ax !== bx) return ax - bx;
+  const ay = a.position?.y ?? 0;
+  const by = b.position?.y ?? 0;
+  if (ay !== by) return ay - by;
+  return a.id.localeCompare(b.id);
+}
+
 function EdgeChips({
   edge,
   onCycleImage,
@@ -167,6 +188,7 @@ export function MobileNodeWorkspace() {
   const [connectionReturnView, setConnectionReturnView] = useState<ConnectionReturnView>("branches");
   const [sessionSheetOpen, setSessionSheetOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [nodeListSort, setNodeListSort] = useState<NodeListSort>("graphAsc");
   const settingsRef = useRef<HTMLDetailsElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
 
@@ -258,6 +280,23 @@ export function MobileNodeWorkspace() {
         }),
       }));
   }, [graphMeta, nodes]);
+  const nodeListItems = useMemo(() => {
+    const parentByTarget = new Map(edges.map((edge) => [edge.target, edge.source]));
+    const childrenBySource = new Map<string, GraphNode[]>();
+    for (const edge of edges) {
+      const child = nodes.find((node) => node.id === edge.target);
+      if (!child) continue;
+      childrenBySource.set(edge.source, [...(childrenBySource.get(edge.source) ?? []), child]);
+    }
+    const sorted = [...nodes].sort((a, b) => compareGraphNodes(a, b, graphMeta));
+    if (nodeListSort === "graphDesc") sorted.reverse();
+    return sorted.map((node) => ({
+      node,
+      meta: graphMeta.get(node.id),
+      parent: nodes.find((candidate) => candidate.id === parentByTarget.get(node.id)) ?? null,
+      children: (childrenBySource.get(node.id) ?? []).sort((a, b) => compareGraphNodes(a, b, graphMeta)),
+    }));
+  }, [edges, graphMeta, nodeListSort, nodes]);
   const clientPreview = useMemo(() => {
     if (!selectedNodeId) return null;
     return buildNodeGeneratePreview(selectedNodeId);
@@ -354,6 +393,12 @@ export function MobileNodeWorkspace() {
     }, 50);
   };
 
+  const handleTabChange = (view: Exclude<MobileNodeView, "connection">) => {
+    setSessionSheetOpen(false);
+    setLightboxOpen(false);
+    setActiveView(view);
+  };
+
   const attachImage = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
@@ -402,7 +447,17 @@ export function MobileNodeWorkspace() {
           <p>{nodes.length ? t("mobileNode.noSelectionDescription") : t("mobileNode.startDescription")}</p>
           {nodes.length ? (
             <div className="mobile-node-list-heading">
-              <span>{t("mobileNode.nodeListTitle")}</span>
+              <div>
+                <span>{t("mobileNode.nodeListTitle")}</span>
+                <button
+                  type="button"
+                  className="mobile-node-sort-toggle"
+                  onClick={() => setNodeListSort((sort) => (sort === "graphAsc" ? "graphDesc" : "graphAsc"))}
+                  aria-label={t("mobileNode.nodeSortToggle")}
+                >
+                  {nodeListSort === "graphAsc" ? t("mobileNode.nodeSortAsc") : t("mobileNode.nodeSortDesc")}
+                </button>
+              </div>
               <small>{t("mobileNode.nodeListHelp")}</small>
             </div>
           ) : null}
@@ -422,17 +477,32 @@ export function MobileNodeWorkspace() {
           <small className="mobile-node-empty__hint">{t("mobileNode.importCurrentHelp")}</small>
           {nodes.length ? (
             <div className="mobile-node-pick-list">
-              {nodes.map((node) => (
-                <button
-                  type="button"
-                  key={node.id}
-                  className="mobile-node-list-card"
-                  onClick={() => selectAndOpenNode(node.id)}
-                >
-                  <span>{nodeLabel(node)}</span>
-                  <small>{getStatusLabel(t, node.data.status)} · {shortNodeId(node.id)}</small>
-                </button>
-              ))}
+              {nodeListItems.map(({ node, meta, parent, children }) => {
+                const childPreview = children.slice(0, 2).map(nodeLabel).join(", ");
+                const extraChildCount = Math.max(0, children.length - 2);
+                return (
+                  <button
+                    type="button"
+                    key={node.id}
+                    className={`mobile-node-list-card${selectedNodeId === node.id ? " is-selected" : ""}`}
+                    style={{ "--node-tree-color": meta?.treeColor ?? "#a78bfa" } as CSSProperties}
+                    onClick={() => selectAndOpenNode(node.id)}
+                  >
+                    <span className="mobile-node-list-card__level">L{meta?.level ?? 0}</span>
+                    <span className="mobile-node-list-card__main">
+                      <strong>{nodeLabel(node)}</strong>
+                      <small>{getStatusLabel(t, node.data.status)} · {shortNodeId(node.id)}</small>
+                    </span>
+                    <span className="mobile-node-list-card__links">
+                      <small>{parent ? `${t("mobileNode.nodeParent")}: ${nodeLabel(parent)}` : t("mobileNode.nodeRoot")}</small>
+                      <small>
+                        {t("mobileNode.nodeChildren", { count: children.length })}
+                        {childPreview ? ` · ${childPreview}${extraChildCount ? ` +${extraChildCount}` : ""}` : ""}
+                      </small>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <small className="mobile-node-empty__hint">{t("mobileNode.sessionHint")}</small>
@@ -1261,9 +1331,9 @@ export function MobileNodeWorkspace() {
                     type="button"
                     onClick={() => {
                       setSessionSheetOpen(false);
-                      void switchSession(session.id);
+                      if (session.id !== activeSessionId) void switchSession(session.id);
                     }}
-                    disabled={sessionLoading || session.id === activeSessionId}
+                    disabled={sessionLoading}
                   >
                     <span>{session.title}</span>
                     <small>{t("mobileNode.sessionNodeCount", { count: session.nodeCount })}</small>
@@ -1294,7 +1364,7 @@ export function MobileNodeWorkspace() {
             key={view}
             type="button"
             className={activeView === view || (view === "branches" && activeView === "connection") ? "is-active" : ""}
-            onClick={() => setActiveView(view)}
+            onClick={() => handleTabChange(view)}
           >
             {t(`mobileNode.tabs.${view}`)}
           </button>
