@@ -6,7 +6,9 @@ import { RightPanel } from "./components/RightPanel";
 import { Toast } from "./components/Toast";
 import { GalleryModal } from "./components/GalleryModal";
 import { MobileToolbar } from "./components/MobileToolbar";
+import { MobileNodeWorkspace } from "./components/MobileNodeWorkspace";
 import { PromptLibraryPanel } from "./components/PromptLibraryPanel";
+import { useIsMobile } from "./hooks/useIsMobile";
 import { useI18n } from "./i18n";
 import { useAppStore, flushGraphSaveBeacon } from "./store/useAppStore";
 
@@ -20,6 +22,7 @@ export default function App() {
   const classicComposerExpanded = useAppStore((s) => s.classicComposerExpanded);
   const graphNodes = useAppStore((s) => s.graphNodes);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
+  const isMobile = useIsMobile();
   const { t } = useI18n();
   const promptLibraryOpen = useAppStore((s) => s.promptLibraryOpen);
   const promptLibraryItems = useAppStore((s) => s.promptLibraryItems);
@@ -45,6 +48,7 @@ export default function App() {
         selectedNode?.data.serverNodeId?.replace(/^n_/, "").slice(0, 8) ||
         (selectedNode ? selectedNode.id.replace(/^n_/, "").slice(0, 8) : t("promptLibrary.targetSelectNode"))
       : t("promptLibrary.targetClassic");
+  const isMobileNode = isMobile && uiMode === "node";
 
   useEffect(() => {
     hydrateHistory();
@@ -78,12 +82,16 @@ export default function App() {
 
   return (
     <>
-      <MobileToolbar />
-      <div className={`app${uiMode === "classic" ? " app--classic app--classic-rail" : ""}${uiMode === "classic" && classicComposerExpanded ? " app--classic-composer-open" : ""}`}>
-        <Sidebar />
-        {uiMode === "classic" ? <Canvas /> : <NodeCanvas />}
-        <RightPanel />
-      </div>
+      {isMobileNode ? null : <MobileToolbar />}
+      {isMobileNode ? (
+        <MobileNodeWorkspace />
+      ) : (
+        <div className={`app${uiMode === "classic" ? " app--classic app--classic-rail" : ""}${uiMode === "classic" && classicComposerExpanded ? " app--classic-composer-open" : ""}`}>
+          <Sidebar />
+          {uiMode === "classic" ? <Canvas /> : <NodeCanvas />}
+          <RightPanel />
+        </div>
+      )}
       <Toast />
       <GalleryModal />
       <PromptLibraryPanel

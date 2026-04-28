@@ -409,6 +409,37 @@
     "transferSettingsOn": "ON: 품질, 크기, 포맷 등 생성 설정값을 전달합니다.",
     "transferSettingsOff": "OFF: 자식 노드의 독립 설정을 사용합니다."
   },
+  "mobileNode": {
+    "title": "노드 작업공간",
+    "tabsLabel": "모바일 노드 화면",
+    "tabs": {
+      "node": "노드",
+      "branches": "브랜치",
+      "map": "맵"
+    },
+    "startTitle": "첫 노드로 시작",
+    "startDescription": "모바일에서는 그래프를 직접 끌기보다 노드를 하나씩 선택해 프롬프트, 생성, 브랜치를 편집합니다.",
+    "noSelectionTitle": "노드를 선택하세요",
+    "noSelectionDescription": "맵이나 목록에서 노드를 선택하면 프롬프트, 생성 설정, 브랜치 액션을 바로 편집할 수 있습니다.",
+    "addFirst": "첫 노드 추가",
+    "sessionHint": "세션은 자동 저장됩니다. 갤러리에서 기존 이미지를 노드로 가져올 수도 있습니다.",
+    "currentNode": "현재 노드",
+    "branchesTitle": "브랜치",
+    "branchesSubtitle": "부모, 현재 노드, 자식 노드를 리스트로 관리합니다.",
+    "children": "자식 노드",
+    "noChildren": "아직 자식 노드가 없습니다. 자식 추가로 다음 변형을 만드세요.",
+    "rootNode": "루트 노드",
+    "rootNodeHelp": "이 노드는 부모 없이 시작하는 브랜치입니다.",
+    "addSibling": "형제 추가",
+    "duplicateRoot": "루트로 복제",
+    "openConnection": "연결 설정",
+    "openMap": "맵 열기",
+    "mapTitle": "워크플로우 맵",
+    "mapSubtitle": "읽기/선택용 맵입니다. 노드를 탭하면 편집 화면으로 이동합니다.",
+    "noConnection": "선택한 연결이 없습니다.",
+    "backToBranches": "브랜치로 돌아가기",
+    "done": "완료"
+  },
   "edgeBadge": {
     "image": "IMG",
     "imageOff": "IMG -",

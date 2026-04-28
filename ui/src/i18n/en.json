@@ -409,6 +409,37 @@
     "transferSettingsOn": "ON: pass generation settings such as quality, size, and format.",
     "transferSettingsOff": "OFF: use the child node's independent settings."
   },
+  "mobileNode": {
+    "title": "Node Workspace",
+    "tabsLabel": "Mobile node views",
+    "tabs": {
+      "node": "Node",
+      "branches": "Branches",
+      "map": "Map"
+    },
+    "startTitle": "Start with a node",
+    "startDescription": "On mobile, edit the workflow one selected node at a time: prompt, generate, branch, then inspect the result.",
+    "noSelectionTitle": "Select a node",
+    "noSelectionDescription": "Pick a node from the map or list to edit its prompt, generation settings, and branch actions.",
+    "addFirst": "Add first node",
+    "sessionHint": "Sessions autosave. You can also import an existing gallery image as a node.",
+    "currentNode": "Current node",
+    "branchesTitle": "Branches",
+    "branchesSubtitle": "Manage parent, current, and child nodes as a touch-first list.",
+    "children": "Children",
+    "noChildren": "No child nodes yet. Add a child to create the next variation.",
+    "rootNode": "Root node",
+    "rootNodeHelp": "This branch starts without a parent.",
+    "addSibling": "Add sibling",
+    "duplicateRoot": "Duplicate as root",
+    "openConnection": "Connection settings",
+    "openMap": "Open map",
+    "mapTitle": "Workflow map",
+    "mapSubtitle": "Read-only navigation map. Tap a node to edit it.",
+    "noConnection": "No connection is selected.",
+    "backToBranches": "Back to branches",
+    "done": "Done"
+  },
   "edgeBadge": {
     "image": "IMG",
     "imageOff": "IMG -",
