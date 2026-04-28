@@ -3,14 +3,31 @@ import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 import { InFlightList } from "./InFlightList";
 
+export type SidebarWorkspaceTab = "library" | "activity";
+
+type SidebarPromptLibraryProps = {
+  tab?: SidebarWorkspaceTab;
+  defaultTab?: SidebarWorkspaceTab;
+  onTabChange?: (tab: SidebarWorkspaceTab) => void;
+};
+
 function compactPrompt(text: string, max = 74) {
   const oneLine = text.trim().replace(/\s+/g, " ");
   return oneLine.length > max ? `${oneLine.slice(0, max)}...` : oneLine;
 }
 
-export function SidebarPromptLibrary() {
+export function SidebarPromptLibrary({
+  tab: controlledTab,
+  defaultTab = "library",
+  onTabChange,
+}: SidebarPromptLibraryProps = {}) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<"library" | "activity">("library");
+  const [internalTab, setInternalTab] = useState<SidebarWorkspaceTab>(defaultTab);
+  const tab = controlledTab ?? internalTab;
+  const setTab = (next: SidebarWorkspaceTab) => {
+    if (controlledTab === undefined) setInternalTab(next);
+    onTabChange?.(next);
+  };
   const uiMode = useAppStore((s) => s.uiMode);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
   const promptLibraryItems = useAppStore((s) => s.promptLibraryItems);

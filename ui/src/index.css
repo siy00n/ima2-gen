@@ -54,6 +54,9 @@ body {
   height: 100dvh;
   overflow: hidden;
 }
+.app--classic-rail {
+  grid-template-columns: 72px 1fr auto;
+}
 
 /* ── Sidebar ── */
 .sidebar {
@@ -73,6 +76,98 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.sidebar--classic-rail {
+  width: 72px;
+  padding: 14px 10px;
+  align-items: center;
+  gap: 14px;
+}
+
+.classic-rail__brand,
+.classic-rail__button {
+  width: 48px;
+  min-height: 48px;
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.classic-rail__brand {
+  background: transparent;
+}
+
+.classic-rail__button:hover,
+.classic-rail__button:focus-visible,
+.classic-rail__brand:hover,
+.classic-rail__brand:focus-visible {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text);
+  outline: none;
+}
+
+.classic-rail__button.active {
+  background: var(--accent-bright);
+  color: var(--accent-ink);
+  border-color: var(--accent-bright);
+}
+
+.classic-rail__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.classic-rail__nav--main {
+  margin-top: 6px;
+}
+
+.classic-rail__badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--green);
+  color: #03150c;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.classic-rail__expand {
+  margin-top: auto;
+  font-size: 18px;
+}
+
+.classic-sidebar-collapse {
+  min-height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.classic-sidebar-collapse:hover,
+.classic-sidebar-collapse:focus-visible {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: var(--text);
+  outline: none;
 }
 
 .logo {
@@ -325,6 +420,13 @@ body {
 .generate-btn.loading::before {
   content: none;
 }
+.generate-btn--dock {
+  width: 132px;
+  min-height: 112px;
+  align-self: stretch;
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(255, 255, 255, 0.08);
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -340,6 +442,28 @@ body {
   position: relative;
   overflow: auto;
   height: 100dvh;
+}
+.canvas--classic-floating {
+  padding-bottom: 214px;
+}
+
+.classic-composer-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  z-index: 18;
+  width: min(860px, calc(100% - 48px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(18, 18, 18, 0.92);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(18px);
+  transform: translateX(-50%);
 }
 
 /* ── Right Panel (collapsible) ── */
@@ -465,6 +589,9 @@ body {
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   object-fit: contain;
+}
+.canvas--classic-floating .result-img {
+  max-height: calc(100dvh - 410px);
 }
 
 .result-prompt {
@@ -762,6 +889,13 @@ body {
   background: var(--surface);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
+.composer--floating {
+  min-width: 0;
+  padding: 6px 8px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+}
 .composer--drag {
   border-color: var(--accent);
   background: rgba(255, 255, 255, 0.04);
@@ -834,6 +968,24 @@ body {
   background: transparent;
   min-height: 72px;
 }
+.composer--floating .composer__textarea {
+  min-height: 52px;
+  max-height: 138px;
+  resize: vertical;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.composer--floating .composer__header {
+  min-height: 16px;
+}
+.composer--floating .composer__chips {
+  max-height: 56px;
+  overflow: auto;
+}
+.composer--floating .composer__chip {
+  width: 40px;
+  height: 40px;
+}
 .composer__textarea:focus,
 .composer__textarea:focus-visible {
   border: none;
@@ -877,6 +1029,12 @@ body {
   font-size: 10px;
   color: var(--text-dim);
   opacity: 0.7;
+}
+.composer--floating .composer__toolbar {
+  gap: 6px;
+}
+.composer--floating .composer__tool {
+  min-height: 32px;
 }
 .composer__dropzone {
   position: absolute;

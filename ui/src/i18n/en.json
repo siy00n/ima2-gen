@@ -141,6 +141,7 @@
     "useCurrentTitle": "Use current result as a reference",
     "hint": "Ctrl + Enter to generate",
     "dropHere": "Drop to attach as reference (up to {max})",
+    "floatingComposer": "Classic prompt composer",
     "openComposer": "Tap to edit or generate another image",
     "collapseComposer": "Hide prompt"
   },
@@ -165,6 +166,7 @@
     "target": "Target",
     "targetClassic": "Classic prompt",
     "targetSelectNode": "Select a node",
+    "selectNodeFirst": "Select a node to append quick prompts.",
     "selectPrompt": "Select a prompt",
     "workspace": "Prompt library and activity",
     "activity": "Activity",
@@ -325,7 +327,12 @@
   },
   "sidebar": {
     "appName": "Image Generator",
-    "nodeModeHint": "In node mode, click a node to edit its prompt, settings, and branches."
+    "nodeModeHint": "In node mode, click a node to edit its prompt, settings, and branches.",
+    "classicWorkspace": "Classic workspace",
+    "collapseClassic": "Collapse sidebar",
+    "expandClassic": "Expand sidebar",
+    "railLibrary": "Open quick library",
+    "railActivity": "Show generation activity"
   },
   "nodeCanvas": {
     "loading": "Loading session...",

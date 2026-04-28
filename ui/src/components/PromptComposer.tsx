@@ -4,7 +4,11 @@ import { useI18n } from "../i18n";
 
 const MAX_REFS = 5;
 
-export function PromptComposer() {
+type PromptComposerProps = {
+  variant?: "sidebar" | "floating";
+};
+
+export function PromptComposer({ variant = "sidebar" }: PromptComposerProps = {}) {
   const prompt = useAppStore((s) => s.prompt);
   const setPrompt = useAppStore((s) => s.setPrompt);
   const generate = useAppStore((s) => s.generate);
@@ -81,7 +85,7 @@ export function PromptComposer() {
 
   return (
     <div
-      className={`composer${dragOver ? " composer--drag" : ""}`}
+      className={`composer composer--${variant}${dragOver ? " composer--drag" : ""}`}
       onDrop={onDrop}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}

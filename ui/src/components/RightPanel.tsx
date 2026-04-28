@@ -98,7 +98,7 @@ export function RightPanel() {
             <NodeInspector />
           ) : (
             <>
-              {isMobile ? <ProviderSelect /> : null}
+              <ProviderSelect />
               <div className="section-title">{t("panel.detailSettings")}</div>
               <OptionGroup<ImageModel>
                 title={t("model.title")}

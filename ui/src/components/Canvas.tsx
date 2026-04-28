@@ -3,6 +3,8 @@ import { useAppStore } from "../store/useAppStore";
 import { ResultActions } from "./ResultActions";
 import { useI18n } from "../i18n";
 import { copyTextToClipboard } from "../lib/clipboard";
+import { useIsMobile } from "../hooks/useIsMobile";
+import { ClassicFloatingComposer } from "./ClassicFloatingComposer";
 
 function sameImage(a: { filename?: string; image: string } | null, b: { filename?: string; image: string } | null) {
   if (!a || !b) return false;
@@ -27,6 +29,7 @@ export function Canvas() {
   const getResolvedSize = useAppStore((s) => s.getResolvedSize);
   const showToast = useAppStore((s) => s.showToast);
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
   const imageKey = currentImage?.filename ?? currentImage?.url ?? currentImage?.image ?? "";
@@ -91,7 +94,7 @@ export function Canvas() {
   };
 
   return (
-    <main className="canvas">
+    <main className={`canvas${!isMobile ? " canvas--classic-floating" : ""}`}>
       <div className={`progress-bar${activeGenerations > 0 ? " active" : ""}`} />
       {currentImage ? (
         <div className="result-container visible">
@@ -177,6 +180,7 @@ export function Canvas() {
           <ResultActions />
         </div>
       ) : null}
+      {!isMobile ? <ClassicFloatingComposer /> : null}
     </main>
   );
 }

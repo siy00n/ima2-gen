@@ -1,7 +1,11 @@
 import { useAppStore } from "../store/useAppStore";
 import { useI18n } from "../i18n";
 
-export function GenerateButton() {
+type GenerateButtonProps = {
+  variant?: "default" | "dock";
+};
+
+export function GenerateButton({ variant = "default" }: GenerateButtonProps = {}) {
   const activeGenerations = useAppStore((s) => s.activeGenerations);
   const generate = useAppStore((s) => s.generate);
   const { t } = useI18n();
@@ -14,7 +18,7 @@ export function GenerateButton() {
   return (
     <button
       type="button"
-      className={`generate-btn${loading ? " loading" : ""}`}
+      className={`generate-btn${variant === "dock" ? " generate-btn--dock" : ""}${loading ? " loading" : ""}`}
       onClick={() => void generate()}
     >
       {label}

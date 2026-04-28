@@ -17,6 +17,7 @@ export default function App() {
   const reconcileInflight = useAppStore((s) => s.reconcileInflight);
   const syncFromStorage = useAppStore((s) => s.syncFromStorage);
   const uiMode = useAppStore((s) => s.uiMode);
+  const classicSidebarCollapsed = useAppStore((s) => s.classicSidebarCollapsed);
   const graphNodes = useAppStore((s) => s.graphNodes);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
   const { t } = useI18n();
@@ -78,7 +79,7 @@ export default function App() {
   return (
     <>
       <MobileToolbar />
-      <div className="app">
+      <div className={`app${uiMode === "classic" ? " app--classic" : ""}${uiMode === "classic" && classicSidebarCollapsed ? " app--classic-rail" : ""}`}>
         <Sidebar />
         {uiMode === "classic" ? <Canvas /> : <NodeCanvas />}
         <RightPanel />

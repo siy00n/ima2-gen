@@ -57,4 +57,28 @@ describe("UI stability contracts", () => {
     assert.match(canvas, /if \(isMobile\) selectEdge\(edge\.id\);\s*else openEdgePopover\(edge\.id\);/);
     assert.match(inspector, /if \(isMobile && selectedEdge && edgeParent && edgeChild\)/);
   });
+
+  it("keeps classic desktop result-first with a floating composer and collapsible rail", () => {
+    const store = readSource("ui/src/store/useAppStore.ts");
+    const app = readSource("ui/src/App.tsx");
+    const sidebar = readSource("ui/src/components/Sidebar.tsx");
+    const canvas = readSource("ui/src/components/Canvas.tsx");
+    const dock = readSource("ui/src/components/ClassicFloatingComposer.tsx");
+    const rightPanel = readSource("ui/src/components/RightPanel.tsx");
+    const css = readSource("ui/src/index.css");
+
+    assert.match(store, /classicSidebarCollapsed: boolean/);
+    assert.match(store, /ima2\.classicSidebarCollapsed/);
+    assert.match(app, /app--classic-rail/);
+    assert.match(sidebar, /sidebar--classic-rail/);
+    assert.match(sidebar, /setClassicSidebarCollapsed\(false\)/);
+    assert.match(sidebar, /SidebarPromptLibrary tab=\{workspaceTab\}/);
+    assert.match(canvas, /ClassicFloatingComposer/);
+    assert.match(dock, /PromptComposer variant="floating"/);
+    assert.match(dock, /GenerateButton variant="dock"/);
+    assert.match(rightPanel, /<ProviderSelect \/>/);
+    assert.match(css, /\.classic-composer-dock/);
+    assert.match(css, /\.composer--floating/);
+    assert.match(css, /\.app--classic-rail/);
+  });
 });
