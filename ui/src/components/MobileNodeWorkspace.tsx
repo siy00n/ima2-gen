@@ -40,6 +40,7 @@ import type { Format, ImageModel, Moderation, Quality, SizePreset } from "../typ
 type MobileNodeView = "node" | "branches" | "map" | "connection";
 type ConnectionReturnView = "node" | "branches";
 type NodeListSort = "graphAsc" | "graphDesc";
+type NodeStatusFilter = "all" | ReturnType<typeof statusTone>;
 type LaneStatusCounts = Record<ReturnType<typeof statusTone>, number>;
 type BranchTreeItem = {
   node: GraphNode;
@@ -47,6 +48,11 @@ type BranchTreeItem = {
   parent: GraphNode | null;
   childNodes: GraphNode[];
   children: BranchTreeItem[];
+};
+type VisibleBranchTreeItem = Omit<BranchTreeItem, "children"> & {
+  children: VisibleBranchTreeItem[];
+  filterMatched?: boolean;
+  filterContext?: boolean;
 };
 type BranchLane = {
   rootId: string;
@@ -58,8 +64,13 @@ type BranchLane = {
   leafCount: number;
   statusCounts: LaneStatusCounts;
 };
+type VisibleBranchLane = Omit<BranchLane, "tree"> & {
+  tree: VisibleBranchTreeItem | null;
+  matchCount: number;
+};
 
 const IMAGE_TRANSFER_OPTIONS: ImageTransferMode[] = ["off", "parent", "ancestor"];
+const NODE_STATUS_FILTERS: NodeStatusFilter[] = ["all", "ready", "empty", "busy", "stale", "error"];
 
 const FORMAT_ITEMS = [
   { value: "png" as const, label: "PNG" },
@@ -119,6 +130,15 @@ function getStatusLabel(t: (key: string) => string, status: ImageNodeStatus): st
   if (status === "asset-missing") return t("nodeInspector.statusMissing");
   if (status === "error") return t("nodeInspector.statusError");
   return t("nodeInspector.statusEmpty");
+}
+
+function getStatusFilterLabel(t: (key: string) => string, filter: NodeStatusFilter): string {
+  if (filter === "all") return t("mobileNode.filterAll");
+  if (filter === "ready") return t("mobileNode.filterReady");
+  if (filter === "empty") return t("mobileNode.filterEmpty");
+  if (filter === "busy") return t("mobileNode.filterBusy");
+  if (filter === "stale") return t("mobileNode.filterStale");
+  return t("mobileNode.filterError");
 }
 
 function edgeTransferText(t: (key: string) => string, edge: GraphEdge): string {
@@ -220,6 +240,8 @@ export function MobileNodeWorkspace() {
   const [sessionSheetOpen, setSessionSheetOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [nodeListSort, setNodeListSort] = useState<NodeListSort>("graphAsc");
+  const [nodeSearchQuery, setNodeSearchQuery] = useState("");
+  const [nodeStatusFilter, setNodeStatusFilter] = useState<NodeStatusFilter>("all");
   const [lastFocusedNodeId, setLastFocusedNodeId] = useState<string | null>(null);
   const [collapsedLaneIds, setCollapsedLaneIds] = useState<Set<string>>(() => new Set());
   const [collapsedTreeNodeIds, setCollapsedTreeNodeIds] = useState<Set<string>>(() => new Set());
@@ -380,6 +402,54 @@ export function MobileNodeWorkspace() {
         tree: nodeById.has(lane.rootId) ? buildTreeItem(lane.root, null, lane, new Set()) : null,
       }));
   }, [edges, graphMeta, nodeListSort, nodes]);
+  const nodeFiltersActive = nodeSearchQuery.trim().length > 0 || nodeStatusFilter !== "all";
+  const visibleBranchLanes = useMemo<VisibleBranchLane[]>(() => {
+    const search = nodeSearchQuery.trim().toLocaleLowerCase();
+    const matchesNode = (node: GraphNode) => {
+      const searchTarget = [node.data.name ?? "", node.data.prompt ?? ""].join(" ").toLocaleLowerCase();
+      const searchMatches = !search || searchTarget.includes(search);
+      const statusMatches = nodeStatusFilter === "all" || statusTone(node.data.status) === nodeStatusFilter;
+      return searchMatches && statusMatches;
+    };
+    const toVisibleTree = (item: BranchTreeItem): VisibleBranchTreeItem => ({
+      ...item,
+      children: item.children.map(toVisibleTree),
+    });
+    const filterTree = (
+      item: BranchTreeItem,
+    ): { tree: VisibleBranchTreeItem; matchCount: number } | null => {
+      const childResults = item.children
+        .map(filterTree)
+        .filter((result): result is { tree: VisibleBranchTreeItem; matchCount: number } => !!result);
+      const directMatch = matchesNode(item.node);
+      const matchCount = (directMatch ? 1 : 0) + childResults.reduce((sum, result) => sum + result.matchCount, 0);
+      if (!directMatch && childResults.length === 0) return null;
+      return {
+        tree: {
+          ...item,
+          children: childResults.map((result) => result.tree),
+          filterMatched: directMatch,
+          filterContext: !directMatch,
+        },
+        matchCount,
+      };
+    };
+
+    if (!nodeFiltersActive) {
+      return branchLanes.map((lane) => ({
+        ...lane,
+        tree: lane.tree ? toVisibleTree(lane.tree) : null,
+        matchCount: lane.itemCount,
+      }));
+    }
+
+    return branchLanes.flatMap((lane) => {
+      if (!lane.tree) return [];
+      const result = filterTree(lane.tree);
+      if (!result) return [];
+      return [{ ...lane, tree: result.tree, matchCount: result.matchCount }];
+    });
+  }, [branchLanes, nodeFiltersActive, nodeSearchQuery, nodeStatusFilter]);
   const clientPreview = useMemo(() => {
     if (!selectedNodeId) return null;
     return buildNodeGeneratePreview(selectedNodeId);
@@ -459,16 +529,17 @@ export function MobileNodeWorkspace() {
     });
   };
 
-  const renderBranchTreeItem = (item: BranchTreeItem, lane: BranchLane) => {
+  const renderBranchTreeItem = (item: VisibleBranchTreeItem, lane: VisibleBranchLane) => {
     const level = item.meta.level ?? 0;
     const hasChildren = item.childNodes.length > 0;
-    const collapsed = hasChildren && collapsedTreeNodeIds.has(item.node.id);
+    const collapsed = hasChildren && !nodeFiltersActive && collapsedTreeNodeIds.has(item.node.id);
     const cardTone = item.meta.treeColor ?? lane.treeColor;
     const nodeName = item.node.data.name?.trim();
     const promptText = item.node.data.prompt.trim();
     const titleText = nodeName || promptText || t("mobileNode.noPromptYet");
     const showPromptPreview = Boolean(nodeName && promptText);
     const thumbnailSrc = item.node.data.imageUrl;
+    const isCurrent = item.node.id === lastFocusedNodeId;
     return (
       <div
         key={item.node.id}
@@ -478,11 +549,14 @@ export function MobileNodeWorkspace() {
           "--node-tree-depth": Math.min(level, 2),
         } as CSSProperties}
       >
-        <div className={`mobile-node-list-card mobile-node-list-card--tree${selectedNodeId === item.node.id ? " is-selected" : ""}`}>
+        <div
+          className={`mobile-node-list-card mobile-node-list-card--tree${selectedNodeId === item.node.id ? " is-selected" : ""}${isCurrent ? " is-current" : ""}${item.filterContext ? " is-filter-context" : ""}`}
+        >
           <button
             type="button"
             className={`mobile-node-list-card__body${thumbnailSrc ? " has-thumbnail" : ""}`}
             onClick={() => selectAndOpenNode(item.node.id)}
+            aria-current={isCurrent ? "true" : undefined}
           >
             <span className="mobile-node-list-card__content">
               <span className="mobile-node-list-card__title-row">
@@ -641,9 +715,35 @@ export function MobileNodeWorkspace() {
               </div>
               <small>{t("mobileNode.nodeListHelp")}</small>
             </div>
+            <div className="mobile-node-node-filters" role="search">
+              <input
+                type="search"
+                className="mobile-node-node-search"
+                value={nodeSearchQuery}
+                onChange={(event) => setNodeSearchQuery(event.currentTarget.value)}
+                placeholder={t("mobileNode.nodeSearchPlaceholder")}
+                aria-label={t("mobileNode.nodeSearchLabel")}
+              />
+              <div className="mobile-node-status-filters" aria-label={t("mobileNode.statusFilterLabel")}>
+                {NODE_STATUS_FILTERS.map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    className={`mobile-node-status-filter${nodeStatusFilter === filter ? " is-active" : ""}`}
+                    onClick={() => setNodeStatusFilter(filter)}
+                    aria-pressed={nodeStatusFilter === filter}
+                  >
+                    {getStatusFilterLabel(t, filter)}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="mobile-node-branch-lanes">
-              {branchLanes.map((lane) => {
-                const collapsed = collapsedLaneIds.has(lane.rootId);
+              {visibleBranchLanes.length === 0 ? (
+                <div className="mobile-node-no-results">{t("mobileNode.nodeNoResults")}</div>
+              ) : null}
+              {visibleBranchLanes.map((lane) => {
+                const collapsed = !nodeFiltersActive && collapsedLaneIds.has(lane.rootId);
                 const summary = laneStatusSummary(t, lane.statusCounts);
                 return (
                   <section
@@ -664,7 +764,9 @@ export function MobileNodeWorkspace() {
                       <span className="mobile-node-branch-lane__title">
                         <strong>{nodeLabel(lane.root)}</strong>
                         <small>
-                          {t("mobileNode.laneNodes", { count: lane.itemCount })} · {t("mobileNode.laneLeaves", { count: lane.leafCount })}
+                          {nodeFiltersActive
+                            ? t("mobileNode.laneMatches", { count: lane.matchCount })
+                            : `${t("mobileNode.laneNodes", { count: lane.itemCount })} · ${t("mobileNode.laneLeaves", { count: lane.leafCount })}`}
                         </small>
                       </span>
                       {summary ? <span className="mobile-node-branch-lane__summary">{summary}</span> : null}

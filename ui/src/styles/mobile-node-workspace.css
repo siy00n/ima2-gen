@@ -1012,6 +1012,68 @@
   line-height: 1.35;
 }
 
+.mobile-node-node-filters {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.mobile-node-node-search {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  padding: 0 11px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.mobile-node-node-search::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.mobile-node-node-search:focus-visible {
+  border-color: rgba(139, 116, 255, 0.68);
+  box-shadow: 0 0 0 3px rgba(139, 116, 255, 0.18);
+}
+
+.mobile-node-status-filters {
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 1px 2px;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-node-status-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-node-status-filter {
+  flex: 0 0 auto;
+  min-height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--mobile-node-muted);
+  padding: 0 9px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.mobile-node-status-filter.is-active {
+  border-color: rgba(139, 116, 255, 0.62);
+  background: rgba(139, 116, 255, 0.18);
+  color: #f3f0ff;
+}
+
 .mobile-node-pick-list,
 .mobile-node-branch-lanes {
   max-height: 42dvh;
@@ -1027,7 +1089,20 @@
 }
 
 .mobile-node-empty--navigator .mobile-node-branch-lanes {
-  max-height: calc(100dvh - 250px);
+  max-height: calc(100dvh - 306px);
+}
+
+.mobile-node-no-results {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--mobile-node-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .mobile-node-branch-lane {
@@ -1150,6 +1225,20 @@
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--node-tree-color, #a78bfa) 20%, transparent), transparent 48%),
     rgba(124, 108, 255, 0.09);
+}
+
+.mobile-node-list-card.is-current {
+  border-color: color-mix(in srgb, var(--node-tree-color, #a78bfa) 42%, rgba(255, 255, 255, 0.13));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--node-tree-color, #a78bfa) 17%, transparent), transparent 46%),
+    rgba(255, 255, 255, 0.052);
+  box-shadow:
+    inset 4px 0 0 var(--node-tree-color, #a78bfa),
+    0 0 0 1px color-mix(in srgb, var(--node-tree-color, #a78bfa) 20%, transparent);
+}
+
+.mobile-node-list-card.is-filter-context {
+  opacity: 0.78;
 }
 
 .mobile-node-list-card__body {
