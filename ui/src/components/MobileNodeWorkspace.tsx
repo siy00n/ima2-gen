@@ -1,4 +1,11 @@
-import { useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ChangeEvent,
+  type MouseEvent,
+} from "react";
 import {
   ANCESTOR_IMAGE_COUNT_OPTIONS,
   canAttachImageToNodeData,
@@ -31,6 +38,7 @@ import {
 import type { Format, ImageModel, Moderation, Quality, SizePreset } from "../types";
 
 type MobileNodeView = "node" | "branches" | "map" | "connection";
+type ConnectionReturnView = "node" | "branches";
 
 const IMAGE_TRANSFER_OPTIONS: ImageTransferMode[] = ["off", "parent", "ancestor"];
 
@@ -77,6 +85,12 @@ function imageTransferLabelKey(mode: ImageTransferMode) {
   return "edgeBadge.imageParent";
 }
 
+function nextImageTransferMode(mode: ImageTransferMode): ImageTransferMode {
+  if (mode === "off") return "parent";
+  if (mode === "parent") return "ancestor";
+  return "off";
+}
+
 function getStatusLabel(t: (key: string) => string, status: ImageNodeStatus): string {
   if (status === "ready") return t("nodeInspector.statusReady");
   if (status === "pending") return t("nodeInspector.statusGenerating");
@@ -97,24 +111,51 @@ function edgeTransferText(t: (key: string) => string, edge: GraphEdge): string {
   ].join(" · ");
 }
 
-function EdgeChips({ edge }: { edge: GraphEdge }) {
+function EdgeChips({
+  edge,
+  onCycleImage,
+  onToggleContext,
+  onToggleSettings,
+}: {
+  edge: GraphEdge;
+  onCycleImage?: (edge: GraphEdge) => void;
+  onToggleContext?: (edge: GraphEdge) => void;
+  onToggleSettings?: (edge: GraphEdge) => void;
+}) {
   const { t } = useI18n();
   const edgeData = normalizeEdgeTransferData(edge.data);
   const edgeState = getEdgeVisualState(edge.data);
+  const handleChip = (event: MouseEvent<HTMLButtonElement>, action?: (edge: GraphEdge) => void) => {
+    event.stopPropagation();
+    action?.(edge);
+  };
   return (
     <div className="mobile-node-edge-chips" data-state={edgeState}>
-      <span
+      <button
+        type="button"
         className={`mobile-node-edge-chip mobile-node-edge-chip--image${edgeData.imageTransfer !== "off" ? " is-on" : ""}`}
         data-image-transfer={edgeData.imageTransfer}
+        onClick={(event) => handleChip(event, onCycleImage)}
+        disabled={!onCycleImage}
       >
         {t(imageTransferLabelKey(edgeData.imageTransfer))}
-      </span>
-      <span className={`mobile-node-edge-chip mobile-node-edge-chip--context${edgeData.transferContext ? " is-on" : ""}`}>
+      </button>
+      <button
+        type="button"
+        className={`mobile-node-edge-chip mobile-node-edge-chip--context${edgeData.transferContext ? " is-on" : ""}`}
+        onClick={(event) => handleChip(event, onToggleContext)}
+        disabled={!onToggleContext}
+      >
         {t("edgeBadge.context")}
-      </span>
-      <span className={`mobile-node-edge-chip mobile-node-edge-chip--settings${edgeData.transferSettings ? " is-on" : ""}`}>
+      </button>
+      <button
+        type="button"
+        className={`mobile-node-edge-chip mobile-node-edge-chip--settings${edgeData.transferSettings ? " is-on" : ""}`}
+        onClick={(event) => handleChip(event, onToggleSettings)}
+        disabled={!onToggleSettings}
+      >
         {t("edgeBadge.settings")}
-      </span>
+      </button>
     </div>
   );
 }
@@ -123,6 +164,8 @@ export function MobileNodeWorkspace() {
   const { t } = useI18n();
   const [activeView, setActiveView] = useState<MobileNodeView>("node");
   const [connectionEdgeId, setConnectionEdgeId] = useState<string | null>(null);
+  const [connectionReturnView, setConnectionReturnView] = useState<ConnectionReturnView>("branches");
+  const [sessionSheetOpen, setSessionSheetOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const settingsRef = useRef<HTMLDetailsElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
@@ -131,6 +174,7 @@ export function MobileNodeWorkspace() {
   const edges = useAppStore((s) => s.graphEdges);
   const sessions = useAppStore((s) => s.sessions);
   const activeSessionId = useAppStore((s) => s.activeSessionId);
+  const sessionLoading = useAppStore((s) => s.sessionLoading);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
   const currentImage = useAppStore((s) => s.currentImage);
   const branchGenerationRootId = useAppStore((s) => s.branchGenerationRootId);
@@ -138,6 +182,10 @@ export function MobileNodeWorkspace() {
   const canUndoGraph = useAppStore((s) => s.canUndoGraph);
   const canRedoGraph = useAppStore((s) => s.canRedoGraph);
   const setUIMode = useAppStore((s) => s.setUIMode);
+  const switchSession = useAppStore((s) => s.switchSession);
+  const createAndSwitchSession = useAppStore((s) => s.createAndSwitchSession);
+  const renameCurrentSession = useAppStore((s) => s.renameCurrentSession);
+  const deleteSessionById = useAppStore((s) => s.deleteSessionById);
   const undoGraph = useAppStore((s) => s.undoGraph);
   const redoGraph = useAppStore((s) => s.redoGraph);
   const addRootNode = useAppStore((s) => s.addRootNode);
@@ -235,8 +283,9 @@ export function MobileNodeWorkspace() {
     },
   ];
 
-  const openConnection = (edgeId: string) => {
+  const openConnection = (edgeId: string, returnView: ConnectionReturnView) => {
     setConnectionEdgeId(edgeId);
+    setConnectionReturnView(returnView);
     setActiveView("connection");
   };
 
@@ -252,6 +301,50 @@ export function MobileNodeWorkspace() {
   const selectAndOpenNode = (nodeId: string) => {
     selectNode(nodeId);
     setActiveView("node");
+  };
+
+  const selectInBranches = (nodeId: string) => {
+    selectNode(nodeId);
+    setActiveView("branches");
+  };
+
+  const showAllNodes = () => {
+    selectNode(null);
+    setActiveView("node");
+  };
+
+  const handleRenameSession = () => {
+    const next = window.prompt(
+      t("session.renamePrompt"),
+      activeSession?.title ?? t("session.newSession"),
+    );
+    if (next?.trim()) void renameCurrentSession(next.trim());
+  };
+
+  const handleDeleteSession = (id: string, title: string) => {
+    if (!window.confirm(t("session.deleteConfirm", { title }))) return;
+    void deleteSessionById(id);
+  };
+
+  const cycleEdgeImageTransfer = (edge: GraphEdge) => {
+    const edgeData = normalizeEdgeTransferData(edge.data);
+    setEdgeImageTransferQuiet(edge.id, nextImageTransferMode(edgeData.imageTransfer));
+  };
+
+  const toggleEdgeContext = (edge: GraphEdge) => {
+    const edgeData = normalizeEdgeTransferData(edge.data);
+    updateEdgeTransferQuiet(edge.id, { transferContext: !edgeData.transferContext });
+  };
+
+  const toggleEdgeSettings = (edge: GraphEdge) => {
+    const edgeData = normalizeEdgeTransferData(edge.data);
+    updateEdgeTransferQuiet(edge.id, { transferSettings: !edgeData.transferSettings });
+  };
+
+  const edgeChipActions = {
+    onCycleImage: cycleEdgeImageTransfer,
+    onToggleContext: toggleEdgeContext,
+    onToggleSettings: toggleEdgeSettings,
   };
 
   const jumpToSettings = () => {
@@ -307,6 +400,12 @@ export function MobileNodeWorkspace() {
           <div className="mobile-node-empty__mark">NODE</div>
           <h1>{nodes.length ? t("mobileNode.noSelectionTitle") : t("mobileNode.startTitle")}</h1>
           <p>{nodes.length ? t("mobileNode.noSelectionDescription") : t("mobileNode.startDescription")}</p>
+          {nodes.length ? (
+            <div className="mobile-node-list-heading">
+              <span>{t("mobileNode.nodeListTitle")}</span>
+              <small>{t("mobileNode.nodeListHelp")}</small>
+            </div>
+          ) : null}
           <div className="mobile-node-empty__actions">
             <button type="button" className="mobile-node-primary" onClick={addRoot}>
               {nodes.length ? t("nodeCanvas.addRootTitle") : t("mobileNode.addFirst")}
@@ -317,12 +416,13 @@ export function MobileNodeWorkspace() {
               onClick={importCurrent}
               disabled={!currentImage?.filename}
             >
-              {t("nodeInspector.importCurrent")}
+              {t("mobileNode.importCurrentResult")}
             </button>
           </div>
+          <small className="mobile-node-empty__hint">{t("mobileNode.importCurrentHelp")}</small>
           {nodes.length ? (
             <div className="mobile-node-pick-list">
-              {nodes.slice(0, 5).map((node) => (
+              {nodes.map((node) => (
                 <button
                   type="button"
                   key={node.id}
@@ -436,6 +536,14 @@ export function MobileNodeWorkspace() {
               <span>{shortNodeId(selected.id)}</span>
               {data.serverNodeId ? <span>{shortNodeId(data.serverNodeId)}</span> : null}
             </div>
+            <div className="mobile-node-header-actions">
+              <button type="button" className="mobile-node-button" onClick={showAllNodes}>
+                {t("mobileNode.allNodes")}
+              </button>
+              <button type="button" className="mobile-node-button" onClick={addRoot}>
+                {t("mobileNode.addRootShort")}
+              </button>
+            </div>
           </div>
 
           {data.imageUrl ? (
@@ -543,17 +651,19 @@ export function MobileNodeWorkspace() {
           ) : null}
 
           {incomingEdge ? (
-            <button
-              type="button"
-              className="mobile-node-connection-summary"
-              onClick={() => openConnection(incomingEdge.id)}
-            >
-              <span>
-                {t("nodeInspector.connectionTitle")}
-                {parent ? <small>{nodeLabel(parent)} -&gt; {nodeLabel(selected)}</small> : null}
-              </span>
-              <EdgeChips edge={incomingEdge} />
-            </button>
+            <div className="mobile-node-connection-summary">
+              <button
+                type="button"
+                className="mobile-node-connection-summary__main"
+                onClick={() => openConnection(incomingEdge.id, "node")}
+              >
+                <span>
+                  {t("nodeInspector.connectionTitle")}
+                  {parent ? <small>{nodeLabel(parent)} -&gt; {nodeLabel(selected)}</small> : null}
+                </span>
+              </button>
+              <EdgeChips edge={incomingEdge} {...edgeChipActions} />
+            </div>
           ) : null}
 
           <details ref={settingsRef} className="mobile-node-settings" open>
@@ -781,7 +891,7 @@ export function MobileNodeWorkspace() {
           <button
             type="button"
             className="mobile-node-lineage-card"
-            onClick={() => selectAndOpenNode(parent.id)}
+            onClick={() => selectInBranches(parent.id)}
           >
             <span>{t("nodeInspector.parentNode")}</span>
             <strong>{nodeLabel(parent)}</strong>
@@ -855,7 +965,7 @@ export function MobileNodeWorkspace() {
             <button
               type="button"
               className="mobile-node-button"
-              onClick={() => openConnection(incomingEdge.id)}
+              onClick={() => openConnection(incomingEdge.id, "branches")}
             >
               {t("mobileNode.openConnection")}
             </button>
@@ -866,13 +976,16 @@ export function MobileNodeWorkspace() {
           {children.length ? (
             children.map(({ edge, node }) => (
               <div key={edge.id} className="mobile-node-child-card">
-                <button type="button" onClick={() => selectAndOpenNode(node.id)}>
+                <button type="button" onClick={() => selectInBranches(node.id)}>
                   <strong>{nodeLabel(node)}</strong>
                   <small>{getStatusLabel(t, node.data.status)} · {shortNodeId(node.id)}</small>
                 </button>
-                <button type="button" onClick={() => openConnection(edge.id)}>
-                  <EdgeChips edge={edge} />
-                </button>
+                <div className="mobile-node-child-card__edge">
+                  <button type="button" onClick={() => openConnection(edge.id, "branches")}>
+                    {t("mobileNode.openConnection")}
+                  </button>
+                  <EdgeChips edge={edge} {...edgeChipActions} />
+                </div>
               </div>
             ))
           ) : (
@@ -939,7 +1052,7 @@ export function MobileNodeWorkspace() {
         <section className="mobile-node-panel">
           <h2>{t("nodeInspector.connectionTitle")}</h2>
           <p>{t("mobileNode.noConnection")}</p>
-          <button type="button" className="mobile-node-button" onClick={() => setActiveView("branches")}>
+          <button type="button" className="mobile-node-button" onClick={() => setActiveView(connectionReturnView)}>
             {t("mobileNode.backToBranches")}
           </button>
         </section>
@@ -956,11 +1069,11 @@ export function MobileNodeWorkspace() {
             <h2>{t("nodeInspector.connectionTitle")}</h2>
             <p>{nodeLabel(connectionParent)} -&gt; {nodeLabel(connectionChild)}</p>
           </div>
-          <button type="button" onClick={() => setActiveView("branches")}>
+          <button type="button" onClick={() => setActiveView(connectionReturnView)}>
             {t("mobileNode.done")}
           </button>
         </div>
-        <EdgeChips edge={activeConnectionEdge} />
+        <EdgeChips edge={activeConnectionEdge} {...edgeChipActions} />
         <div className="mobile-node-connection-control">
           <span>
             {t("nodeInspector.imageTransfer")}
@@ -1045,7 +1158,7 @@ export function MobileNodeWorkspace() {
           className="mobile-node-danger mobile-node-button--wide"
           onClick={() => {
             detachEdge(activeConnectionEdge.id);
-            setActiveView("branches");
+            setActiveView(connectionReturnView);
           }}
           disabled={childBusy}
         >
@@ -1069,13 +1182,17 @@ export function MobileNodeWorkspace() {
       <header className="mobile-node-topbar">
         <div className="mobile-node-brand">
           <strong>{t("mobileNode.title")}</strong>
-          <span>
-            {activeSession?.title ?? t("session.loading")} · {nodes.length} {t("uiMode.node")}
-          </span>
+          <button type="button" onClick={() => setSessionSheetOpen(true)}>
+            <span>{activeSession?.title ?? t("session.loading")}</span>
+            <small>{nodes.length} {t("uiMode.node")}</small>
+          </button>
         </div>
         <div className="mobile-node-topbar__actions">
           <button type="button" onClick={() => setUIMode("classic")}>
             {t("uiMode.classic")}
+          </button>
+          <button type="button" onClick={addRoot}>
+            {t("mobileNode.addRootShort")}
           </button>
           <button type="button" onClick={undoGraph} disabled={!canUndoGraph} aria-label={t("nodeCanvas.undo")}>
             ↶
@@ -1095,6 +1212,81 @@ export function MobileNodeWorkspace() {
           <LanguageToggle />
         </div>
       </header>
+      {sessionSheetOpen ? (
+        <div className="mobile-node-session-sheet" role="dialog" aria-modal="true" aria-label={t("mobileNode.sessionSheetTitle")}>
+          <button
+            type="button"
+            className="mobile-node-session-sheet__backdrop"
+            onClick={() => setSessionSheetOpen(false)}
+            aria-label={t("common.close")}
+          />
+          <section className="mobile-node-session-sheet__panel">
+            <div className="mobile-node-session-sheet__grabber" aria-hidden="true" />
+            <div className="mobile-node-session-sheet__header">
+              <div>
+                <h2>{t("mobileNode.sessionSheetTitle")}</h2>
+                <p>{t("mobileNode.sessionSheetHelp")}</p>
+              </div>
+              <button type="button" onClick={() => setSessionSheetOpen(false)}>
+                {t("common.close")}
+              </button>
+            </div>
+            <div className="mobile-node-session-sheet__actions">
+              <button
+                type="button"
+                className="mobile-node-primary"
+                onClick={() => {
+                  setSessionSheetOpen(false);
+                  void createAndSwitchSession(t("session.newSession"));
+                }}
+              >
+                {t("session.newSessionTitle")}
+              </button>
+              <button
+                type="button"
+                className="mobile-node-button"
+                onClick={handleRenameSession}
+                disabled={!activeSession}
+              >
+                {t("session.renameTitle")}
+              </button>
+            </div>
+            <div className="mobile-node-session-list">
+              {sessions.map((session) => (
+                <div
+                  key={session.id}
+                  className={`mobile-node-session-row${session.id === activeSessionId ? " is-active" : ""}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionSheetOpen(false);
+                      void switchSession(session.id);
+                    }}
+                    disabled={sessionLoading || session.id === activeSessionId}
+                  >
+                    <span>{session.title}</span>
+                    <small>{t("mobileNode.sessionNodeCount", { count: session.nodeCount })}</small>
+                  </button>
+                  <button
+                    type="button"
+                    className="mobile-node-session-row__delete"
+                    onClick={() => handleDeleteSession(session.id, session.title)}
+                    disabled={sessionLoading}
+                    aria-label={t("session.deleteTitle")}
+                    title={t("session.deleteTitle")}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {sessions.length === 0 ? (
+                <div className="mobile-node-session-empty">{t("session.empty")}</div>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
       <div className="mobile-node-view">{activeViewContent}</div>
       <nav className="mobile-node-tabs" aria-label={t("mobileNode.tabsLabel")}>
         {(["node", "branches", "map"] as const).map((view) => (

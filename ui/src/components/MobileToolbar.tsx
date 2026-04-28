@@ -20,11 +20,23 @@ function GalleryIcon() {
   );
 }
 
+function NodeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="6" cy="12" r="2.2" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="18" cy="6" r="2.2" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="18" cy="18" r="2.2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8.2 12h3.5M12 11.8 16 7M12 12.2 16 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function MobileToolbar() {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const openGallery = useAppStore((s) => s.openGallery);
   const provider = useAppStore((s) => s.provider);
+  const setUIMode = useAppStore((s) => s.setUIMode);
   const setRightPanelOpen = useAppStore((s) => s.setRightPanelOpen);
   const availability = useProviderAvailability();
   const providerLabel = provider === "oauth" ? "OAuth" : t("provider.apiLabel");
@@ -50,6 +62,15 @@ export function MobileToolbar() {
       </div>
       <div className="mobile-toolbar__actions">
         <LanguageToggle />
+        <button
+          type="button"
+          className="mobile-toolbar__icon-btn"
+          onClick={() => setUIMode("node")}
+          aria-label={t("uiMode.node")}
+          title={t("uiMode.node")}
+        >
+          <NodeIcon />
+        </button>
         <button
           type="button"
           className="mobile-toolbar__icon-btn"

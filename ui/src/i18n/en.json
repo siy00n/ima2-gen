@@ -422,7 +422,13 @@
     "noSelectionTitle": "Select a node",
     "noSelectionDescription": "Pick a node from the map or list to edit its prompt, generation settings, and branch actions.",
     "addFirst": "Add first node",
+    "addRootShort": "+ Root",
+    "allNodes": "All nodes",
     "sessionHint": "Sessions autosave. You can also import an existing gallery image as a node.",
+    "nodeListTitle": "Current session nodes",
+    "nodeListHelp": "Shown in saved graph order. Tap a node to edit it.",
+    "importCurrentResult": "Import current result",
+    "importCurrentHelp": "Imports the currently selected Classic/Gallery image as a root node.",
     "currentNode": "Current node",
     "branchesTitle": "Branches",
     "branchesSubtitle": "Manage parent, current, and child nodes as a touch-first list.",
@@ -438,7 +444,10 @@
     "mapSubtitle": "Read-only navigation map. Tap a node to edit it.",
     "noConnection": "No connection is selected.",
     "backToBranches": "Back to branches",
-    "done": "Done"
+    "done": "Done",
+    "sessionSheetTitle": "Sessions",
+    "sessionSheetHelp": "Switch the active node workflow session.",
+    "sessionNodeCount": "{count} nodes"
   },
   "edgeBadge": {
     "image": "IMG",
