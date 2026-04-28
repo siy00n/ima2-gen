@@ -268,9 +268,6 @@ function NodeCanvasInner() {
               +
             </button>
           </div>
-          <div className="node-canvas__hint">
-            {t("nodeCanvas.hint")}
-          </div>
         </>
       )}
     </main>

@@ -20,6 +20,8 @@
     "promptRequired": "프롬프트를 입력하세요.",
     "promptSaved": "프롬프트를 라이브러리에 저장했습니다.",
     "promptSaveFailed": "프롬프트를 저장하지 못했습니다.",
+    "promptAppended": "프롬프트를 추가했습니다.",
+    "promptReplaced": "프롬프트를 교체했습니다.",
     "selectNodeFirst": "먼저 노드를 선택하세요.",
     "nodeCreated": "노드 {id} 생성 완료 ({elapsed}초)",
     "nodeCreateFailed": "노드 생성에 실패했습니다.",

@@ -43,14 +43,23 @@ describe("UI stability contracts", () => {
   it("removes the nonfunctional node menu placeholder and enables classic navigation", () => {
     const imageNode = readSource("ui/src/components/ImageNode.tsx");
     const canvas = readSource("ui/src/components/Canvas.tsx");
+    const nodeCanvas = readSource("ui/src/components/NodeCanvas.tsx");
+    const promptLibrarySlice = readSource("ui/src/store/promptLibrarySlice.ts");
     const css = readCssBundle();
 
     assert.doesNotMatch(imageNode, /image-node__menu/);
     assert.doesNotMatch(css, /\.image-node__menu/);
+    assert.doesNotMatch(nodeCanvas, /node-canvas__hint/);
+    assert.match(css, /\.image-node__actions button[\s\S]*display: inline-flex/);
     assert.match(canvas, /ArrowLeft/);
     assert.match(canvas, /ArrowRight/);
     assert.match(canvas, /isEditableTarget/);
+    assert.match(canvas, /ImageLightbox/);
+    assert.match(canvas, /result-image-button/);
     assert.match(css, /\.result-nav\s*\{/);
+    assert.match(css, /\.result-image-button\s*\{/);
+    assert.match(promptLibrarySlice, /toast\.promptAppended/);
+    assert.match(promptLibrarySlice, /toast\.promptReplaced/);
   });
 
   it("uses a desktop edge popover without switching the right inspector", () => {
@@ -101,6 +110,8 @@ describe("UI stability contracts", () => {
     assert.match(rightPanel, /<ProviderSelect \/>/);
     assert.match(css, /\.classic-composer-dock/);
     assert.match(css, /\.classic-composer-dock--compact/);
+    assert.match(css, /\.classic-composer-dock--expanded[\s\S]*max-height: min\(52dvh, 440px\)/);
+    assert.match(css, /\.composer--floating \.composer__textarea[\s\S]*min-height: clamp\(180px, 24dvh, 280px\)/);
     assert.match(css, /\.classic-rail-drawer/);
     assert.match(css, /\.composer--floating/);
     assert.match(css, /\.app--classic-rail/);

@@ -20,6 +20,8 @@
     "promptRequired": "Enter a prompt.",
     "promptSaved": "Saved prompt to library.",
     "promptSaveFailed": "Failed to save prompt.",
+    "promptAppended": "Appended prompt.",
+    "promptReplaced": "Replaced prompt.",
     "selectNodeFirst": "Select a node first.",
     "nodeCreated": "Node {id} created ({elapsed}s)",
     "nodeCreateFailed": "Node generation failed.",

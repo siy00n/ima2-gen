@@ -229,8 +229,8 @@
   min-height: 72px;
 }
 .composer--floating .composer__textarea {
-  min-height: 52px;
-  max-height: 138px;
+  min-height: clamp(180px, 24dvh, 280px);
+  max-height: min(34dvh, 360px);
   resize: vertical;
   font-size: 15px;
   line-height: 1.45;
@@ -757,4 +757,3 @@
     box-shadow: none;
   }
 }
-

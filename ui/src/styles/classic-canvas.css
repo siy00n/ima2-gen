@@ -155,7 +155,7 @@
   padding-bottom: 136px;
 }
 .app--classic-composer-open .canvas--classic-floating {
-  padding-bottom: 196px;
+  padding-bottom: clamp(300px, 42dvh, 440px);
 }
 
 .classic-composer-dock {
@@ -180,11 +180,13 @@
   min-height: 64px;
 }
 .classic-composer-dock--expanded {
-  width: min(860px, calc(100% - 48px));
+  width: min(920px, calc(100% - 48px));
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: stretch;
   padding: 10px;
   border-radius: 18px;
+  max-height: min(52dvh, 440px);
+  overflow: auto;
 }
 .classic-composer-dock--drag {
   border-color: rgba(255, 255, 255, 0.5);
@@ -375,7 +377,23 @@
   max-height: calc(100dvh - 320px);
 }
 .app--classic-composer-open .canvas--classic-floating .result-img {
-  max-height: calc(100dvh - 370px);
+  max-height: calc(100dvh - clamp(420px, 56dvh, 560px));
+}
+
+.result-image-button {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.result-image-button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.64);
+  outline-offset: 4px;
 }
 
 .result-prompt {
@@ -521,4 +539,3 @@
   transform: translateX(-50%);
   backdrop-filter: blur(8px);
 }
-

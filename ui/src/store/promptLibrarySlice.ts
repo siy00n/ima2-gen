@@ -175,6 +175,7 @@ export function createPromptLibrarySlice(
       } else {
         set({ prompt: item.text });
       }
+      get().showToast(t("toast.promptReplaced"));
       get().closePromptLibrary();
     },
     insertPromptLibraryItem: (item) => {
@@ -189,6 +190,7 @@ export function createPromptLibrarySlice(
       } else {
         set({ prompt: [s.prompt, item.text].filter(Boolean).join("\n\n") });
       }
+      get().showToast(t("toast.promptAppended"));
       get().closePromptLibrary();
     },
   };

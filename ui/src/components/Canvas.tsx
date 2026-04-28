@@ -5,6 +5,7 @@ import { useI18n } from "../i18n";
 import { copyTextToClipboard } from "../lib/clipboard";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { ClassicFloatingComposer } from "./ClassicFloatingComposer";
+import { ImageLightbox } from "./ImageLightbox";
 
 function sameImage(a: { filename?: string; image: string } | null, b: { filename?: string; image: string } | null) {
   if (!a || !b) return false;
@@ -31,13 +32,16 @@ export function Canvas() {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const suppressNextImageClick = useRef(false);
   const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const imageKey = currentImage?.filename ?? currentImage?.url ?? currentImage?.image ?? "";
   const currentPrompt = currentImage?.prompt ?? "";
   const promptCanExpand = currentPrompt.length > 120 || currentPrompt.includes("\n");
 
   useEffect(() => {
     setIsPromptExpanded(false);
+    setLightboxOpen(false);
   }, [imageKey]);
 
   const copyPrompt = async () => {
@@ -89,9 +93,27 @@ export function Canvas() {
     const dx = t0.clientX - start.x;
     const dy = t0.clientY - start.y;
     if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+    suppressNextImageClick.current = true;
+    window.setTimeout(() => {
+      suppressNextImageClick.current = false;
+    }, 250);
     if (dx < 0 && canNext) selectNextImage();
     if (dx > 0 && canPrevious) selectPreviousImage();
   };
+
+  const openImagePreview = () => {
+    if (suppressNextImageClick.current) return;
+    setLightboxOpen(true);
+  };
+
+  const lightboxMeta = [
+    currentImage?.filename ?? null,
+    displayQuality,
+    displaySize,
+    currentImage?.provider ?? null,
+  ]
+    .filter((v): v is string => Boolean(v))
+    .join(" · ");
 
   return (
     <main className={`canvas${!isMobile ? " canvas--classic-floating" : ""}`}>
@@ -130,12 +152,20 @@ export function Canvas() {
                 </div>
               </>
             ) : null}
-            <img
-              className="result-img"
-              key={currentImage.filename ?? currentImage.url ?? currentImage.image}
-              src={currentImage.url ?? currentImage.image}
-              alt={t("canvas.resultAlt")}
-            />
+            <button
+              type="button"
+              className="result-image-button"
+              onClick={openImagePreview}
+              aria-label={t("history.openPreviewAria")}
+              title={t("history.openPreviewTitle")}
+            >
+              <img
+                className="result-img"
+                key={currentImage.filename ?? currentImage.url ?? currentImage.image}
+                src={currentImage.url ?? currentImage.image}
+                alt={t("canvas.resultAlt")}
+              />
+            </button>
           </div>
           {currentImage.prompt ? (
             <div
@@ -178,6 +208,13 @@ export function Canvas() {
               .join(" · ")}
           </div>
           <ResultActions />
+          <ImageLightbox
+            open={lightboxOpen}
+            imageSrc={currentImage.url ?? currentImage.image}
+            title={currentImage.prompt || currentImage.filename || t("canvas.resultAlt")}
+            meta={lightboxMeta}
+            onClose={() => setLightboxOpen(false)}
+          />
         </div>
       ) : null}
       {!isMobile ? <ClassicFloatingComposer /> : null}
