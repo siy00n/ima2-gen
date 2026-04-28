@@ -29,9 +29,9 @@
 
 .mobile-node-brand {
   min-width: 0;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(86px, auto) auto;
+  align-items: center;
   gap: 10px;
 }
 
@@ -42,9 +42,8 @@
   line-height: 1.1;
 }
 
-.mobile-node-brand > button {
+.mobile-node-brand__session {
   min-width: 0;
-  max-width: 62%;
   display: grid;
   justify-items: end;
   gap: 2px;
@@ -55,8 +54,21 @@
   text-align: right;
 }
 
-.mobile-node-brand span,
-.mobile-node-brand small {
+.mobile-node-brand__all-nodes {
+  min-width: max-content;
+  min-height: 30px;
+  border: 1px solid rgba(124, 108, 255, 0.34);
+  border-radius: 999px;
+  background: rgba(124, 108, 255, 0.12);
+  color: #eeeaff;
+  padding: 0 9px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.mobile-node-brand__session span,
+.mobile-node-brand__session small {
   min-width: 0;
   overflow: hidden;
   color: var(--mobile-node-muted);
@@ -66,7 +78,7 @@
   white-space: nowrap;
 }
 
-.mobile-node-brand small {
+.mobile-node-brand__session small {
   opacity: 0.82;
 }
 
@@ -994,13 +1006,108 @@
   line-height: 1.35;
 }
 
-.mobile-node-pick-list {
+.mobile-node-pick-list,
+.mobile-node-branch-lanes {
   max-height: 42dvh;
   overflow-y: auto;
   display: grid;
   gap: 8px;
   padding-right: 2px;
   overscroll-behavior: contain;
+}
+
+.mobile-node-branch-lanes {
+  max-height: 48dvh;
+}
+
+.mobile-node-branch-lane {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--node-tree-color, #a78bfa) 28%, rgba(255, 255, 255, 0.08));
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--node-tree-color, #a78bfa) 10%, transparent), transparent 46%),
+    rgba(255, 255, 255, 0.028);
+}
+
+.mobile-node-branch-lane__header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 2px;
+  text-align: left;
+}
+
+.mobile-node-branch-lane__marker {
+  width: 13px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--node-tree-color, #a78bfa);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--node-tree-color, #a78bfa) 38%, transparent);
+}
+
+.mobile-node-branch-lane__title {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-node-branch-lane__title strong,
+.mobile-node-branch-lane__title small,
+.mobile-node-branch-lane__summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-node-branch-lane__title strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.mobile-node-branch-lane__title small,
+.mobile-node-branch-lane__summary {
+  color: var(--mobile-node-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.mobile-node-branch-lane__summary {
+  max-width: 96px;
+  justify-self: end;
+}
+
+.mobile-node-branch-lane__chevron {
+  color: #eeeaff;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.mobile-node-branch-lane__body {
+  position: relative;
+  display: grid;
+  gap: 7px;
+}
+
+.mobile-node-branch-lane__body::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 18px;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 48%, transparent);
 }
 
 .mobile-node-list-card {
@@ -1017,11 +1124,26 @@
   box-shadow: inset 4px 0 0 var(--node-tree-color, #a78bfa);
 }
 
+.mobile-node-list-card--lane {
+  margin-left: calc(min(var(--node-lane-depth, 0), 3) * 10px);
+}
+
 .mobile-node-list-card.is-selected {
   border-color: color-mix(in srgb, var(--node-tree-color, #a78bfa) 62%, #ffffff 24%);
   background:
     linear-gradient(90deg, color-mix(in srgb, var(--node-tree-color, #a78bfa) 20%, transparent), transparent 48%),
     rgba(124, 108, 255, 0.09);
+}
+
+.mobile-node-list-card__connector {
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 58%, transparent);
+  transform: translateY(-50%);
 }
 
 .mobile-node-list-card__level {

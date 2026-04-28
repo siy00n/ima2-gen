@@ -40,6 +40,7 @@ import type { Format, ImageModel, Moderation, Quality, SizePreset } from "../typ
 type MobileNodeView = "node" | "branches" | "map" | "connection";
 type ConnectionReturnView = "node" | "branches";
 type NodeListSort = "graphAsc" | "graphDesc";
+type LaneStatusCounts = Record<ReturnType<typeof statusTone>, number>;
 
 const IMAGE_TRANSFER_OPTIONS: ImageTransferMode[] = ["off", "parent", "ancestor"];
 
@@ -132,6 +133,19 @@ function compareGraphNodes(
   return a.id.localeCompare(b.id);
 }
 
+function laneStatusSummary(t: (key: string, vars?: Record<string, string | number>) => string, counts: LaneStatusCounts): string {
+  return [
+    counts.ready ? t("mobileNode.laneStatusReady", { count: counts.ready }) : "",
+    counts.busy ? t("mobileNode.laneStatusBusy", { count: counts.busy }) : "",
+    counts.stale ? t("mobileNode.laneStatusStale", { count: counts.stale }) : "",
+    counts.error ? t("mobileNode.laneStatusError", { count: counts.error }) : "",
+    counts.empty ? t("mobileNode.laneStatusEmpty", { count: counts.empty }) : "",
+  ]
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(" · ");
+}
+
 function EdgeChips({
   edge,
   onCycleImage,
@@ -189,6 +203,8 @@ export function MobileNodeWorkspace() {
   const [sessionSheetOpen, setSessionSheetOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [nodeListSort, setNodeListSort] = useState<NodeListSort>("graphAsc");
+  const [lastFocusedNodeId, setLastFocusedNodeId] = useState<string | null>(null);
+  const [collapsedLaneIds, setCollapsedLaneIds] = useState<Set<string>>(() => new Set());
   const settingsRef = useRef<HTMLDetailsElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
 
@@ -280,7 +296,7 @@ export function MobileNodeWorkspace() {
         }),
       }));
   }, [graphMeta, nodes]);
-  const nodeListItems = useMemo(() => {
+  const branchLanes = useMemo(() => {
     const parentByTarget = new Map(edges.map((edge) => [edge.target, edge.source]));
     const childrenBySource = new Map<string, GraphNode[]>();
     for (const edge of edges) {
@@ -288,14 +304,57 @@ export function MobileNodeWorkspace() {
       if (!child) continue;
       childrenBySource.set(edge.source, [...(childrenBySource.get(edge.source) ?? []), child]);
     }
-    const sorted = [...nodes].sort((a, b) => compareGraphNodes(a, b, graphMeta));
-    if (nodeListSort === "graphDesc") sorted.reverse();
-    return sorted.map((node) => ({
-      node,
-      meta: graphMeta.get(node.id),
-      parent: nodes.find((candidate) => candidate.id === parentByTarget.get(node.id)) ?? null,
-      children: (childrenBySource.get(node.id) ?? []).sort((a, b) => compareGraphNodes(a, b, graphMeta)),
-    }));
+    const lanes = new Map<string, {
+      rootId: string;
+      root: GraphNode;
+      treeColor: string;
+      treeIndex: number;
+      items: Array<{
+        node: GraphNode;
+        meta: ReturnType<typeof deriveGraphMeta> extends Map<string, infer Meta> ? Meta : never;
+        parent: GraphNode | null;
+        children: GraphNode[];
+      }>;
+      leafCount: number;
+      statusCounts: LaneStatusCounts;
+    }>();
+    for (const node of nodes) {
+      const meta = graphMeta.get(node.id);
+      const rootId = meta?.treeRootId ?? node.id;
+      const root = nodes.find((candidate) => candidate.id === rootId) ?? node;
+      const childrenForNode = (childrenBySource.get(node.id) ?? []).sort((a, b) => compareGraphNodes(a, b, graphMeta));
+      const lane = lanes.get(rootId) ?? {
+        rootId,
+        root,
+        treeColor: meta?.treeColor ?? "#a78bfa",
+        treeIndex: meta?.treeIndex ?? 0,
+        items: [],
+        leafCount: 0,
+        statusCounts: { ready: 0, busy: 0, error: 0, stale: 0, empty: 0 },
+      };
+      lane.items.push({
+        node,
+        meta: meta ?? {
+          level: 0,
+          isolated: true,
+          treeRootId: rootId,
+          treeIndex: lane.treeIndex,
+          treeColor: lane.treeColor,
+        },
+        parent: nodes.find((candidate) => candidate.id === parentByTarget.get(node.id)) ?? null,
+        children: childrenForNode,
+      });
+      if (childrenForNode.length === 0) lane.leafCount += 1;
+      lane.statusCounts[statusTone(node.data.status)] += 1;
+      lanes.set(rootId, lane);
+    }
+    return [...lanes.values()]
+      .sort((a, b) => a.treeIndex - b.treeIndex || nodeLabel(a.root).localeCompare(nodeLabel(b.root)))
+      .map((lane) => {
+        const items = [...lane.items].sort((a, b) => compareGraphNodes(a.node, b.node, graphMeta));
+        if (nodeListSort === "graphDesc") items.reverse();
+        return { ...lane, items };
+      });
   }, [edges, graphMeta, nodeListSort, nodes]);
   const clientPreview = useMemo(() => {
     if (!selectedNodeId) return null;
@@ -329,7 +388,9 @@ export function MobileNodeWorkspace() {
   };
 
   const addRoot = () => {
-    selectNode(addRootNode());
+    const nodeId = addRootNode();
+    setLastFocusedNodeId(nodeId);
+    selectNode(nodeId);
     setActiveView("node");
   };
 
@@ -338,18 +399,30 @@ export function MobileNodeWorkspace() {
   };
 
   const selectAndOpenNode = (nodeId: string) => {
+    setLastFocusedNodeId(nodeId);
     selectNode(nodeId);
     setActiveView("node");
   };
 
   const selectInBranches = (nodeId: string) => {
+    setLastFocusedNodeId(nodeId);
     selectNode(nodeId);
     setActiveView("branches");
   };
 
   const showAllNodes = () => {
+    setLastFocusedNodeId(selectedNodeId ?? lastFocusedNodeId);
     selectNode(null);
     setActiveView("node");
+  };
+
+  const toggleLaneCollapsed = (rootId: string) => {
+    setCollapsedLaneIds((current) => {
+      const next = new Set(current);
+      if (next.has(rootId)) next.delete(rootId);
+      else next.add(rootId);
+      return next;
+    });
   };
 
   const handleRenameSession = () => {
@@ -476,31 +549,75 @@ export function MobileNodeWorkspace() {
           </div>
           <small className="mobile-node-empty__hint">{t("mobileNode.importCurrentHelp")}</small>
           {nodes.length ? (
-            <div className="mobile-node-pick-list">
-              {nodeListItems.map(({ node, meta, parent, children }) => {
-                const childPreview = children.slice(0, 2).map(nodeLabel).join(", ");
-                const extraChildCount = Math.max(0, children.length - 2);
+            <div className="mobile-node-branch-lanes">
+              {branchLanes.map((lane) => {
+                const focusNodeId = lastFocusedNodeId ?? selectedNodeId;
+                const focusedTreeRootId = focusNodeId ? graphMeta.get(focusNodeId)?.treeRootId : null;
+                const collapsed = collapsedLaneIds.has(lane.rootId) && focusedTreeRootId !== lane.rootId;
+                const summary = laneStatusSummary(t, lane.statusCounts);
                 return (
-                  <button
-                    type="button"
-                    key={node.id}
-                    className={`mobile-node-list-card${selectedNodeId === node.id ? " is-selected" : ""}`}
-                    style={{ "--node-tree-color": meta?.treeColor ?? "#a78bfa" } as CSSProperties}
-                    onClick={() => selectAndOpenNode(node.id)}
+                  <section
+                    key={lane.rootId}
+                    className={`mobile-node-branch-lane${collapsed ? " is-collapsed" : ""}`}
+                    style={{ "--node-tree-color": lane.treeColor } as CSSProperties}
                   >
-                    <span className="mobile-node-list-card__level">L{meta?.level ?? 0}</span>
-                    <span className="mobile-node-list-card__main">
-                      <strong>{nodeLabel(node)}</strong>
-                      <small>{getStatusLabel(t, node.data.status)} · {shortNodeId(node.id)}</small>
-                    </span>
-                    <span className="mobile-node-list-card__links">
-                      <small>{parent ? `${t("mobileNode.nodeParent")}: ${nodeLabel(parent)}` : t("mobileNode.nodeRoot")}</small>
-                      <small>
-                        {t("mobileNode.nodeChildren", { count: children.length })}
-                        {childPreview ? ` · ${childPreview}${extraChildCount ? ` +${extraChildCount}` : ""}` : ""}
-                      </small>
-                    </span>
-                  </button>
+                    <button
+                      type="button"
+                      className="mobile-node-branch-lane__header"
+                      onClick={() => toggleLaneCollapsed(lane.rootId)}
+                      aria-expanded={!collapsed}
+                      aria-label={t(collapsed ? "mobileNode.laneExpand" : "mobileNode.laneCollapse", {
+                        name: nodeLabel(lane.root),
+                      })}
+                    >
+                      <span className="mobile-node-branch-lane__marker" aria-hidden="true" />
+                      <span className="mobile-node-branch-lane__title">
+                        <strong>{nodeLabel(lane.root)}</strong>
+                        <small>
+                          {t("mobileNode.laneNodes", { count: lane.items.length })} · {t("mobileNode.laneLeaves", { count: lane.leafCount })}
+                        </small>
+                      </span>
+                      {summary ? <span className="mobile-node-branch-lane__summary">{summary}</span> : null}
+                      <span className="mobile-node-branch-lane__chevron" aria-hidden="true">
+                        {collapsed ? "▸" : "▾"}
+                      </span>
+                    </button>
+                    {!collapsed ? (
+                      <div className="mobile-node-branch-lane__body">
+                        {lane.items.map(({ node, meta, parent, children }) => {
+                          const childPreview = children.slice(0, 2).map(nodeLabel).join(", ");
+                          const extraChildCount = Math.max(0, children.length - 2);
+                          const level = meta?.level ?? 0;
+                          return (
+                            <button
+                              type="button"
+                              key={node.id}
+                              className={`mobile-node-list-card mobile-node-list-card--lane${selectedNodeId === node.id ? " is-selected" : ""}`}
+                              style={{
+                                "--node-tree-color": meta?.treeColor ?? lane.treeColor,
+                                "--node-lane-depth": Math.min(level, 3),
+                              } as CSSProperties}
+                              onClick={() => selectAndOpenNode(node.id)}
+                            >
+                              <span className="mobile-node-list-card__connector" aria-hidden="true" />
+                              <span className="mobile-node-list-card__level">L{level}</span>
+                              <span className="mobile-node-list-card__main">
+                                <strong>{nodeLabel(node)}</strong>
+                                <small>{getStatusLabel(t, node.data.status)} · {shortNodeId(node.id)}</small>
+                              </span>
+                              <span className="mobile-node-list-card__links">
+                                <small>{parent ? `${t("mobileNode.nodeParent")}: ${nodeLabel(parent)}` : t("mobileNode.nodeRoot")}</small>
+                                <small>
+                                  {t("mobileNode.nodeChildren", { count: children.length })}
+                                  {childPreview ? ` · ${childPreview}${extraChildCount ? ` +${extraChildCount}` : ""}` : ""}
+                                </small>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </section>
                 );
               })}
             </div>
@@ -605,14 +722,6 @@ export function MobileNodeWorkspace() {
               <span>L{selectedMeta.level}</span>
               <span>{shortNodeId(selected.id)}</span>
               {data.serverNodeId ? <span>{shortNodeId(data.serverNodeId)}</span> : null}
-            </div>
-            <div className="mobile-node-header-actions">
-              <button type="button" className="mobile-node-button" onClick={showAllNodes}>
-                {t("mobileNode.allNodes")}
-              </button>
-              <button type="button" className="mobile-node-button" onClick={addRoot}>
-                {t("mobileNode.addRootShort")}
-              </button>
             </div>
           </div>
 
@@ -1252,10 +1361,15 @@ export function MobileNodeWorkspace() {
       <header className="mobile-node-topbar">
         <div className="mobile-node-brand">
           <strong>{t("mobileNode.title")}</strong>
-          <button type="button" onClick={() => setSessionSheetOpen(true)}>
+          <button type="button" className="mobile-node-brand__session" onClick={() => setSessionSheetOpen(true)}>
             <span>{activeSession?.title ?? t("session.loading")}</span>
             <small>{nodes.length} {t("uiMode.node")}</small>
           </button>
+          {nodes.length ? (
+            <button type="button" className="mobile-node-brand__all-nodes" onClick={showAllNodes}>
+              {t("mobileNode.allNodes")}
+            </button>
+          ) : null}
         </div>
         <div className="mobile-node-topbar__actions">
           <button type="button" onClick={() => setUIMode("classic")}>
