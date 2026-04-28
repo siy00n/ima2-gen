@@ -662,6 +662,236 @@
   opacity: 0.8;
 }
 
+.mobile-node-branch-section {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-node-action-grid--branch-create button:last-child {
+  grid-column: 1 / -1;
+}
+
+.mobile-node-branch-node-card {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+  border: 1px solid color-mix(in srgb, var(--node-tree-color, #a78bfa) 30%, rgba(255, 255, 255, 0.08));
+  border-radius: 13px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--node-tree-color, #a78bfa) 14%, transparent), transparent 44%),
+    rgba(255, 255, 255, 0.04);
+  box-shadow:
+    inset 4px 0 0 var(--node-tree-color, #a78bfa),
+    0 12px 30px rgba(0, 0, 0, 0.22);
+  color: inherit;
+  padding: 12px 10px 10px 11px;
+  text-align: left;
+}
+
+.mobile-node-branch-node-card.has-thumbnail {
+  grid-template-columns: minmax(0, 1fr) 44px;
+}
+
+.mobile-node-branch-node-card--current {
+  border-color: color-mix(in srgb, var(--node-tree-color, #a78bfa) 48%, rgba(255, 255, 255, 0.12));
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--node-tree-color, #a78bfa) 20%, transparent), transparent 48%),
+    rgba(124, 108, 255, 0.07);
+}
+
+.mobile-node-branch-node-card__content {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.mobile-node-branch-node-card__title {
+  min-width: 0;
+  min-height: 22px;
+  display: block;
+  padding-right: 122px;
+}
+
+.mobile-node-branch-node-card.has-thumbnail .mobile-node-branch-node-card__title {
+  padding-right: 84px;
+}
+
+.mobile-node-branch-node-card__title strong {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-node-branch-node-card__prompt,
+.mobile-node-branch-node-card__meta {
+  min-width: 0;
+  color: var(--mobile-node-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.mobile-node-branch-node-card__prompt {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+
+.mobile-node-branch-node-card__prompt--muted {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.mobile-node-branch-node-card__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-node-branch-node-card__thumb {
+  width: 44px;
+  height: 44px;
+  align-self: end;
+  margin-top: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.mobile-node-branch-node-card__thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.mobile-node-branch-node-card__badges {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: calc(100% - 18px);
+}
+
+.mobile-node-branch-connection-card,
+.mobile-node-branch-root-card,
+.mobile-node-branch-generate-card {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 13px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.018)),
+    rgba(255, 255, 255, 0.035);
+}
+
+.mobile-node-branch-connection-card__body {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  padding: 6px;
+  text-align: left;
+}
+
+.mobile-node-branch-connection-card__body span,
+.mobile-node-branch-connection-card__body small,
+.mobile-node-branch-root-card small,
+.mobile-node-branch-generate-card small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--mobile-node-muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-node-branch-connection-card__body strong,
+.mobile-node-branch-root-card strong,
+.mobile-node-branch-generate-card strong {
+  min-width: 0;
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-node-branch-connection-card__actions {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+}
+
+.mobile-node-branch-connection-card__actions > button {
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #eeeaff;
+  padding: 0 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.mobile-node-branch-root-card {
+  border-color: rgba(124, 108, 255, 0.26);
+  background: rgba(124, 108, 255, 0.08);
+}
+
+.mobile-node-branch-generate-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.mobile-node-branch-generate-card > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.mobile-node-branch-root-card small,
+.mobile-node-branch-generate-card small {
+  white-space: normal;
+}
+
+.mobile-node-branch-generate-card button {
+  min-width: 124px;
+}
+
+.mobile-node-branch-generate-card.is-running {
+  border-color: rgba(96, 165, 250, 0.34);
+  background: rgba(96, 165, 250, 0.09);
+}
+
 .mobile-node-children {
   display: grid;
   gap: 8px;
@@ -669,14 +899,13 @@
 
 .mobile-node-child-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   align-items: stretch;
   padding: 8px;
   border-radius: 13px;
 }
 
-.mobile-node-child-card > button,
 .mobile-node-list-card {
   min-width: 0;
   display: grid;
@@ -690,10 +919,13 @@
 }
 
 .mobile-node-child-card__edge {
-  display: grid;
-  align-content: center;
-  justify-items: end;
-  gap: 5px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 2px;
 }
 
 .mobile-node-child-card__edge > button {

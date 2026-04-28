@@ -300,6 +300,13 @@ export function MobileNodeWorkspace() {
   const data = selected?.data ?? null;
   const activeSession = sessions.find((session) => session.id === activeSessionId);
   const graphMeta = useMemo(() => deriveGraphMeta(nodes, edges), [nodes, edges]);
+  const childCountByNodeId = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const edge of edges) {
+      counts.set(edge.source, (counts.get(edge.source) ?? 0) + 1);
+    }
+    return counts;
+  }, [edges]);
   const incomingEdge = selected ? edges.find((edge) => edge.target === selected.id) ?? null : null;
   const parent = incomingEdge ? nodes.find((node) => node.id === incomingEdge.source) ?? null : null;
   const children = selected
@@ -1291,9 +1298,14 @@ export function MobileNodeWorkspace() {
         <section className="mobile-node-panel">
           <h2>{t("mobileNode.branchesTitle")}</h2>
           <p>{t("mobileNode.noSelectionDescription")}</p>
-          <button type="button" className="mobile-node-primary" onClick={showAllNodes}>
-            {t("mobileNode.allNodes")}
-          </button>
+          <div className="mobile-node-action-grid mobile-node-action-grid--primary">
+            <button type="button" className="mobile-node-primary" onClick={showAllNodes}>
+              {t("mobileNode.allNodes")}
+            </button>
+            <button type="button" className="mobile-node-button" onClick={addRoot}>
+              {t("mobileNode.addRootShort")}
+            </button>
+          </div>
         </section>
       );
     }
@@ -1304,6 +1316,100 @@ export function MobileNodeWorkspace() {
     const canGenerate = !busy && data.prompt.trim().length > 0;
     const canRegenerateBranch = canGenerate && hasImageReference && children.length > 0;
     const isBranchGenerating = branchGenerationRootId === selected.id;
+    const branchDisabledReason = isBranchGenerating
+      ? t("mobileNode.branchRunning")
+      : busy
+        ? t("mobileNode.branchReasonBusy")
+        : !data.prompt.trim()
+          ? t("mobileNode.branchReasonPrompt")
+          : !hasImageReference
+            ? t("mobileNode.branchReasonImage")
+            : children.length === 0
+              ? t("mobileNode.branchReasonChildren")
+              : "";
+    const createChild = () => {
+      const nodeId = addChildNode(selected.id);
+      setLastFocusedNodeId(nodeId);
+      selectNode(nodeId);
+      setActiveView("node");
+    };
+    const createSibling = () => {
+      const nodeId = addSiblingNode(selected.id);
+      setLastFocusedNodeId(nodeId);
+      selectNode(nodeId);
+      setActiveView("node");
+    };
+    const createDuplicateRoot = () => {
+      const nodeId = duplicateBranchRoot(selected.id);
+      setLastFocusedNodeId(nodeId);
+      selectNode(nodeId);
+      setActiveView("node");
+    };
+    const renderBranchNodeCard = (
+      node: GraphNode,
+      variant: "current" | "child",
+      onSelect?: () => void,
+    ) => {
+      const nodeMeta = graphMeta.get(node.id) ?? {
+        level: 0,
+        isolated: true,
+        treeRootId: node.id,
+        treeIndex: 0,
+        treeColor: "#a78bfa",
+      };
+      const promptText = node.data.prompt.trim();
+      const titleText = node.data.name?.trim() || promptText || t("mobileNode.noPromptYet");
+      const showPromptPreview = Boolean(node.data.name?.trim() && promptText);
+      const descendantCount = childCountByNodeId.get(node.id) ?? 0;
+      const content = (
+        <>
+          <span className="mobile-node-branch-node-card__content">
+            <span className="mobile-node-branch-node-card__title">
+              <strong>{titleText}</strong>
+            </span>
+            {showPromptPreview ? (
+              <span className="mobile-node-branch-node-card__prompt">{promptText}</span>
+            ) : !promptText ? (
+              <span className="mobile-node-branch-node-card__prompt mobile-node-branch-node-card__prompt--muted">
+                {t("mobileNode.noPromptYet")}
+              </span>
+            ) : null}
+            {descendantCount ? (
+              <span className="mobile-node-branch-node-card__meta">
+                {t("mobileNode.nodeChildShort", { count: descendantCount })}
+              </span>
+            ) : null}
+          </span>
+          {node.data.imageUrl ? (
+            <span className="mobile-node-branch-node-card__thumb" aria-hidden="true">
+              <img src={node.data.imageUrl} alt="" />
+            </span>
+          ) : null}
+          <span className="mobile-node-branch-node-card__badges">
+            <span className="mobile-node-list-card__level">L{nodeMeta.level ?? 0}</span>
+            <span className={`mobile-node-list-card__status mobile-node-list-card__status--${statusTone(node.data.status)}`}>
+              {getStatusLabel(t, node.data.status)}
+            </span>
+          </span>
+        </>
+      );
+      const className = `mobile-node-branch-node-card mobile-node-branch-node-card--${variant}${node.data.imageUrl ? " has-thumbnail" : ""}`;
+      const style = { "--node-tree-color": nodeMeta.treeColor ?? "#a78bfa" } as CSSProperties;
+
+      if (onSelect) {
+        return (
+          <button type="button" className={className} style={style} onClick={onSelect}>
+            {content}
+          </button>
+        );
+      }
+
+      return (
+        <div className={className} style={style}>
+          {content}
+        </div>
+      );
+    };
 
     return (
       <section className="mobile-node-panel mobile-node-panel--branches">
@@ -1312,101 +1418,87 @@ export function MobileNodeWorkspace() {
             <h2>{t("mobileNode.branchesTitle")}</h2>
             <p>{t("mobileNode.branchesSubtitle")}</p>
           </div>
-          <span>{children.length}</span>
         </div>
+        <section className="mobile-node-branch-section">
+          <div className="mobile-node-action-title">{t("mobileNode.currentSummaryTitle")}</div>
+          {renderBranchNodeCard(selected, "current")}
+        </section>
+        <section className="mobile-node-branch-section">
+          <div className="mobile-node-action-title">{t("mobileNode.inputConnectionTitle")}</div>
         {parent && incomingEdge ? (
-          <button
-            type="button"
-            className="mobile-node-lineage-card"
-            onClick={() => selectInBranches(parent.id)}
-          >
-            <span>{t("nodeInspector.parentNode")}</span>
-            <strong>{nodeLabel(parent)}</strong>
-            <small>{edgeTransferText(t, incomingEdge)}</small>
-          </button>
+          <div className="mobile-node-branch-connection-card">
+            <button
+              type="button"
+              className="mobile-node-branch-connection-card__body"
+              onClick={() => openConnection(incomingEdge.id, "branches")}
+            >
+              <span>{t("nodeInspector.parentNode")}</span>
+              <strong>{nodeLabel(parent)}</strong>
+              <small>{edgeTransferText(t, incomingEdge)}</small>
+            </button>
+            <div className="mobile-node-branch-connection-card__actions">
+              <button type="button" onClick={() => selectInBranches(parent.id)}>
+                {t("mobileNode.goParent")}
+              </button>
+              <EdgeChips edge={incomingEdge} {...edgeChipActions} />
+            </div>
+          </div>
         ) : (
-          <div className="mobile-node-lineage-card mobile-node-lineage-card--muted">
-            <span>{t("nodeInspector.parentNode")}</span>
+          <div className="mobile-node-branch-root-card">
             <strong>{t("mobileNode.rootNode")}</strong>
-            <small>{t("mobileNode.rootNodeHelp")}</small>
+            <small>{t("mobileNode.rootNodeBranchesHelp")}</small>
           </div>
         )}
-        <div className="mobile-node-lineage-card mobile-node-lineage-card--current">
-          <span>{t("mobileNode.currentNode")}</span>
-          <strong>{nodeLabel(selected)}</strong>
-          <small>{getStatusLabel(t, data.status)} · {shortNodeId(selected.id)}</small>
-        </div>
-        <div className="mobile-node-action-grid">
-          <button
-            type="button"
-            className="mobile-node-primary"
-            onClick={() => {
-              selectNode(addChildNode(selected.id));
-              setActiveView("node");
-            }}
-            disabled={!canBranch}
-          >
-            {t("node.addChild")}
-          </button>
-          <button
-            type="button"
-            className="mobile-node-button"
-            onClick={() => {
-              selectNode(addSiblingNode(selected.id));
-              setActiveView("node");
-            }}
-          >
-            {t("mobileNode.addSibling")}
-          </button>
-          <button
-            type="button"
-            className="mobile-node-button"
-            onClick={() => {
-              selectNode(duplicateBranchRoot(selected.id));
-              setActiveView("node");
-            }}
-          >
-            {t("mobileNode.duplicateRoot")}
-          </button>
-          <button
-            type="button"
-            className={isBranchGenerating ? "mobile-node-danger" : "mobile-node-button"}
-            onClick={() =>
-              isBranchGenerating
-                ? void cancelBranchGeneration(selected.id)
-                : void regenerateBranch(selected.id)
-            }
-            disabled={isBranchGenerating ? false : !canRegenerateBranch}
-          >
-            {isBranchGenerating ? t("node.cancelBranch") : t("node.regenerateBranch")}
-          </button>
-          <button
-            type="button"
-            className="mobile-node-danger"
-            onClick={() => detachNodeFromParent(selected.id)}
-            disabled={!incomingEdge || busy}
-          >
-            {t("nodeInspector.detachConnection")}
-          </button>
-          {incomingEdge ? (
+        </section>
+        <section className="mobile-node-branch-section">
+          <div className="mobile-node-action-title">{t("mobileNode.branchCreateTitle")}</div>
+          <div className="mobile-node-action-grid mobile-node-action-grid--branch-create">
+            <button type="button" className="mobile-node-primary" onClick={createChild} disabled={!canBranch}>
+              {t("node.addChild")}
+            </button>
+            <button type="button" className="mobile-node-button" onClick={createSibling}>
+              {t("mobileNode.addSibling")}
+            </button>
             <button
               type="button"
               className="mobile-node-button"
-              onClick={() => openConnection(incomingEdge.id, "branches")}
+              onClick={createDuplicateRoot}
             >
-              {t("mobileNode.openConnection")}
+              {t("mobileNode.duplicateRoot")}
             </button>
-          ) : null}
-        </div>
-        <div className="mobile-node-children">
-          <div className="mobile-node-action-title">{t("mobileNode.children")}</div>
+          </div>
+        </section>
+        <section className="mobile-node-branch-section">
+          <div className="mobile-node-action-title">{t("mobileNode.branchGenerateTitle")}</div>
+          <div className={`mobile-node-branch-generate-card${isBranchGenerating ? " is-running" : ""}`}>
+            <div>
+              <strong>{isBranchGenerating ? t("mobileNode.branchRunning") : t("node.regenerateBranch")}</strong>
+              <small>
+                {isBranchGenerating
+                  ? t("mobileNode.branchImpact", { count: children.length })
+                  : branchDisabledReason || t("mobileNode.branchReady", { count: children.length })}
+              </small>
+            </div>
+            <button
+              type="button"
+              className={isBranchGenerating ? "mobile-node-danger" : "mobile-node-button"}
+              onClick={() =>
+                isBranchGenerating
+                  ? void cancelBranchGeneration(selected.id)
+                  : void regenerateBranch(selected.id)
+              }
+              disabled={isBranchGenerating ? false : !canRegenerateBranch}
+            >
+              {isBranchGenerating ? t("node.cancelBranch") : t("node.regenerateBranch")}
+            </button>
+          </div>
+        </section>
+        <section className="mobile-node-branch-section mobile-node-children">
+          <div className="mobile-node-action-title">{t("mobileNode.outputBranchesTitle")}</div>
           {children.length ? (
             children.map(({ edge, node }) => (
               <div key={edge.id} className="mobile-node-child-card">
-                <button type="button" onClick={() => selectInBranches(node.id)}>
-                  <strong>{nodeLabel(node)}</strong>
-                  <small>{getStatusLabel(t, node.data.status)} · {shortNodeId(node.id)}</small>
-                </button>
+                {renderBranchNodeCard(node, "child", () => selectInBranches(node.id))}
                 <div className="mobile-node-child-card__edge">
                   <button type="button" onClick={() => openConnection(edge.id, "branches")}>
                     {t("mobileNode.openConnection")}
@@ -1418,7 +1510,20 @@ export function MobileNodeWorkspace() {
           ) : (
             <p className="mobile-node-muted">{t("mobileNode.noChildren")}</p>
           )}
-        </div>
+        </section>
+        {incomingEdge ? (
+          <section className="mobile-node-branch-section">
+            <div className="mobile-node-action-title">{t("mobileNode.branchStructureTitle")}</div>
+            <button
+              type="button"
+              className="mobile-node-danger mobile-node-button--wide"
+              onClick={() => detachNodeFromParent(selected.id)}
+              disabled={busy}
+            >
+              {t("nodeInspector.detachConnection")}
+            </button>
+          </section>
+        ) : null}
       </section>
     );
   };
