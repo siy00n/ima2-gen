@@ -433,6 +433,8 @@
     "nodeParent": "Parent",
     "nodeRoot": "Root",
     "nodeChildren": "{count} children",
+    "nodeChildShort": "Child {count}",
+    "noPromptYet": "No prompt yet",
     "laneNodes": "{count} nodes",
     "laneLeaves": "{count} leaves",
     "laneCollapse": "Collapse {name}",

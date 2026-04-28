@@ -474,43 +474,57 @@ export function MobileNodeWorkspace() {
   };
 
   const renderBranchTreeItem = (item: BranchTreeItem, lane: BranchLane) => {
-    const childPreview = item.childNodes.slice(0, 2).map(nodeLabel).join(", ");
-    const extraChildCount = Math.max(0, item.childNodes.length - 2);
     const level = item.meta.level ?? 0;
     const hasChildren = item.childNodes.length > 0;
     const forceOpen = expandedTreeNodeIds.has(item.node.id);
     const collapsed = hasChildren && collapsedTreeNodeIds.has(item.node.id) && !forceOpen;
     const cardTone = item.meta.treeColor ?? lane.treeColor;
+    const nodeName = item.node.data.name?.trim();
+    const promptText = item.node.data.prompt.trim();
+    const titleText = nodeName || promptText || t("mobileNode.noPromptYet");
+    const showPromptPreview = Boolean(nodeName && promptText);
+    const thumbnailSrc = item.node.data.imageUrl;
     return (
       <div
         key={item.node.id}
         className="mobile-node-tree-row"
         style={{
           "--node-tree-color": cardTone,
-          "--node-tree-depth": Math.min(level, 3),
+          "--node-tree-depth": Math.min(level, 2),
         } as CSSProperties}
       >
         <div className={`mobile-node-list-card mobile-node-list-card--tree${selectedNodeId === item.node.id ? " is-selected" : ""}`}>
           <button
             type="button"
-            className="mobile-node-list-card__body"
+            className={`mobile-node-list-card__body${thumbnailSrc ? " has-thumbnail" : ""}`}
             onClick={() => selectAndOpenNode(item.node.id)}
           >
-            <span className={`mobile-node-list-card__gutter${item.parent ? " has-parent" : ""}`} aria-hidden="true">
-              <span className="mobile-node-list-card__elbow" />
+            <span className="mobile-node-list-card__content">
+              <span className="mobile-node-list-card__title-row">
+                <strong>{titleText}</strong>
+                <span className="mobile-node-list-card__level">L{level}</span>
+                <span className={`mobile-node-list-card__status mobile-node-list-card__status--${statusTone(item.node.data.status)}`}>
+                  {getStatusLabel(t, item.node.data.status)}
+                </span>
+              </span>
+              {showPromptPreview ? (
+                <span className="mobile-node-list-card__prompt">{promptText}</span>
+              ) : !promptText ? (
+                <span className="mobile-node-list-card__prompt mobile-node-list-card__prompt--muted">
+                  {t("mobileNode.noPromptYet")}
+                </span>
+              ) : null}
+              {hasChildren ? (
+                <span className="mobile-node-list-card__meta">
+                  {t("mobileNode.nodeChildShort", { count: item.childNodes.length })}
+                </span>
+              ) : null}
             </span>
-            <span className="mobile-node-list-card__level">L{level}</span>
-            <span className="mobile-node-list-card__main">
-              <strong>{nodeLabel(item.node)}</strong>
-              <small>{getStatusLabel(t, item.node.data.status)} · {shortNodeId(item.node.id)}</small>
-            </span>
-            <span className="mobile-node-list-card__links">
-              <small>{item.parent ? `${t("mobileNode.nodeParent")}: ${nodeLabel(item.parent)}` : t("mobileNode.nodeRoot")}</small>
-              <small>
-                {t("mobileNode.nodeChildren", { count: item.childNodes.length })}
-                {childPreview ? ` · ${childPreview}${extraChildCount ? ` +${extraChildCount}` : ""}` : ""}
-              </small>
-            </span>
+            {thumbnailSrc ? (
+              <span className="mobile-node-list-card__thumb" aria-hidden="true">
+                <img src={thumbnailSrc} alt="" />
+              </span>
+            ) : null}
           </button>
           {hasChildren ? (
             <button
@@ -525,7 +539,7 @@ export function MobileNodeWorkspace() {
               {collapsed ? "▸" : "▾"}
             </button>
           ) : (
-            <span className="mobile-node-list-card__leaf">{t("mobileNode.leaf")}</span>
+            null
           )}
         </div>
         {hasChildren && !collapsed ? (
