@@ -643,9 +643,7 @@ export function MobileNodeWorkspace() {
             </div>
             <div className="mobile-node-branch-lanes">
               {branchLanes.map((lane) => {
-                const focusNodeId = lastFocusedNodeId ?? selectedNodeId;
-                const focusedTreeRootId = focusNodeId ? graphMeta.get(focusNodeId)?.treeRootId : null;
-                const collapsed = collapsedLaneIds.has(lane.rootId) && focusedTreeRootId !== lane.rootId;
+                const collapsed = collapsedLaneIds.has(lane.rootId);
                 const summary = laneStatusSummary(t, lane.statusCounts);
                 return (
                   <section

@@ -1161,7 +1161,7 @@
   border: 0;
   background: transparent;
   color: inherit;
-  padding: 30px 10px 10px 11px;
+  padding: 12px 10px 10px 11px;
   text-align: left;
   width: 100%;
 }
@@ -1194,6 +1194,12 @@
 .mobile-node-list-card__title-row {
   min-width: 0;
   display: block;
+  min-height: 22px;
+  padding-right: 122px;
+}
+
+.mobile-node-list-card__body.has-thumbnail .mobile-node-list-card__title-row {
+  padding-right: 84px;
 }
 
 .mobile-node-list-card__title-row strong {
@@ -1279,6 +1285,7 @@
   width: 44px;
   height: 44px;
   align-self: end;
+  margin-top: 22px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 11px;
