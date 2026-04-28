@@ -350,7 +350,7 @@
   },
   "nodeInspector": {
     "title": "Selected node",
-    "noSelection": "Select a node to inspect it, edit its prompt, and create branches.",
+    "noSelection": "Select a node to edit its prompt, generation settings, and branch actions.",
     "importCurrent": "Import current image",
     "createVariation": "Create variation",
     "statusValue": "{value}",

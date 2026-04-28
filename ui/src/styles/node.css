@@ -2257,7 +2257,8 @@ button.workflow-edge-badge__chip {
 
   .gallery {
     width: 100vw;
-    height: min(82dvh, 740px);
+    height: min(92dvh, calc(100dvh - 12px));
+    max-height: calc(100dvh - 12px);
     border-radius: 18px 18px 0 0;
     border-left: none;
     border-right: none;
@@ -2556,19 +2557,23 @@ button.workflow-edge-badge__chip {
   }
 
   .right-panel {
-    height: min(72dvh, 640px);
-    max-height: calc(100dvh - 16px);
+    height: min(86dvh, 760px);
+    max-height: calc(100dvh - 12px);
     border-radius: 20px 20px 0 0;
     background: rgba(20, 20, 20, 0.98);
   }
 
   .right-panel--node {
-    height: min(84dvh, 740px);
+    height: min(88dvh, 780px);
   }
 
   .right-panel-body,
   .right-panel--node .right-panel-body {
     padding: 48px 14px max(18px, env(safe-area-inset-bottom));
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .right-panel--node .billing-bar {
@@ -2618,6 +2623,11 @@ button.workflow-edge-badge__chip {
     flex-direction: column;
     gap: 12px;
     padding: 0 12px 12px;
+  }
+
+  .mobile-settings-advanced {
+    flex: 0 0 auto;
+    overflow: visible;
   }
 
   .sidebar--mobile-node {
@@ -2762,11 +2772,11 @@ button.workflow-edge-badge__chip {
   }
 
   .node-inspector__actions--parent {
-    order: 7;
+    order: 8;
   }
 
   .node-inspector__mobile-transfer {
-    order: 8;
+    order: 9;
   }
 
   .node-inspector__action-panel {
@@ -2774,7 +2784,7 @@ button.workflow-edge-badge__chip {
   }
 
   .node-inspector__settings:not(.node-inspector__mobile-transfer) {
-    order: 9;
+    order: 7;
   }
 
   .node-inspector__primary,
@@ -2851,7 +2861,8 @@ button.workflow-edge-badge__chip {
 
   .gallery {
     position: relative;
-    height: min(82dvh, 740px);
+    height: min(92dvh, calc(100dvh - 12px));
+    max-height: calc(100dvh - 12px);
     padding-top: 10px;
   }
 

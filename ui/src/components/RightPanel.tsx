@@ -114,7 +114,7 @@ export function RightPanel() {
                 onChange={setQuality}
               />
               {isMobile ? (
-                <details className="mobile-settings-advanced">
+                <details className="mobile-settings-advanced" open>
                   <summary>
                     <span>{t("size.title")} / {t("format.title")}</span>
                     <small>{resolvedSize} · {format}</small>

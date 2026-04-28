@@ -757,7 +757,7 @@ export function NodeInspector() {
             </div>
           </details>
         ) : null}
-        <details className="node-inspector__settings" open={!isMobile}>
+        <details className="node-inspector__settings" open>
           <summary className="node-inspector__settings-summary">
             <span>{t("nodeInspector.nodeSettings")}</span>
             <small>{settingsSummary}</small>
