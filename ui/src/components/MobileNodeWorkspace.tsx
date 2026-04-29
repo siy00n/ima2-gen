@@ -671,6 +671,7 @@ export function MobileNodeWorkspace() {
   const jumpToSettings = () => {
     setActiveView("node");
     window.setTimeout(() => {
+      if (settingsRef.current) settingsRef.current.open = true;
       settingsRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
     }, 50);
   };
@@ -992,35 +993,34 @@ export function MobileNodeWorkspace() {
     return (
       <>
         <section className="mobile-node-focus">
-          <div className="mobile-node-focus__header">
-            <label className="mobile-node-name-field">
-              <span>{t("nodeInspector.nodeName")}</span>
-              <input
-                type="text"
-                value={data.name ?? ""}
-                onChange={(event) => updateNodeName(selected.id, event.target.value)}
-                placeholder={t("node.untitledName")}
-              />
-            </label>
-          </div>
-
           <div
-            className={`mobile-node-context-card${data.imageUrl ? " has-thumbnail" : ""}${parent ? " has-action" : ""}`}
+            className={`mobile-node-context-card mobile-node-edit-card${data.imageUrl ? " has-thumbnail" : ""}${parent ? " has-action" : ""}`}
             style={{ "--node-tree-color": selectedMeta.treeColor ?? "#a78bfa" } as CSSProperties}
           >
-            <span className="mobile-node-context-card__main">
-              <span className="mobile-node-context-card__eyebrow">{t("mobileNode.nodeContextTitle")}</span>
-              <strong>
-                {parent
-                  ? `${nodeLabel(parent)} -> ${nodeLabel(selected)}`
-                  : `${t("mobileNode.rootLane")}: ${nodeLabel(rootNode)}`}
-              </strong>
-              <span className="mobile-node-context-card__meta">
-                <span className="mobile-node-list-card__level">L{selectedMeta.level}</span>
-                <span className={`mobile-node-list-card__status mobile-node-list-card__status--${statusTone(data.status)}`}>
-                  {getStatusLabel(t, data.status)}
+            <span className="mobile-node-edit-card__main">
+              <label className="mobile-node-name-field mobile-node-name-field--compact">
+                <span>{t("nodeInspector.nodeName")}</span>
+                <input
+                  type="text"
+                  value={data.name ?? ""}
+                  onChange={(event) => updateNodeName(selected.id, event.target.value)}
+                  placeholder={t("node.untitledName")}
+                />
+              </label>
+              <span className="mobile-node-context-card__main">
+                <span className="mobile-node-context-card__eyebrow">{t("mobileNode.nodeContextTitle")}</span>
+                <strong>
+                  {parent
+                    ? `${nodeLabel(parent)} -> ${nodeLabel(selected)}`
+                    : `${t("mobileNode.rootLane")}: ${nodeLabel(rootNode)}`}
+                </strong>
+                <span className="mobile-node-context-card__meta">
+                  <span className="mobile-node-list-card__level">L{selectedMeta.level}</span>
+                  <span className={`mobile-node-list-card__status mobile-node-list-card__status--${statusTone(data.status)}`}>
+                    {getStatusLabel(t, data.status)}
+                  </span>
+                  <span>{t("mobileNode.nodeChildShort", { count: children.length })}</span>
                 </span>
-                <span>{t("mobileNode.nodeChildShort", { count: children.length })}</span>
               </span>
             </span>
             {data.imageUrl ? (
@@ -1035,25 +1035,7 @@ export function MobileNodeWorkspace() {
             ) : null}
           </div>
 
-          {data.imageUrl ? (
-            <button
-              type="button"
-              className="mobile-node-preview mobile-node-preview--button"
-              onClick={() => setLightboxOpen(true)}
-              aria-label={t("nodeInspector.openImagePreview")}
-            >
-              <img src={data.imageUrl} alt={t("node.nodeImageAlt")} />
-            </button>
-          ) : (
-            <div className="mobile-node-preview mobile-node-preview--empty">
-              <span>{t("node.noImage")}</span>
-            </div>
-          )}
-
           <div className="mobile-node-pills" aria-label={t("nodeInspector.statusMeta")}>
-            <span className={`mobile-node-pill mobile-node-pill--${statusTone(data.status)}`}>
-              {getStatusLabel(t, data.status)}
-            </span>
             <span className="mobile-node-pill">{data.settings.quality}</span>
             <span className="mobile-node-pill">{resolvedSize}</span>
             {data.elapsed != null ? <span className="mobile-node-pill">{data.elapsed}s</span> : null}
@@ -1086,7 +1068,7 @@ export function MobileNodeWorkspace() {
               disabled={busy}
               onChange={(event) => updateNodePrompt(selected.id, event.target.value)}
               placeholder={parent ? t("node.editPromptPlaceholder") : t("node.promptPlaceholder")}
-              rows={6}
+              rows={5}
             />
           </label>
 
@@ -1138,6 +1120,21 @@ export function MobileNodeWorkspace() {
             </>
           ) : null}
 
+          {data.imageUrl ? (
+            <button
+              type="button"
+              className="mobile-node-preview mobile-node-preview--button"
+              onClick={() => setLightboxOpen(true)}
+              aria-label={t("nodeInspector.openImagePreview")}
+            >
+              <img src={data.imageUrl} alt={t("node.nodeImageAlt")} />
+            </button>
+          ) : (
+            <div className="mobile-node-preview mobile-node-preview--empty">
+              <span>{t("node.noImage")}</span>
+            </div>
+          )}
+
           {incomingEdge ? (
             <div className="mobile-node-connection-summary">
               <button
@@ -1154,7 +1151,7 @@ export function MobileNodeWorkspace() {
             </div>
           ) : null}
 
-          <details ref={settingsRef} className="mobile-node-settings" open>
+          <details ref={settingsRef} className="mobile-node-settings">
             <summary>
               <span>{t("nodeInspector.nodeSettings")}</span>
               <small>{settingsSummary}</small>
@@ -1266,79 +1263,87 @@ export function MobileNodeWorkspace() {
             <pre>{previewJson}</pre>
           </details>
 
-          <div className="mobile-node-action-title">{t("nodeInspector.exportActions")}</div>
-          <div className="mobile-node-action-grid">
-            <button type="button" className="mobile-node-button" onClick={download} disabled={!data.imageUrl}>
-              {t("result.download")}
-            </button>
-            <button type="button" className="mobile-node-button" onClick={() => void copyImage()} disabled={!data.imageUrl}>
-              {t("result.copyImage")}
-            </button>
-            <button type="button" className="mobile-node-button" onClick={() => void copyPrompt()} disabled={!data.prompt}>
-              {t("result.copyPrompt")}
-            </button>
-            {canRemoveImageReference ? (
-              <button
-                type="button"
-                className="mobile-node-danger"
-                onClick={() => removeNodeImageReference(selected.id)}
-                disabled={busy}
-              >
-                {t("nodeInspector.removeImage")}
-              </button>
-            ) : null}
-          </div>
+          <details className="mobile-node-actions-details">
+            <summary>
+              <span>{t("mobileNode.actionsTitle")}</span>
+              <small>{t("mobileNode.actionsSummary")}</small>
+            </summary>
+            <div className="mobile-node-actions-details__body">
+              <div className="mobile-node-action-title">{t("nodeInspector.exportActions")}</div>
+              <div className="mobile-node-action-grid">
+                <button type="button" className="mobile-node-button" onClick={download} disabled={!data.imageUrl}>
+                  {t("result.download")}
+                </button>
+                <button type="button" className="mobile-node-button" onClick={() => void copyImage()} disabled={!data.imageUrl}>
+                  {t("result.copyImage")}
+                </button>
+                <button type="button" className="mobile-node-button" onClick={() => void copyPrompt()} disabled={!data.prompt}>
+                  {t("result.copyPrompt")}
+                </button>
+                {canRemoveImageReference ? (
+                  <button
+                    type="button"
+                    className="mobile-node-danger"
+                    onClick={() => removeNodeImageReference(selected.id)}
+                    disabled={busy}
+                  >
+                    {t("nodeInspector.removeImage")}
+                  </button>
+                ) : null}
+              </div>
 
-          <div className="mobile-node-action-title">{t("nodeInspector.workflowActions")}</div>
-          <div className={`mobile-node-branch-inline-hint${isBranchGenerating ? " is-running" : ""}`}>
-            {isBranchGenerating
-              ? t("mobileNode.branchImpact", { count: children.length })
-              : branchRegenerateState.reason || t("mobileNode.branchReady", { count: children.length })}
-          </div>
-          <div className="mobile-node-action-grid">
-            <button
-              type="button"
-              className="mobile-node-button"
-              onClick={() =>
-                isBranchGenerating
-                  ? void cancelBranchGeneration(selected.id)
-                  : void regenerateBranch(selected.id)
-              }
-              disabled={isBranchGenerating ? false : !branchRegenerateState.canRegenerate}
-            >
-              {isBranchGenerating ? t("node.cancelBranch") : t("node.regenerateBranch")}
-            </button>
-            <button
-              type="button"
-              className="mobile-node-button"
-              onClick={() => {
-                selectNode(addSiblingNode(selected.id));
-                setActiveView("node");
-              }}
-            >
-              {t("mobileNode.addSibling")}
-            </button>
-            <button
-              type="button"
-              className="mobile-node-button"
-              onClick={() => {
-                selectNode(duplicateBranchRoot(selected.id));
-                setActiveView("node");
-              }}
-            >
-              {t("mobileNode.duplicateRoot")}
-            </button>
-            <button
-              type="button"
-              className="mobile-node-danger"
-              onClick={() => {
-                deleteNode(selected.id);
-                selectNode(null);
-              }}
-            >
-              {t("common.delete")}
-            </button>
-          </div>
+              <div className="mobile-node-action-title">{t("nodeInspector.workflowActions")}</div>
+              <div className={`mobile-node-branch-inline-hint${isBranchGenerating ? " is-running" : ""}`}>
+                {isBranchGenerating
+                  ? t("mobileNode.branchImpact", { count: children.length })
+                  : branchRegenerateState.reason || t("mobileNode.branchReady", { count: children.length })}
+              </div>
+              <div className="mobile-node-action-grid">
+                <button
+                  type="button"
+                  className="mobile-node-button"
+                  onClick={() =>
+                    isBranchGenerating
+                      ? void cancelBranchGeneration(selected.id)
+                      : void regenerateBranch(selected.id)
+                  }
+                  disabled={isBranchGenerating ? false : !branchRegenerateState.canRegenerate}
+                >
+                  {isBranchGenerating ? t("node.cancelBranch") : t("node.regenerateBranch")}
+                </button>
+                <button
+                  type="button"
+                  className="mobile-node-button"
+                  onClick={() => {
+                    selectNode(addSiblingNode(selected.id));
+                    setActiveView("node");
+                  }}
+                >
+                  {t("mobileNode.addSibling")}
+                </button>
+                <button
+                  type="button"
+                  className="mobile-node-button"
+                  onClick={() => {
+                    selectNode(duplicateBranchRoot(selected.id));
+                    setActiveView("node");
+                  }}
+                >
+                  {t("mobileNode.duplicateRoot")}
+                </button>
+                <button
+                  type="button"
+                  className="mobile-node-danger"
+                  onClick={() => {
+                    deleteNode(selected.id);
+                    selectNode(null);
+                  }}
+                >
+                  {t("common.delete")}
+                </button>
+              </div>
+            </div>
+          </details>
         </section>
         <ImageLightbox
           open={lightboxOpen && !!data.imageUrl}

@@ -465,6 +465,8 @@
     "nodeContextTitle": "Workflow context",
     "rootLane": "Root lane",
     "openBranches": "Branches",
+    "actionsTitle": "Actions",
+    "actionsSummary": "Export, branch, and danger actions",
     "connectionParent": "Parent",
     "connectionChild": "Child",
     "branchesTitle": "Branches",

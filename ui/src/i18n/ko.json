@@ -465,6 +465,8 @@
     "nodeContextTitle": "워크플로우 맥락",
     "rootLane": "루트 흐름",
     "openBranches": "브랜치",
+    "actionsTitle": "액션",
+    "actionsSummary": "내보내기, 브랜치, 위험 액션",
     "connectionParent": "부모",
     "connectionChild": "자식",
     "branchesTitle": "브랜치",
