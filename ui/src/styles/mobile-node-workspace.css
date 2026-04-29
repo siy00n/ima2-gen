@@ -1289,24 +1289,24 @@
   opacity: 0.72;
 }
 
-.mobile-node-map-tree-row[data-image-transfer="ancestor"] .mobile-node-map-connector__elbow path {
+.mobile-node-map-connector[data-image-transfer="ancestor"] .mobile-node-map-connector__elbow path {
   stroke-width: 1.85;
   opacity: 0.9;
 }
 
-.mobile-node-map-tree-row[data-image-transfer="off"] .mobile-node-map-connector__elbow path {
+.mobile-node-map-connector[data-image-transfer="off"] .mobile-node-map-connector__elbow path {
   stroke-dasharray: 2 4;
   stroke-width: 1.35;
   opacity: 0.46;
 }
 
-.mobile-node-map-tree-row.has-active-edge .mobile-node-map-connector__elbow path {
+.mobile-node-map-connector[data-active="true"] .mobile-node-map-connector__elbow path {
   stroke-width: 1.95;
   opacity: 0.96;
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--map-edge-color, var(--edge-image)) 42%, transparent));
 }
 
-.mobile-node-map-tree-row.has-active-edge[data-image-transfer="off"] .mobile-node-map-connector__elbow path {
+.mobile-node-map-connector[data-active="true"][data-image-transfer="off"] .mobile-node-map-connector__elbow path {
   stroke-dasharray: 2 4;
   stroke-width: 1.45;
   opacity: 0.62;
@@ -1347,12 +1347,12 @@
   color: var(--edge-settings);
 }
 
-.mobile-node-map-tree-row.has-active-edge .mobile-node-map-edge-indicator {
+.mobile-node-map-connector[data-active="true"] .mobile-node-map-edge-indicator {
   transform: scale(1.08);
   box-shadow: 0 0 8px color-mix(in srgb, currentColor 42%, transparent);
 }
 
-.mobile-node-map-tree-row[data-image-transfer="off"] .mobile-node-map-edge-indicator {
+.mobile-node-map-connector[data-image-transfer="off"] .mobile-node-map-edge-indicator {
   background: rgba(13, 16, 22, 0.58);
   opacity: 0.66;
 }

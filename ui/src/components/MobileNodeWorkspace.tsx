@@ -129,6 +129,52 @@ function edgeMapColor(imageTransfer: ImageTransferMode): string {
   return "var(--edge-image)";
 }
 
+function MobileMapConnector({
+  active,
+  depth,
+  edge,
+}: {
+  active: boolean;
+  depth: number;
+  edge: GraphEdge;
+}) {
+  const edgeData = normalizeEdgeTransferData(edge.data);
+  const contextIndicator = edgeData.transferContext ? "C" : null;
+  const settingsIndicator = edgeData.transferSettings ? "S" : null;
+  return (
+    <span
+      className="mobile-node-map-connector"
+      data-active={active ? "true" : undefined}
+      data-image-transfer={edgeData.imageTransfer}
+      style={
+        {
+          "--map-depth": depth,
+          "--map-edge-color": edgeMapColor(edgeData.imageTransfer),
+        } as CSSProperties
+      }
+      aria-hidden="true"
+    >
+      <svg className="mobile-node-map-connector__elbow" viewBox="0 0 20 34" focusable="false">
+        <path d="M2 1 V21 Q2 29 10 29 H19" vectorEffect="non-scaling-stroke" />
+      </svg>
+      {contextIndicator || settingsIndicator ? (
+        <span className="mobile-node-map-edge-indicators">
+          {contextIndicator ? (
+            <span className="mobile-node-map-edge-indicator mobile-node-map-edge-indicator--context">
+              {contextIndicator}
+            </span>
+          ) : null}
+          {settingsIndicator ? (
+            <span className="mobile-node-map-edge-indicator mobile-node-map-edge-indicator--settings">
+              {settingsIndicator}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function getStatusLabel(t: (key: string) => string, status: ImageNodeStatus): string {
   if (status === "ready") return t("nodeInspector.statusReady");
   if (status === "pending") return t("nodeInspector.statusGenerating");
@@ -1602,44 +1648,14 @@ export function MobileNodeWorkspace() {
       const incomingEdge = item.parent
         ? edges.find((edge) => edge.source === item.parent?.id && edge.target === item.node.id)
         : null;
-      const incomingEdgeData = incomingEdge ? normalizeEdgeTransferData(incomingEdge.data) : null;
       const edgeActive = !!incomingEdge && (incomingEdge.source === selectedNodeId || incomingEdge.target === selectedNodeId);
-      const connectorStyle = incomingEdgeData
-        ? ({
-            "--map-depth": depth,
-            "--map-edge-color": edgeMapColor(incomingEdgeData.imageTransfer),
-          } as CSSProperties)
-        : ({ "--map-depth": depth } as CSSProperties);
-      const contextIndicator = incomingEdgeData?.transferContext ? "C" : null;
-      const settingsIndicator = incomingEdgeData?.transferSettings ? "S" : null;
       return (
         <div
           key={item.node.id}
-          className={`mobile-node-map-tree-row${item.parent ? " has-parent" : ""}${edgeActive ? " has-active-edge" : ""}`}
-          data-image-transfer={incomingEdgeData?.imageTransfer}
-          style={connectorStyle}
+          className={`mobile-node-map-tree-row${item.parent ? " has-parent" : ""}`}
+          style={{ "--map-depth": depth } as CSSProperties}
         >
-          {incomingEdgeData ? (
-            <span className="mobile-node-map-connector" aria-hidden="true">
-              <svg className="mobile-node-map-connector__elbow" viewBox="0 0 20 34" focusable="false">
-                <path d="M2 1 V21 Q2 29 10 29 H19" vectorEffect="non-scaling-stroke" />
-              </svg>
-              {contextIndicator || settingsIndicator ? (
-                <span className="mobile-node-map-edge-indicators">
-                  {contextIndicator ? (
-                    <span className="mobile-node-map-edge-indicator mobile-node-map-edge-indicator--context">
-                      {contextIndicator}
-                    </span>
-                  ) : null}
-                  {settingsIndicator ? (
-                    <span className="mobile-node-map-edge-indicator mobile-node-map-edge-indicator--settings">
-                      {settingsIndicator}
-                    </span>
-                  ) : null}
-                </span>
-              ) : null}
-            </span>
-          ) : null}
+          {incomingEdge ? <MobileMapConnector active={edgeActive} depth={depth} edge={incomingEdge} /> : null}
           <button
             type="button"
             className={`mobile-node-map-node${isSelected ? " is-selected" : ""}${isCurrent ? " is-current" : ""}${thumbnailSrc ? " has-thumbnail" : ""}`}
