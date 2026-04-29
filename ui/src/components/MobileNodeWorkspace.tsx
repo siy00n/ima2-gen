@@ -1719,6 +1719,11 @@ export function MobileNodeWorkspace() {
 
     const edgeData = normalizeEdgeTransferData(activeConnectionEdge.data);
     const childBusy = isBusy(connectionChild.data);
+    const connectionStatusSummary = [
+      t(imageTransferLabelKey(edgeData.imageTransfer)),
+      t(edgeData.transferContext ? "edgeBadge.contextOn" : "edgeBadge.contextOff"),
+      t(edgeData.transferSettings ? "edgeBadge.settingsOn" : "edgeBadge.settingsOff"),
+    ].join(" · ");
 
     return (
       <section className="mobile-node-panel mobile-node-panel--connection">
@@ -1732,10 +1737,20 @@ export function MobileNodeWorkspace() {
           </button>
         </div>
         <div className="mobile-node-connection-context">
+          <div className="mobile-node-connection-context__summary">
+            <strong>{t("mobileNode.deliverySummary")}</strong>
+            <span>{connectionStatusSummary}</span>
+          </div>
           <div className="mobile-node-connection-context__flow">
             {renderEndpointSummary(connectionParent, t("mobileNode.connectionParent"))}
             <span className="mobile-node-connection-context__arrow" aria-hidden="true">-&gt;</span>
             {renderEndpointSummary(connectionChild, t("mobileNode.connectionChild"))}
+          </div>
+        </div>
+        <div className="mobile-node-quick-delivery">
+          <div>
+            <strong>{t("mobileNode.quickDeliveryTitle")}</strong>
+            <small>{t("mobileNode.quickDeliveryHelp")}</small>
           </div>
           <EdgeChips edge={activeConnectionEdge} {...edgeChipActions} />
         </div>
@@ -1757,7 +1772,7 @@ export function MobileNodeWorkspace() {
             ))}
           </div>
         </div>
-        <div className="mobile-node-connection-control">
+        <div className={`mobile-node-connection-control${edgeData.imageTransfer !== "ancestor" ? " is-muted" : ""}`}>
           <span>
             {t("nodeInspector.maxAncestorImages")}
             <small>
