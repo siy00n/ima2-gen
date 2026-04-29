@@ -1265,14 +1265,77 @@
   position: relative;
 }
 
-.mobile-node-map-tree-row.has-parent::before {
-  content: "";
+.mobile-node-map-connector {
   position: absolute;
-  left: calc((var(--map-depth, 1) * 18px) - 10px);
-  top: 15px;
-  width: 10px;
-  height: 1px;
-  background: color-mix(in srgb, var(--node-tree-color, #a78bfa) 48%, rgba(255, 255, 255, 0.1));
+  inset: 0 auto auto 0;
+  pointer-events: none;
+}
+
+.mobile-node-map-connector__elbow {
+  position: absolute;
+  left: calc((var(--map-depth, 1) * 18px) - 13px);
+  top: -7px;
+  width: 14px;
+  height: 31px;
+  border-left: 1.5px solid var(--map-edge-color, var(--edge-image));
+  border-bottom: 1.5px solid var(--map-edge-color, var(--edge-image));
+  border-bottom-left-radius: 8px;
+  opacity: 0.74;
+}
+
+.mobile-node-map-tree-row[data-image-transfer="ancestor"] .mobile-node-map-connector__elbow {
+  border-left-width: 2px;
+  border-bottom-width: 2px;
+  opacity: 0.9;
+}
+
+.mobile-node-map-tree-row[data-image-transfer="off"] .mobile-node-map-connector__elbow {
+  border-style: dashed;
+  opacity: 0.56;
+}
+
+.mobile-node-map-tree-row.has-active-edge .mobile-node-map-connector__elbow {
+  border-left-width: 2.4px;
+  border-bottom-width: 2.4px;
+  opacity: 1;
+}
+
+.mobile-node-map-edge-indicators {
+  position: absolute;
+  left: calc((var(--map-depth, 1) * 18px) - 15px);
+  top: 17px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.mobile-node-map-edge-indicator {
+  min-width: 12px;
+  height: 12px;
+  display: grid;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: rgba(13, 16, 22, 0.92);
+  font-family: var(--mono);
+  font-size: 7px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.mobile-node-map-edge-indicator--context {
+  color: var(--edge-context);
+}
+
+.mobile-node-map-edge-indicator--settings {
+  color: var(--edge-settings);
+}
+
+.mobile-node-map-tree-row.has-active-edge .mobile-node-map-edge-indicator {
+  transform: scale(1.08);
+  box-shadow: 0 0 8px color-mix(in srgb, currentColor 42%, transparent);
 }
 
 .mobile-node-map-tree-children {

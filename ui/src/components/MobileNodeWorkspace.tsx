@@ -123,6 +123,12 @@ function nextImageTransferMode(mode: ImageTransferMode): ImageTransferMode {
   return "off";
 }
 
+function edgeMapColor(imageTransfer: ImageTransferMode): string {
+  if (imageTransfer === "ancestor") return "var(--edge-ancestor)";
+  if (imageTransfer === "off") return "var(--edge-off)";
+  return "var(--edge-image)";
+}
+
 function getStatusLabel(t: (key: string) => string, status: ImageNodeStatus): string {
   if (status === "ready") return t("nodeInspector.statusReady");
   if (status === "pending") return t("nodeInspector.statusGenerating");
@@ -1593,12 +1599,45 @@ export function MobileNodeWorkspace() {
       const thumbnailSrc = item.node.data.status === "ready" ? item.node.data.imageUrl : null;
       const isSelected = selectedNodeId === item.node.id;
       const isCurrent = item.node.id === lastFocusedNodeId && !isSelected;
+      const incomingEdge = item.parent
+        ? edges.find((edge) => edge.source === item.parent?.id && edge.target === item.node.id)
+        : null;
+      const incomingEdgeData = incomingEdge ? normalizeEdgeTransferData(incomingEdge.data) : null;
+      const edgeActive = !!incomingEdge && (incomingEdge.source === selectedNodeId || incomingEdge.target === selectedNodeId);
+      const connectorStyle = incomingEdgeData
+        ? ({
+            "--map-depth": depth,
+            "--map-edge-color": edgeMapColor(incomingEdgeData.imageTransfer),
+          } as CSSProperties)
+        : ({ "--map-depth": depth } as CSSProperties);
+      const contextIndicator = incomingEdgeData?.transferContext ? "C" : null;
+      const settingsIndicator = incomingEdgeData?.transferSettings ? "S" : null;
       return (
         <div
           key={item.node.id}
-          className={`mobile-node-map-tree-row${item.parent ? " has-parent" : ""}`}
-          style={{ "--map-depth": depth } as CSSProperties}
+          className={`mobile-node-map-tree-row${item.parent ? " has-parent" : ""}${edgeActive ? " has-active-edge" : ""}`}
+          data-image-transfer={incomingEdgeData?.imageTransfer}
+          style={connectorStyle}
         >
+          {incomingEdgeData ? (
+            <span className="mobile-node-map-connector" aria-hidden="true">
+              <span className="mobile-node-map-connector__elbow" />
+              {contextIndicator || settingsIndicator ? (
+                <span className="mobile-node-map-edge-indicators">
+                  {contextIndicator ? (
+                    <span className="mobile-node-map-edge-indicator mobile-node-map-edge-indicator--context">
+                      {contextIndicator}
+                    </span>
+                  ) : null}
+                  {settingsIndicator ? (
+                    <span className="mobile-node-map-edge-indicator mobile-node-map-edge-indicator--settings">
+                      {settingsIndicator}
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
           <button
             type="button"
             className={`mobile-node-map-node${isSelected ? " is-selected" : ""}${isCurrent ? " is-current" : ""}${thumbnailSrc ? " has-thumbnail" : ""}`}
