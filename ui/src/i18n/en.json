@@ -468,8 +468,6 @@
     "actionsTitle": "Actions",
     "actionsSummary": "Export, branch, and danger actions",
     "deliverySummary": "Current delivery",
-    "quickDeliveryTitle": "Quick delivery",
-    "quickDeliveryHelp": "Tap IMG, CTX, or SET to change what this edge passes.",
     "connectionParent": "Parent",
     "connectionChild": "Child",
     "branchesTitle": "Branches",
