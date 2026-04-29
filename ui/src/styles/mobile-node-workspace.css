@@ -678,7 +678,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  align-items: end;
+  align-items: start;
   border: 1px solid color-mix(in srgb, var(--node-tree-color, #a78bfa) 30%, rgba(255, 255, 255, 0.08));
   border-radius: 13px;
   background:
@@ -688,7 +688,7 @@
     inset 4px 0 0 var(--node-tree-color, #a78bfa),
     0 12px 30px rgba(0, 0, 0, 0.22);
   color: inherit;
-  padding: 12px 10px 10px 11px;
+  padding: 10px 10px 10px 11px;
   text-align: left;
 }
 
@@ -703,6 +703,12 @@
     rgba(124, 108, 255, 0.07);
 }
 
+.mobile-node-branch-node-card--parent {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--node-tree-color, #a78bfa) 12%, transparent), transparent 42%),
+    rgba(255, 255, 255, 0.038);
+}
+
 .mobile-node-branch-node-card__content {
   min-width: 0;
   display: grid;
@@ -711,7 +717,7 @@
 
 .mobile-node-branch-node-card__title {
   min-width: 0;
-  min-height: 22px;
+  min-height: 20px;
   display: block;
   padding-right: 122px;
 }
@@ -761,7 +767,7 @@
 .mobile-node-branch-node-card__thumb {
   width: 44px;
   height: 44px;
-  align-self: end;
+  align-self: start;
   margin-top: 22px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -802,20 +808,6 @@
     rgba(255, 255, 255, 0.035);
 }
 
-.mobile-node-branch-connection-card__body {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: inherit;
-  padding: 6px;
-  text-align: left;
-}
-
-.mobile-node-branch-connection-card__body span,
-.mobile-node-branch-connection-card__body small,
 .mobile-node-branch-root-card small,
 .mobile-node-branch-generate-card small {
   min-width: 0;
@@ -828,7 +820,6 @@
   white-space: nowrap;
 }
 
-.mobile-node-branch-connection-card__body strong,
 .mobile-node-branch-root-card strong,
 .mobile-node-branch-generate-card strong {
   min-width: 0;
@@ -841,16 +832,17 @@
   white-space: nowrap;
 }
 
-.mobile-node-branch-connection-card__actions {
+.mobile-node-branch-connection-row {
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 7px;
+  padding: 0 2px;
 }
 
-.mobile-node-branch-connection-card__actions > button {
+.mobile-node-branch-connection-row > button {
   min-height: 30px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;

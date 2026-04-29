@@ -1347,7 +1347,7 @@ export function MobileNodeWorkspace() {
     };
     const renderBranchNodeCard = (
       node: GraphNode,
-      variant: "current" | "child",
+      variant: "current" | "parent" | "child",
       onSelect?: () => void,
     ) => {
       const nodeMeta = graphMeta.get(node.id) ?? {
@@ -1427,18 +1427,10 @@ export function MobileNodeWorkspace() {
           <div className="mobile-node-action-title">{t("mobileNode.inputConnectionTitle")}</div>
         {parent && incomingEdge ? (
           <div className="mobile-node-branch-connection-card">
-            <button
-              type="button"
-              className="mobile-node-branch-connection-card__body"
-              onClick={() => openConnection(incomingEdge.id, "branches")}
-            >
-              <span>{t("nodeInspector.parentNode")}</span>
-              <strong>{nodeLabel(parent)}</strong>
-              <small>{edgeTransferText(t, incomingEdge)}</small>
-            </button>
-            <div className="mobile-node-branch-connection-card__actions">
-              <button type="button" onClick={() => selectInBranches(parent.id)}>
-                {t("mobileNode.goParent")}
+            {renderBranchNodeCard(parent, "parent", () => selectInBranches(parent.id))}
+            <div className="mobile-node-branch-connection-row">
+              <button type="button" onClick={() => openConnection(incomingEdge.id, "branches")}>
+                {t("mobileNode.openConnection")}
               </button>
               <EdgeChips edge={incomingEdge} {...edgeChipActions} />
             </div>
@@ -1499,7 +1491,7 @@ export function MobileNodeWorkspace() {
             children.map(({ edge, node }) => (
               <div key={edge.id} className="mobile-node-child-card">
                 {renderBranchNodeCard(node, "child", () => selectInBranches(node.id))}
-                <div className="mobile-node-child-card__edge">
+                <div className="mobile-node-branch-connection-row">
                   <button type="button" onClick={() => openConnection(edge.id, "branches")}>
                     {t("mobileNode.openConnection")}
                   </button>
