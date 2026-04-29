@@ -139,12 +139,20 @@ function MobileMapConnector({
   edge: GraphEdge;
 }) {
   const edgeData = normalizeEdgeTransferData(edge.data);
-  const contextIndicator = edgeData.transferContext ? "C" : null;
-  const settingsIndicator = edgeData.transferSettings ? "S" : null;
+  const deliveryBadgeText =
+    edgeData.transferContext && edgeData.transferSettings
+      ? "CS"
+      : edgeData.transferContext
+        ? "C"
+        : edgeData.transferSettings
+          ? "S"
+          : null;
   return (
     <span
       className="mobile-node-map-connector"
       data-active={active ? "true" : undefined}
+      data-has-context={edgeData.transferContext ? "true" : undefined}
+      data-has-settings={edgeData.transferSettings ? "true" : undefined}
       data-image-transfer={edgeData.imageTransfer}
       style={
         {
@@ -157,20 +165,7 @@ function MobileMapConnector({
       <svg className="mobile-node-map-connector__elbow" viewBox="0 0 20 34" focusable="false">
         <path d="M2 1 V21 Q2 29 10 29 H19" vectorEffect="non-scaling-stroke" />
       </svg>
-      {contextIndicator || settingsIndicator ? (
-        <span className="mobile-node-map-edge-indicators">
-          {contextIndicator ? (
-            <span className="mobile-node-map-edge-indicator mobile-node-map-edge-indicator--context">
-              {contextIndicator}
-            </span>
-          ) : null}
-          {settingsIndicator ? (
-            <span className="mobile-node-map-edge-indicator mobile-node-map-edge-indicator--settings">
-              {settingsIndicator}
-            </span>
-          ) : null}
-        </span>
-      ) : null}
+      {deliveryBadgeText ? <span className="mobile-node-map-edge-badge">{deliveryBadgeText}</span> : null}
     </span>
   );
 }
