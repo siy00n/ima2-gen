@@ -1621,7 +1621,9 @@ export function MobileNodeWorkspace() {
         >
           {incomingEdgeData ? (
             <span className="mobile-node-map-connector" aria-hidden="true">
-              <span className="mobile-node-map-connector__elbow" />
+              <svg className="mobile-node-map-connector__elbow" viewBox="0 0 20 34" focusable="false">
+                <path d="M2 1 V21 Q2 29 10 29 H19" vectorEffect="non-scaling-stroke" />
+              </svg>
               {contextIndicator || settingsIndicator ? (
                 <span className="mobile-node-map-edge-indicators">
                   {contextIndicator ? (

@@ -1275,29 +1275,42 @@
   position: absolute;
   left: calc((var(--map-depth, 1) * 18px) - 13px);
   top: -7px;
-  width: 14px;
-  height: 31px;
-  border-left: 1.5px solid var(--map-edge-color, var(--edge-image));
-  border-bottom: 1.5px solid var(--map-edge-color, var(--edge-image));
-  border-bottom-left-radius: 8px;
-  opacity: 0.74;
+  width: 20px;
+  height: 34px;
+  overflow: visible;
 }
 
-.mobile-node-map-tree-row[data-image-transfer="ancestor"] .mobile-node-map-connector__elbow {
-  border-left-width: 2px;
-  border-bottom-width: 2px;
+.mobile-node-map-connector__elbow path {
+  fill: none;
+  stroke: var(--map-edge-color, var(--edge-image));
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.72;
+}
+
+.mobile-node-map-tree-row[data-image-transfer="ancestor"] .mobile-node-map-connector__elbow path {
+  stroke-width: 1.85;
   opacity: 0.9;
 }
 
-.mobile-node-map-tree-row[data-image-transfer="off"] .mobile-node-map-connector__elbow {
-  border-style: dashed;
-  opacity: 0.56;
+.mobile-node-map-tree-row[data-image-transfer="off"] .mobile-node-map-connector__elbow path {
+  stroke-dasharray: 2 4;
+  stroke-width: 1.35;
+  opacity: 0.46;
 }
 
-.mobile-node-map-tree-row.has-active-edge .mobile-node-map-connector__elbow {
-  border-left-width: 2.4px;
-  border-bottom-width: 2.4px;
-  opacity: 1;
+.mobile-node-map-tree-row.has-active-edge .mobile-node-map-connector__elbow path {
+  stroke-width: 1.95;
+  opacity: 0.96;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--map-edge-color, var(--edge-image)) 42%, transparent));
+}
+
+.mobile-node-map-tree-row.has-active-edge[data-image-transfer="off"] .mobile-node-map-connector__elbow path {
+  stroke-dasharray: 2 4;
+  stroke-width: 1.45;
+  opacity: 0.62;
+  filter: none;
 }
 
 .mobile-node-map-edge-indicators {
@@ -1311,18 +1324,19 @@
 }
 
 .mobile-node-map-edge-indicator {
-  min-width: 12px;
-  height: 12px;
+  min-width: 10px;
+  height: 10px;
   display: grid;
   place-items: center;
   border: 1px solid currentColor;
   border-radius: 999px;
-  background: rgba(13, 16, 22, 0.92);
+  background: rgba(13, 16, 22, 0.72);
   font-family: var(--mono);
-  font-size: 7px;
+  font-size: 6px;
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0;
+  opacity: 0.82;
 }
 
 .mobile-node-map-edge-indicator--context {
@@ -1336,6 +1350,11 @@
 .mobile-node-map-tree-row.has-active-edge .mobile-node-map-edge-indicator {
   transform: scale(1.08);
   box-shadow: 0 0 8px color-mix(in srgb, currentColor 42%, transparent);
+}
+
+.mobile-node-map-tree-row[data-image-transfer="off"] .mobile-node-map-edge-indicator {
+  background: rgba(13, 16, 22, 0.58);
+  opacity: 0.66;
 }
 
 .mobile-node-map-tree-children {
