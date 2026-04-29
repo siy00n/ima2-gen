@@ -251,6 +251,7 @@ export function MobileNodeWorkspace() {
   const knownLaneRootIdsRef = useRef<Set<string>>(new Set());
   const settingsRef = useRef<HTMLDetailsElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
+  const viewRef = useRef<HTMLDivElement>(null);
 
   const nodes = useAppStore((s) => s.graphNodes);
   const edges = useAppStore((s) => s.graphEdges);
@@ -450,6 +451,10 @@ export function MobileNodeWorkspace() {
       return changed || next.size !== current.size ? next : current;
     });
   }, [activeSessionId, branchLanes]);
+
+  useEffect(() => {
+    viewRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [activeView, connectionEdgeId, selectedNodeId]);
 
   const nodeFiltersActive = nodeSearchQuery.trim().length > 0 || nodeStatusFilter !== "all";
   const visibleBranchLanes = useMemo<VisibleBranchLane[]>(() => {
@@ -863,6 +868,66 @@ export function MobileNodeWorkspace() {
     );
   };
 
+  const getNodeMeta = (node: GraphNode): GraphNodeMeta =>
+    graphMeta.get(node.id) ?? {
+      level: 0,
+      isolated: true,
+      treeRootId: node.id,
+      treeIndex: 0,
+      treeColor: "#a78bfa",
+    };
+
+  const getBranchRegenerateState = (
+    nodeData: ImageNodeData,
+    childCount: number,
+    running: boolean,
+  ) => {
+    const nodeBusy = isBusy(nodeData);
+    const hasReference = !!nodeData.serverNodeId || !!nodeData.imageUrl;
+    const canRegenerate = !nodeBusy && nodeData.prompt.trim().length > 0 && hasReference && childCount > 0;
+    const reason = running
+      ? t("mobileNode.branchRunning")
+      : nodeBusy
+        ? t("mobileNode.branchReasonBusy")
+        : !nodeData.prompt.trim()
+          ? t("mobileNode.branchReasonPrompt")
+          : !hasReference
+            ? t("mobileNode.branchReasonImage")
+            : childCount === 0
+              ? t("mobileNode.branchReasonChildren")
+              : "";
+    return { canRegenerate, reason };
+  };
+
+  const renderEndpointSummary = (node: GraphNode, label: string) => {
+    const meta = getNodeMeta(node);
+    const promptText = node.data.prompt.trim();
+    const titleText = node.data.name?.trim() || promptText || t("mobileNode.noPromptYet");
+    return (
+      <div
+        className={`mobile-node-connection-endpoint${node.data.imageUrl ? " has-thumbnail" : ""}`}
+        style={{ "--node-tree-color": meta.treeColor ?? "#a78bfa" } as CSSProperties}
+      >
+        {node.data.imageUrl ? (
+          <span className="mobile-node-connection-endpoint__thumb" aria-hidden="true">
+            <img src={node.data.imageUrl} alt="" />
+          </span>
+        ) : null}
+        <span className="mobile-node-connection-endpoint__content">
+          <span>{label}</span>
+          <strong>{titleText}</strong>
+          {promptText && node.data.name?.trim() ? <small>{promptText}</small> : null}
+        </span>
+        <span className="mobile-node-connection-endpoint__badges">
+          <span className="mobile-node-list-card__level">L{meta.level}</span>
+          <span className={`mobile-node-list-card__status mobile-node-list-card__status--${statusTone(node.data.status)}`}>
+            {getStatusLabel(t, node.data.status)}
+          </span>
+        </span>
+      </div>
+    );
+  };
+
   const renderSelectedNode = () => {
     if (!selected || !data) {
       return (
@@ -889,17 +954,10 @@ export function MobileNodeWorkspace() {
     const canRemoveImageReference = canRemoveNodeImageReference(data);
     const attachingImage = attachingNodeIds.includes(selected.id);
     const canBranch = canUseNodeAsBranchParent(data);
-    const hasChildren = children.length > 0;
-    const hasImageReference = !!data.serverNodeId || !!data.imageUrl;
     const isBranchGenerating = branchGenerationRootId === selected.id;
-    const canRegenerateBranch = canGenerate && hasImageReference && hasChildren;
-    const selectedMeta = graphMeta.get(selected.id) ?? {
-      level: 0,
-      isolated: true,
-      treeRootId: selected.id,
-      treeIndex: 0,
-      treeColor: "#a78bfa",
-    };
+    const branchRegenerateState = getBranchRegenerateState(data, children.length, isBranchGenerating);
+    const selectedMeta = getNodeMeta(selected);
+    const rootNode = nodes.find((node) => node.id === selectedMeta.treeRootId) ?? selected;
     const resolvedSize =
       data.settings.sizePreset === "custom"
         ? `${snap16(data.settings.customW)}x${snap16(data.settings.customH)}`
@@ -973,11 +1031,37 @@ export function MobileNodeWorkspace() {
                 placeholder={t("node.untitledName")}
               />
             </label>
-            <div className="mobile-node-id-meta">
-              <span>L{selectedMeta.level}</span>
-              <span>{shortNodeId(selected.id)}</span>
-              {data.serverNodeId ? <span>{shortNodeId(data.serverNodeId)}</span> : null}
-            </div>
+          </div>
+
+          <div
+            className={`mobile-node-context-card${data.imageUrl ? " has-thumbnail" : ""}${parent ? " has-action" : ""}`}
+            style={{ "--node-tree-color": selectedMeta.treeColor ?? "#a78bfa" } as CSSProperties}
+          >
+            <span className="mobile-node-context-card__main">
+              <span className="mobile-node-context-card__eyebrow">{t("mobileNode.nodeContextTitle")}</span>
+              <strong>
+                {parent
+                  ? `${nodeLabel(parent)} -> ${nodeLabel(selected)}`
+                  : `${t("mobileNode.rootLane")}: ${nodeLabel(rootNode)}`}
+              </strong>
+              <span className="mobile-node-context-card__meta">
+                <span className="mobile-node-list-card__level">L{selectedMeta.level}</span>
+                <span className={`mobile-node-list-card__status mobile-node-list-card__status--${statusTone(data.status)}`}>
+                  {getStatusLabel(t, data.status)}
+                </span>
+                <span>{t("mobileNode.nodeChildShort", { count: children.length })}</span>
+              </span>
+            </span>
+            {data.imageUrl ? (
+              <span className="mobile-node-context-card__thumb" aria-hidden="true">
+                <img src={data.imageUrl} alt="" />
+              </span>
+            ) : null}
+            {parent ? (
+              <button type="button" className="mobile-node-context-card__action" onClick={() => setActiveView("branches")}>
+                {t("mobileNode.openBranches")}
+              </button>
+            ) : null}
           </div>
 
           {data.imageUrl ? (
@@ -1002,7 +1086,6 @@ export function MobileNodeWorkspace() {
             <span className="mobile-node-pill">{data.settings.quality}</span>
             <span className="mobile-node-pill">{resolvedSize}</span>
             {data.elapsed != null ? <span className="mobile-node-pill">{data.elapsed}s</span> : null}
-            {parent ? <span className="mobile-node-pill">{t("nodeInspector.parentNode")}: {nodeLabel(parent)}</span> : null}
           </div>
 
           <label className="mobile-node-prompt">
@@ -1236,6 +1319,11 @@ export function MobileNodeWorkspace() {
           </div>
 
           <div className="mobile-node-action-title">{t("nodeInspector.workflowActions")}</div>
+          <div className={`mobile-node-branch-inline-hint${isBranchGenerating ? " is-running" : ""}`}>
+            {isBranchGenerating
+              ? t("mobileNode.branchImpact", { count: children.length })
+              : branchRegenerateState.reason || t("mobileNode.branchReady", { count: children.length })}
+          </div>
           <div className="mobile-node-action-grid">
             <button
               type="button"
@@ -1245,7 +1333,7 @@ export function MobileNodeWorkspace() {
                   ? void cancelBranchGeneration(selected.id)
                   : void regenerateBranch(selected.id)
               }
-              disabled={isBranchGenerating ? false : !canRegenerateBranch}
+              disabled={isBranchGenerating ? false : !branchRegenerateState.canRegenerate}
             >
               {isBranchGenerating ? t("node.cancelBranch") : t("node.regenerateBranch")}
             </button>
@@ -1312,21 +1400,8 @@ export function MobileNodeWorkspace() {
 
     const busy = isBusy(data);
     const canBranch = canUseNodeAsBranchParent(data);
-    const hasImageReference = !!data.serverNodeId || !!data.imageUrl;
-    const canGenerate = !busy && data.prompt.trim().length > 0;
-    const canRegenerateBranch = canGenerate && hasImageReference && children.length > 0;
     const isBranchGenerating = branchGenerationRootId === selected.id;
-    const branchDisabledReason = isBranchGenerating
-      ? t("mobileNode.branchRunning")
-      : busy
-        ? t("mobileNode.branchReasonBusy")
-        : !data.prompt.trim()
-          ? t("mobileNode.branchReasonPrompt")
-          : !hasImageReference
-            ? t("mobileNode.branchReasonImage")
-            : children.length === 0
-              ? t("mobileNode.branchReasonChildren")
-              : "";
+    const branchRegenerateState = getBranchRegenerateState(data, children.length, isBranchGenerating);
     const createChild = () => {
       const nodeId = addChildNode(selected.id);
       setLastFocusedNodeId(nodeId);
@@ -1350,13 +1425,7 @@ export function MobileNodeWorkspace() {
       variant: "current" | "parent" | "child",
       onSelect?: () => void,
     ) => {
-      const nodeMeta = graphMeta.get(node.id) ?? {
-        level: 0,
-        isolated: true,
-        treeRootId: node.id,
-        treeIndex: 0,
-        treeColor: "#a78bfa",
-      };
+      const nodeMeta = getNodeMeta(node);
       const promptText = node.data.prompt.trim();
       const titleText = node.data.name?.trim() || promptText || t("mobileNode.noPromptYet");
       const showPromptPreview = Boolean(node.data.name?.trim() && promptText);
@@ -1468,7 +1537,7 @@ export function MobileNodeWorkspace() {
               <small>
                 {isBranchGenerating
                   ? t("mobileNode.branchImpact", { count: children.length })
-                  : branchDisabledReason || t("mobileNode.branchReady", { count: children.length })}
+                  : branchRegenerateState.reason || t("mobileNode.branchReady", { count: children.length })}
               </small>
             </div>
             <button
@@ -1479,7 +1548,7 @@ export function MobileNodeWorkspace() {
                   ? void cancelBranchGeneration(selected.id)
                   : void regenerateBranch(selected.id)
               }
-              disabled={isBranchGenerating ? false : !canRegenerateBranch}
+              disabled={isBranchGenerating ? false : !branchRegenerateState.canRegenerate}
             >
               {isBranchGenerating ? t("node.cancelBranch") : t("node.regenerateBranch")}
             </button>
@@ -1599,7 +1668,14 @@ export function MobileNodeWorkspace() {
             {t("mobileNode.done")}
           </button>
         </div>
-        <EdgeChips edge={activeConnectionEdge} {...edgeChipActions} />
+        <div className="mobile-node-connection-context">
+          <div className="mobile-node-connection-context__flow">
+            {renderEndpointSummary(connectionParent, t("mobileNode.connectionParent"))}
+            <span className="mobile-node-connection-context__arrow" aria-hidden="true">-&gt;</span>
+            {renderEndpointSummary(connectionChild, t("mobileNode.connectionChild"))}
+          </div>
+          <EdgeChips edge={activeConnectionEdge} {...edgeChipActions} />
+        </div>
         <div className="mobile-node-connection-control">
           <span>
             {t("nodeInspector.imageTransfer")}
@@ -1815,7 +1891,7 @@ export function MobileNodeWorkspace() {
           </section>
         </div>
       ) : null}
-      <div className="mobile-node-view">{activeViewContent}</div>
+      <div ref={viewRef} className="mobile-node-view">{activeViewContent}</div>
       <nav className="mobile-node-tabs" aria-label={t("mobileNode.tabsLabel")}>
         {(["all", "node", "branches"] as const).map((view) => (
           <button
@@ -1824,7 +1900,7 @@ export function MobileNodeWorkspace() {
             className={
               activeView === view ||
               (view === "all" && activeView === "map") ||
-              (view === "branches" && activeView === "connection")
+              (activeView === "connection" && connectionReturnView === view)
                 ? "is-active"
                 : ""
             }
