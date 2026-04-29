@@ -143,15 +143,6 @@ function getStatusFilterLabel(t: (key: string) => string, filter: NodeStatusFilt
   return t("mobileNode.filterError");
 }
 
-function edgeTransferText(t: (key: string) => string, edge: GraphEdge): string {
-  const data = normalizeEdgeTransferData(edge.data);
-  return [
-    t(imageTransferLabelKey(data.imageTransfer)),
-    data.transferContext ? t("edgeBadge.contextOn") : t("edgeBadge.contextOff"),
-    data.transferSettings ? t("edgeBadge.settingsOn") : t("edgeBadge.settingsOff"),
-  ].join(" · ");
-}
-
 function compareGraphNodes(
   a: GraphNode,
   b: GraphNode,
@@ -328,26 +319,6 @@ export function MobileNodeWorkspace() {
   const connectionChild = activeConnectionEdge
     ? nodes.find((node) => node.id === activeConnectionEdge.target) ?? null
     : null;
-  const mapLevels = useMemo(() => {
-    const grouped = new Map<number, GraphNode[]>();
-    for (const node of nodes) {
-      const level = graphMeta.get(node.id)?.level ?? 0;
-      grouped.set(level, [...(grouped.get(level) ?? []), node]);
-    }
-    return [...grouped.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([level, levelNodes]) => ({
-        level,
-        nodes: levelNodes.sort((a, b) => {
-          const ma = graphMeta.get(a.id);
-          const mb = graphMeta.get(b.id);
-          if ((ma?.treeIndex ?? 0) !== (mb?.treeIndex ?? 0)) {
-            return (ma?.treeIndex ?? 0) - (mb?.treeIndex ?? 0);
-          }
-          return (a.position?.x ?? 0) - (b.position?.x ?? 0);
-        }),
-      }));
-  }, [graphMeta, nodes]);
   const branchLanes = useMemo<BranchLane[]>(() => {
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
     const childrenBySource = new Map<string, GraphNode[]>();
@@ -1590,6 +1561,71 @@ export function MobileNodeWorkspace() {
   };
 
   const renderMap = () => {
+    const totalStatusCounts = branchLanes.reduce<LaneStatusCounts>(
+      (counts, lane) => ({
+        ready: counts.ready + lane.statusCounts.ready,
+        busy: counts.busy + lane.statusCounts.busy,
+        error: counts.error + lane.statusCounts.error,
+        stale: counts.stale + lane.statusCounts.stale,
+        empty: counts.empty + lane.statusCounts.empty,
+      }),
+      { ready: 0, busy: 0, error: 0, stale: 0, empty: 0 },
+    );
+    const selectedMeta = selected ? getNodeMeta(selected) : null;
+    const selectedRoot = selectedMeta
+      ? branchLanes.find((lane) => lane.rootId === selectedMeta.treeRootId)?.root ?? selected
+      : null;
+    const statusSummary = [
+      totalStatusCounts.ready ? t("mobileNode.laneStatusReady", { count: totalStatusCounts.ready }) : "",
+      totalStatusCounts.busy ? t("mobileNode.laneStatusBusy", { count: totalStatusCounts.busy }) : "",
+      totalStatusCounts.stale ? t("mobileNode.laneStatusStale", { count: totalStatusCounts.stale }) : "",
+      totalStatusCounts.error ? t("mobileNode.laneStatusError", { count: totalStatusCounts.error }) : "",
+      totalStatusCounts.empty ? t("mobileNode.laneStatusEmpty", { count: totalStatusCounts.empty }) : "",
+    ].filter(Boolean);
+    const renderMapNode = (item: BranchTreeItem) => {
+      const depth = Math.min(item.meta.level ?? 0, 5);
+      const hasChildren = item.children.length > 0;
+      const thumbnailSrc = item.node.data.status === "ready" ? item.node.data.imageUrl : null;
+      const isSelected = selectedNodeId === item.node.id;
+      const isCurrent = item.node.id === lastFocusedNodeId && !isSelected;
+      return (
+        <div
+          key={item.node.id}
+          className={`mobile-node-map-tree-row${item.parent ? " has-parent" : ""}`}
+          style={{ "--map-depth": depth } as CSSProperties}
+        >
+          <button
+            type="button"
+            className={`mobile-node-map-node${isSelected ? " is-selected" : ""}${isCurrent ? " is-current" : ""}${thumbnailSrc ? " has-thumbnail" : ""}`}
+            style={{ "--node-tree-color": item.meta.treeColor ?? "#a78bfa" } as CSSProperties}
+            onClick={() => selectAndOpenNode(item.node.id)}
+            aria-current={isSelected ? "true" : undefined}
+          >
+            <span className="mobile-node-map-node__level">L{item.meta.level ?? 0}</span>
+            {thumbnailSrc ? (
+              <span className="mobile-node-map-node__thumb" aria-hidden="true">
+                <img src={thumbnailSrc} alt="" />
+              </span>
+            ) : null}
+            <span className="mobile-node-map-node__text">
+              <strong>{nodeLabel(item.node)}</strong>
+              <small>{getStatusLabel(t, item.node.data.status)}</small>
+            </span>
+            {hasChildren ? (
+              <span className="mobile-node-map-node__child-count">
+                {t("mobileNode.nodeChildShort", { count: item.children.length })}
+              </span>
+            ) : null}
+          </button>
+          {hasChildren ? (
+            <div className="mobile-node-map-tree-children">
+              {item.children.map(renderMapNode)}
+            </div>
+          ) : null}
+        </div>
+      );
+    };
+
     return (
       <section className="mobile-node-panel mobile-node-panel--map">
         <div className="mobile-node-panel__header">
@@ -1597,37 +1633,59 @@ export function MobileNodeWorkspace() {
             <h2>{t("mobileNode.mapTitle")}</h2>
             <p>{t("mobileNode.mapSubtitle")}</p>
           </div>
-          <button type="button" onClick={showAllNodes}>
-            {t("mobileNode.backToAll")}
-          </button>
+          <div className="mobile-node-map-actions">
+            <button type="button" onClick={showAllNodes}>
+              {t("mobileNode.tabs.all")}
+            </button>
+            {selected ? (
+              <button type="button" onClick={() => setActiveView("branches")}>
+                {t("mobileNode.openBranches")}
+              </button>
+            ) : null}
+          </div>
         </div>
         {nodes.length ? (
-          <div className="mobile-node-map">
-            {mapLevels.map(({ level, nodes: levelNodes }) => (
-              <div key={level} className="mobile-node-map-level">
-                <div className="mobile-node-map-level__label">L{level}</div>
-                <div className="mobile-node-map-level__nodes">
-                  {levelNodes.map((node) => {
-                    const meta = graphMeta.get(node.id);
-                    const parentEdge = edges.find((edge) => edge.target === node.id) ?? null;
-                    return (
-                      <button
-                        key={node.id}
-                        type="button"
-                        className={`mobile-node-map-node${selectedNodeId === node.id ? " is-selected" : ""}`}
-                        style={{ "--node-tree-color": meta?.treeColor ?? "#a78bfa" } as CSSProperties}
-                        onClick={() => selectAndOpenNode(node.id)}
-                      >
-                        <span>{nodeLabel(node)}</span>
-                        <small>{getStatusLabel(t, node.data.status)} · {shortNodeId(node.id)}</small>
-                        {parentEdge ? <em>{edgeTransferText(t, parentEdge)}</em> : null}
-                      </button>
-                    );
-                  })}
-                </div>
+          <>
+            <div className="mobile-node-map-summary">
+              <div>
+                <strong>{t("mobileNode.mapOverview")}</strong>
+                <span>{t("mobileNode.mapTotals", { roots: branchLanes.length, nodes: nodes.length })}</span>
               </div>
-            ))}
-          </div>
+              <small>{statusSummary.length ? statusSummary.join(" · ") : t("mobileNode.nodeNoResults")}</small>
+              <em>
+                {selected && selectedMeta && selectedRoot
+                  ? t("mobileNode.mapCurrentLocation", {
+                      root: nodeLabel(selectedRoot),
+                      level: selectedMeta.level,
+                    })
+                  : t("mobileNode.mapNoCurrent")}
+              </em>
+            </div>
+            <div className="mobile-node-map">
+              {branchLanes.map((lane) => (
+                <section
+                  key={lane.rootId}
+                  className="mobile-node-map-lane"
+                  style={{ "--node-tree-color": lane.treeColor } as CSSProperties}
+                >
+                  <div className="mobile-node-map-lane__header">
+                    <div>
+                      <strong>{nodeLabel(lane.root)}</strong>
+                      <small>
+                        {t("mobileNode.laneNodes", { count: lane.itemCount })} · {t("mobileNode.laneLeaves", { count: lane.leafCount })}
+                      </small>
+                    </div>
+                    <span>{t("mobileNode.nodeChildShort", { count: childCountByNodeId.get(lane.rootId) ?? 0 })}</span>
+                  </div>
+                  <div className="mobile-node-map-lane__scroll">
+                    <div className="mobile-node-map-tree">
+                      {lane.tree ? renderMapNode(lane.tree) : null}
+                    </div>
+                  </div>
+                </section>
+              ))}
+            </div>
+          </>
         ) : (
           <div className="mobile-node-empty mobile-node-empty--compact">
             <h2>{t("mobileNode.startTitle")}</h2>
