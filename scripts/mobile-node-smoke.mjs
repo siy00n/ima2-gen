@@ -417,6 +417,23 @@ async function assertBottomTabsHitTarget(page) {
   assert(misses.length === 0, `Bottom tab hit target blocked at: ${misses.join(", ")}`);
 }
 
+async function assertSlideUpSheet(page, selector, label) {
+  const sheet = page.locator(selector);
+  await page.waitForTimeout(260);
+  const motion = await sheet.evaluate((el) => {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return {
+      bottomAligned: Math.abs(window.innerHeight - rect.bottom) <= 2,
+      animationName: style.animationName,
+      animationDuration: style.animationDuration,
+    };
+  });
+  assert(motion.bottomAligned, `${label}: sheet should be bottom aligned`);
+  assert(motion.animationName.includes("mobile-sheet-slide-up"), `${label}: sheet should use slide-up animation`);
+  assert(motion.animationDuration !== "0s", `${label}: sheet slide-up animation should have duration`);
+}
+
 async function assertConnector(page, source, target, expectedTransfer, expectedBadge) {
   const connector = page.locator(`.mobile-node-map-connector[data-source="${source}"][data-target="${target}"]`);
   await connector.waitFor({ state: "attached", timeout: 5_000 });
@@ -534,6 +551,7 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.getByRole("button", { name: "Open gallery" }).click();
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".gallery__search").waitFor({ state: "visible", timeout: 5_000 });
+    await assertSlideUpSheet(page, ".gallery", `${label}: Node Gallery`);
     assert((await page.locator(".gallery__close").count()) === 0, `${label}: Gallery should not show a visible close button`);
     const nodeGalleryHandleContent = await page.locator(".gallery").evaluate((gallery) => getComputedStyle(gallery, "::before").content);
     assert(nodeGalleryHandleContent === "none", `${label}: Gallery should not show a grab handle`);
@@ -542,6 +560,7 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.getByRole("button", { name: "Open prompt library" }).click();
     await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__search").waitFor({ state: "visible", timeout: 5_000 });
+    await assertSlideUpSheet(page, ".prompt-library-panel__dialog", `${label}: Node Prompt Library`);
     await page.locator(".prompt-library-panel__favorite-filter").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__add").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__import").waitFor({ state: "visible", timeout: 5_000 });
@@ -652,6 +671,7 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     await page.getByRole("button", { name: "Open prompt library" }).click();
     await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__title").waitFor({ state: "visible", timeout: 5_000 });
+    await assertSlideUpSheet(page, ".prompt-library-panel__dialog", `${label}: Classic Prompt Library`);
     await page.locator(".prompt-library-panel__search").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__favorite-filter").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__add").waitFor({ state: "visible", timeout: 5_000 });
@@ -667,6 +687,7 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     await page.getByRole("button", { name: "Open gallery" }).click();
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".gallery__search").waitFor({ state: "visible", timeout: 5_000 });
+    await assertSlideUpSheet(page, ".gallery", `${label}: Classic Gallery`);
     await page.locator(".gallery__favorite-filter").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".gallery__group-toggle").waitFor({ state: "visible", timeout: 5_000 });
     assert((await page.locator(".gallery__close").count()) === 0, `${label}: Classic Gallery should not show a visible close button`);

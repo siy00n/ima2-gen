@@ -1760,6 +1760,15 @@ button.workflow-edge-badge__chip {
 }
 
 @media (max-width: 800px) {
+  @keyframes mobile-sheet-slide-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
   :root {
     --mobile-toolbar-height: 60px;
     --mobile-dock-height: min(320px, 38dvh);
@@ -2324,6 +2333,7 @@ button.workflow-edge-badge__chip {
     border-left: none;
     border-right: none;
     border-bottom: none;
+    animation: mobile-sheet-slide-up 220ms ease both;
   }
 
   .gallery__header {
@@ -3079,6 +3089,7 @@ button.workflow-edge-badge__chip {
 
   .prompt-library-panel__dialog {
     padding: 14px 14px max(16px, env(safe-area-inset-bottom));
+    animation: mobile-sheet-slide-up 220ms ease both;
   }
 
   .prompt-library-panel__header {
@@ -3111,6 +3122,17 @@ button.workflow-edge-badge__chip {
   .gallery__scroll {
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gallery-backdrop,
+    .prompt-library-panel__backdrop,
+    .right-panel-backdrop,
+    .gallery,
+    .prompt-library-panel__dialog {
+      animation: none;
+      transition: none;
+    }
   }
 }
 
