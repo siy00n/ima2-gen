@@ -359,6 +359,12 @@ async function clickBottomTab(page, name) {
   await page.locator(".mobile-node-tabs").getByRole("button", { name }).click();
 }
 
+async function mobileBack(page) {
+  await page.evaluate(() => {
+    window.history.back();
+  });
+}
+
 async function assertMobileToolbarHitTarget(page) {
   const misses = await page.evaluate(() => {
     return [...document.querySelectorAll(".mobile-toolbar__actions button, .mobile-toolbar .lang-toggle__btn")].flatMap((button) => {
@@ -451,7 +457,7 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await assertMobileNodeTopbarHitTarget(page);
     await page.locator(".mobile-node-brand").click();
     await page.locator(".mobile-node-session-sheet").waitFor({ state: "visible", timeout: 5_000 });
-    await page.locator(".mobile-node-session-sheet__backdrop").click();
+    await mobileBack(page);
     await page.locator(".mobile-node-session-sheet").waitFor({ state: "hidden", timeout: 5_000 });
 
     const lanes = page.locator(".mobile-node-branch-lane");
@@ -483,6 +489,10 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.getByRole("button", { name: /Paper cup/ }).click();
     await page.locator(".mobile-node-focus").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".mobile-node-prompt textarea").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".mobile-node-preview--button").click();
+    await page.locator(".image-lightbox").waitFor({ state: "visible", timeout: 5_000 });
+    await mobileBack(page);
+    await page.locator(".image-lightbox").waitFor({ state: "hidden", timeout: 5_000 });
     await page.locator(".mobile-node-settings").evaluate((details) => {
       if (!(details instanceof HTMLDetailsElement)) throw new Error("settings is not a details element");
       if (details.open) throw new Error("node settings should be collapsed by default");
@@ -527,7 +537,7 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     assert((await page.locator(".gallery__close").count()) === 0, `${label}: Gallery should not show a visible close button`);
     const nodeGalleryHandleContent = await page.locator(".gallery").evaluate((gallery) => getComputedStyle(gallery, "::before").content);
     assert(nodeGalleryHandleContent === "none", `${label}: Gallery should not show a grab handle`);
-    await page.locator(".gallery-backdrop").click({ position: { x: 4, y: 4 } });
+    await mobileBack(page);
     await page.locator(".gallery").waitFor({ state: "hidden", timeout: 5_000 });
     await page.getByRole("button", { name: "Open prompt library" }).click();
     await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
@@ -542,9 +552,15 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     assert(nodeLibraryHandleContent === "none", `${label}: Prompt Library should not show a grab handle`);
     await page.locator(".prompt-library-row").first().click();
     await page.locator(".prompt-library-panel__back").waitFor({ state: "visible", timeout: 5_000 });
-    await page.locator(".prompt-library-panel__back").click();
+    await mobileBack(page);
     await page.locator(".prompt-library-panel__search").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__add").click();
+    await page.locator(".prompt-library-editor").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__backdrop").click({ position: { x: 4, y: 4 } });
+    await page.locator(".prompt-library-editor").waitFor({ state: "visible", timeout: 5_000 });
+    await mobileBack(page);
+    await page.locator(".prompt-library-panel__search").waitFor({ state: "visible", timeout: 5_000 });
+    await mobileBack(page);
     await page.locator(".prompt-library-panel").waitFor({ state: "hidden", timeout: 5_000 });
     await assertBottomTabsHitTarget(page);
   } catch (err) {
@@ -626,6 +642,11 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     assert(resultSurface.primaryHeight >= 44, `${label}: Classic primary action should keep touch height`);
     assert(!resultSurface.primaryBg.includes("0, 0)"), `${label}: Classic primary action should keep visible accent surface`);
 
+    await page.locator(".result-image-button").click();
+    await page.locator(".image-lightbox").waitFor({ state: "visible", timeout: 5_000 });
+    await mobileBack(page);
+    await page.locator(".image-lightbox").waitFor({ state: "hidden", timeout: 5_000 });
+
     await assertMobileToolbarHitTarget(page);
 
     await page.getByRole("button", { name: "Open prompt library" }).click();
@@ -662,6 +683,10 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     const settingsHandleContent = await page.locator(".right-panel.drawer-open").evaluate((panel) => getComputedStyle(panel, "::before").content);
     assert(settingsHandleContent === "none", `${label}: Classic Settings should not show a grab handle`);
     await page.locator(".right-panel-backdrop").click({ position: { x: 4, y: 4 } });
+    await page.locator(".right-panel.drawer-open").waitFor({ state: "hidden", timeout: 5_000 });
+    await page.getByRole("button", { name: "Show settings" }).click();
+    await page.locator(".right-panel.drawer-open").waitFor({ state: "visible", timeout: 5_000 });
+    await mobileBack(page);
     await page.locator(".right-panel.drawer-open").waitFor({ state: "hidden", timeout: 5_000 });
 
     await page.locator(".mobile-prompt-peek").click();

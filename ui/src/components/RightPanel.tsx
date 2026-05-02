@@ -8,6 +8,7 @@ import { NodeInspector } from "./NodeInspector";
 import type { Count, Format, ImageModel, Moderation, Quality } from "../types";
 import { useI18n } from "../i18n";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { useMobileBackDismiss } from "../hooks/useMobileBackDismiss";
 
 const FORMAT_ITEMS = [
   { value: "png" as const, label: "PNG" },
@@ -30,6 +31,7 @@ export function RightPanel() {
   const isMobile = useIsMobile();
 
   const drawerOpen = isMobile ? open : true;
+  const dismissDrawer = useMobileBackDismiss(drawerOpen, () => setOpen(false));
 
   const model = useAppStore((s) => s.model);
   const setModel = useAppStore((s) => s.setModel);
@@ -72,7 +74,7 @@ export function RightPanel() {
           className="right-panel-backdrop"
           role="button"
           aria-label={t("panel.closeSettings")}
-          onClick={() => setOpen(false)}
+          onClick={dismissDrawer}
         />
       ) : null}
       <aside

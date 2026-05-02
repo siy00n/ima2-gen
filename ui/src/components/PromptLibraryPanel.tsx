@@ -16,6 +16,7 @@ import {
 import { PromptLibraryEditor } from "./PromptLibraryEditor";
 import { PromptLibraryRow } from "./PromptLibraryRow";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { useMobileBackDismiss } from "../hooks/useMobileBackDismiss";
 
 type PromptLibraryLabels = {
   title?: string;
@@ -134,6 +135,35 @@ export function PromptLibraryPanel({
     if (selectedPrompt.id !== selectedId) setSelectedId(selectedPrompt.id);
   }, [open, selectedId, selectedPrompt]);
 
+  const closeEditor = () => {
+    setEditorOpen(false);
+    setEditing(null);
+  };
+
+  const openEditor = (prompt: PromptItem | null) => {
+    setEditing(prompt);
+    setEditorOpen(true);
+    if (isMobile) setMobileDetailOpen(true);
+  };
+
+  const selectPrompt = (prompt: PromptItem) => {
+    setSelectedId(prompt.id);
+    if (isMobile) setMobileDetailOpen(true);
+  };
+
+  const title = selectedPrompt?.name || labels.untitled || "Untitled prompt";
+  const canApplyPrompt = targetAvailable && !!selectedPrompt;
+  const showMobileDetail = isMobile && (mobileDetailOpen || editorOpen);
+
+  const dismissPanel = useMobileBackDismiss(open && !!onClose, () => {
+    onClose?.();
+  });
+
+  const dismissDetail = useMobileBackDismiss(open && showMobileDetail, () => {
+    closeEditor();
+    setMobileDetailOpen(false);
+  });
+
   if (!open) return null;
 
   const importFiles = async (files: File[]) => {
@@ -156,26 +186,6 @@ export function PromptLibraryPanel({
     e.target.value = "";
   };
 
-  const closeEditor = () => {
-    setEditorOpen(false);
-    setEditing(null);
-  };
-
-  const openEditor = (prompt: PromptItem | null) => {
-    setEditing(prompt);
-    setEditorOpen(true);
-    if (isMobile) setMobileDetailOpen(true);
-  };
-
-  const selectPrompt = (prompt: PromptItem) => {
-    setSelectedId(prompt.id);
-    if (isMobile) setMobileDetailOpen(true);
-  };
-
-  const title = selectedPrompt?.name || labels.untitled || "Untitled prompt";
-  const canApplyPrompt = targetAvailable && !!selectedPrompt;
-  const showMobileDetail = isMobile && (mobileDetailOpen || editorOpen);
-
   return (
     <section
       className="prompt-library-panel"
@@ -191,7 +201,10 @@ export function PromptLibraryPanel({
         <button
           type="button"
           className="prompt-library-panel__backdrop"
-          onClick={onClose}
+          onClick={() => {
+            if (isMobile && (editorOpen || saving)) return;
+            dismissPanel();
+          }}
           aria-label={labels.close || "Close"}
         />
       )}
@@ -314,10 +327,7 @@ export function PromptLibraryPanel({
               <button
                 type="button"
                 className="prompt-library-panel__back"
-                onClick={() => {
-                  closeEditor();
-                  setMobileDetailOpen(false);
-                }}
+                onClick={dismissDetail}
               >
                 {"<"} {labels.title || "Prompt library"}
               </button>

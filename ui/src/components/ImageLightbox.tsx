@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
+import { useMobileBackDismiss } from "../hooks/useMobileBackDismiss";
 
 type Props = {
   open: boolean;
@@ -34,6 +35,8 @@ export function ImageLightbox({ open, imageSrc, title, meta, onClose }: Props) {
   const dragRef = useRef<DragState | null>(null);
   const { scale, pan } = view;
 
+  const dismissLightbox = useMobileBackDismiss(open && !!imageSrc, onClose);
+
   const resetView = () => {
     setView({ scale: 1, pan: { x: 0, y: 0 } });
   };
@@ -66,7 +69,7 @@ export function ImageLightbox({ open, imageSrc, title, meta, onClose }: Props) {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        dismissLightbox();
         return;
       }
       if (event.key === "+" || event.key === "=") {
@@ -82,7 +85,7 @@ export function ImageLightbox({ open, imageSrc, title, meta, onClose }: Props) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose, open]);
+  }, [dismissLightbox, open]);
 
   if (!open || !imageSrc) return null;
 
@@ -93,7 +96,7 @@ export function ImageLightbox({ open, imageSrc, title, meta, onClose }: Props) {
 
   const handleStageClick = (event: MouseEvent<HTMLDivElement>) => {
     event.stopPropagation();
-    if (event.target === event.currentTarget) onClose();
+    if (event.target === event.currentTarget) dismissLightbox();
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLImageElement>) => {
@@ -132,13 +135,13 @@ export function ImageLightbox({ open, imageSrc, title, meta, onClose }: Props) {
   };
 
   return createPortal(
-    <div className="image-lightbox" role="dialog" aria-modal="true" aria-label={title ?? t("node.nodeImageAlt")} onClick={onClose}>
+    <div className="image-lightbox" role="dialog" aria-modal="true" aria-label={title ?? t("node.nodeImageAlt")} onClick={dismissLightbox}>
       <div className="image-lightbox__topbar" onClick={(event) => event.stopPropagation()}>
         <div className="image-lightbox__title">
           <strong>{title}</strong>
           {meta ? <span>{meta}</span> : null}
         </div>
-        <button type="button" className="image-lightbox__close" onClick={onClose} aria-label={t("lightbox.close")} title={t("lightbox.close")}>
+        <button type="button" className="image-lightbox__close" onClick={dismissLightbox} aria-label={t("lightbox.close")} title={t("lightbox.close")}>
           ×
         </button>
       </div>

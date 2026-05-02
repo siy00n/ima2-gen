@@ -27,6 +27,7 @@ import { OptionGroup, type OptionItem } from "./OptionGroup";
 import { ImageLightbox } from "./ImageLightbox";
 import { LanguageToggle } from "./LanguageToggle";
 import { useProviderAvailability } from "../hooks/useProviderAvailability";
+import { useMobileBackDismiss } from "../hooks/useMobileBackDismiss";
 import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
 import { deriveGraphMeta, type GraphNodeMeta } from "../lib/graphMeta";
 import {
@@ -338,6 +339,8 @@ export function MobileNodeWorkspace() {
   const settingsRef = useRef<HTMLDetailsElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
   const viewRef = useRef<HTMLDivElement>(null);
+
+  const dismissSessionSheet = useMobileBackDismiss(sessionSheetOpen, () => setSessionSheetOpen(false));
 
   const nodes = useAppStore((s) => s.graphNodes);
   const edges = useAppStore((s) => s.graphEdges);
@@ -2043,7 +2046,7 @@ export function MobileNodeWorkspace() {
           <button
             type="button"
             className="mobile-node-session-sheet__backdrop"
-            onClick={() => setSessionSheetOpen(false)}
+            onClick={dismissSessionSheet}
             aria-label={t("common.close")}
           />
           <section className="mobile-node-session-sheet__panel">
@@ -2053,7 +2056,7 @@ export function MobileNodeWorkspace() {
                 <h2>{t("mobileNode.sessionSheetTitle")}</h2>
                 <p>{t("mobileNode.sessionSheetHelp")}</p>
               </div>
-              <button type="button" onClick={() => setSessionSheetOpen(false)}>
+              <button type="button" onClick={dismissSessionSheet}>
                 {t("common.close")}
               </button>
             </div>

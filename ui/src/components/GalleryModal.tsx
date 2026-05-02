@@ -4,6 +4,7 @@ import type { GenerateItem } from "../types";
 import { deleteHistoryItem, restoreHistoryItem, getHistoryGrouped } from "../lib/api";
 import { getGalleryItemKey, getGalleryItemReactKey } from "../lib/galleryNavigation";
 import { useI18n } from "../i18n";
+import { useMobileBackDismiss } from "../hooks/useMobileBackDismiss";
 import { ImageLightbox } from "./ImageLightbox";
 
 type TrashPending = {
@@ -93,15 +94,17 @@ export function GalleryModal() {
   const itemRefs = useRef<Record<string, HTMLElement | null>>({});
   const lastScrollTopRef = useRef(0);
 
+  const dismissGallery = useMobileBackDismiss(open, close);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (previewItem) return;
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") dismissGallery();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, close, previewItem]);
+  }, [open, dismissGallery, previewItem]);
 
   useEffect(() => {
     if (!open) {
@@ -374,7 +377,7 @@ export function GalleryModal() {
 
   return (
     <>
-      <div className="gallery-backdrop" onClick={close} role="presentation">
+      <div className="gallery-backdrop" onClick={dismissGallery} role="presentation">
         <div
           className="gallery"
           role="dialog"
