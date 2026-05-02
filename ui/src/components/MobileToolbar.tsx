@@ -59,7 +59,7 @@ export function MobileToolbar() {
       <div className="mobile-toolbar__brand">
         <div className="logo-mark" aria-hidden="true" />
         <div className="mobile-toolbar__copy">
-          <div className="mobile-toolbar__title">ima2-gen</div>
+          <div className="mobile-toolbar__title">{t("uiMode.classic")}</div>
           <div className="mobile-toolbar__subtitle">
             <span
               className={`status-dot ${providerOk ? "status-dot--ok" : "status-dot--bad"}`}

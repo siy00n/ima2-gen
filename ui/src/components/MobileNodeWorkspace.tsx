@@ -26,6 +26,7 @@ import { useI18n } from "../i18n";
 import { OptionGroup, type OptionItem } from "./OptionGroup";
 import { ImageLightbox } from "./ImageLightbox";
 import { LanguageToggle } from "./LanguageToggle";
+import { useProviderAvailability } from "../hooks/useProviderAvailability";
 import { copyImageToClipboard, copyTextToClipboard } from "../lib/clipboard";
 import { deriveGraphMeta, type GraphNodeMeta } from "../lib/graphMeta";
 import {
@@ -301,6 +302,7 @@ export function MobileNodeWorkspace() {
   const sessionLoading = useAppStore((s) => s.sessionLoading);
   const selectedNodeId = useAppStore((s) => s.selectedNodeId);
   const currentImage = useAppStore((s) => s.currentImage);
+  const provider = useAppStore((s) => s.provider);
   const branchGenerationRootId = useAppStore((s) => s.branchGenerationRootId);
   const attachingNodeIds = useAppStore((s) => s.attachingNodeIds);
   const canUndoGraph = useAppStore((s) => s.canUndoGraph);
@@ -341,6 +343,9 @@ export function MobileNodeWorkspace() {
   const selected = selectedNodeId ? nodes.find((node) => node.id === selectedNodeId) ?? null : null;
   const data = selected?.data ?? null;
   const activeSession = sessions.find((session) => session.id === activeSessionId);
+  const availability = useProviderAvailability();
+  const providerLabel = provider === "oauth" ? "OAuth" : t("provider.apiLabel");
+  const providerOk = availability[provider].ok;
   const graphMeta = useMemo(() => deriveGraphMeta(nodes, edges), [nodes, edges]);
   const childCountByNodeId = useMemo(() => {
     const counts = new Map<string, number>();
@@ -1904,17 +1909,30 @@ export function MobileNodeWorkspace() {
   return (
     <main className="mobile-node-workspace">
       <header className="mobile-node-topbar">
-        <div className="mobile-node-brand">
-          <strong>{t("mobileNode.title")}</strong>
-          <button type="button" className="mobile-node-brand__session" onClick={() => setSessionSheetOpen(true)}>
-            <span>{activeSession?.title ?? t("session.loading")}</span>
-            <small>{nodes.length} {t("uiMode.node")}</small>
-          </button>
-        </div>
+        <button type="button" className="mobile-node-brand" onClick={() => setSessionSheetOpen(true)}>
+          <span className="mobile-node-brand__copy">
+            <strong>{t("uiMode.node")}</strong>
+            <small>
+              <span>{activeSession?.title ?? t("session.loading")}</span>
+              <span aria-hidden="true"> · </span>
+              <span
+                className={`status-dot ${providerOk ? "status-dot--ok" : "status-dot--bad"}`}
+                title={providerOk ? t("provider.availableTitle", { name: providerLabel }) : availability[provider].reason}
+                aria-hidden="true"
+              />
+              <span>{providerLabel}</span>
+            </small>
+          </span>
+        </button>
         <div className="mobile-node-topbar__actions">
           <button type="button" onClick={() => setUIMode("classic")}>
             {t("uiMode.classic")}
           </button>
+          {nodes.length ? (
+            <button type="button" onClick={showAllNodes}>
+              {t("mobileNode.tabs.all")}
+            </button>
+          ) : null}
           <button type="button" onClick={addRoot}>
             {t("mobileNode.addRootShort")}
           </button>

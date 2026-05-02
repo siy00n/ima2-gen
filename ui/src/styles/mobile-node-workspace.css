@@ -17,11 +17,12 @@
 }
 
 .mobile-node-topbar {
-  min-height: 74px;
+  min-height: 60px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 150px) minmax(0, 1fr);
+  align-items: center;
   gap: 10px;
-  padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px;
+  padding: max(9px, env(safe-area-inset-top, 0px)) 12px 9px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(8, 9, 13, 0.86);
   backdrop-filter: blur(18px);
@@ -29,47 +30,60 @@
 
 .mobile-node-brand {
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(86px, auto);
+  height: 38px;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-}
-
-.mobile-node-brand strong {
-  color: #f6f4ff;
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.1;
-}
-
-.mobile-node-brand__session {
-  min-width: 0;
-  display: grid;
-  justify-items: end;
-  gap: 2px;
   border: 0;
   background: transparent;
   color: inherit;
   padding: 0;
-  text-align: right;
+  text-align: left;
 }
 
-.mobile-node-brand__session span,
-.mobile-node-brand__session small {
+.mobile-node-brand__copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.mobile-node-brand strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #f6f4ff;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-node-brand small,
+.mobile-node-brand small span {
   min-width: 0;
   overflow: hidden;
   color: var(--mobile-node-muted);
   font-family: var(--mono);
   font-size: 10px;
+  line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.mobile-node-brand__session small {
+.mobile-node-brand small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   opacity: 0.82;
 }
 
+.mobile-node-brand .status-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+}
+
 .mobile-node-topbar__actions {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -85,7 +99,7 @@
 .mobile-node-topbar__actions > button,
 .mobile-node-topbar .lang-toggle__btn {
   min-width: max-content;
-  min-height: 34px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

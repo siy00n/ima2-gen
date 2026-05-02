@@ -363,6 +363,26 @@ async function assertMobileToolbarHitTarget(page) {
   assert(misses.length === 0, `Mobile toolbar hit target blocked at: ${misses.join(", ")}`);
 }
 
+async function assertMobileNodeTopbarHitTarget(page) {
+  const buttons = await page.locator(".mobile-node-topbar__actions button, .mobile-node-topbar .lang-toggle__btn").all();
+  const misses = [];
+  for (const button of buttons) {
+    await button.evaluate((el) => el.scrollIntoView({ block: "nearest", inline: "center" }));
+    await page.waitForTimeout(20);
+    const miss = await button.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const target = document.elementFromPoint(x, y);
+      return target?.closest("button") === el
+        ? ""
+        : el.getAttribute("aria-label") || el.textContent?.trim() || "node toolbar button";
+    });
+    if (miss) misses.push(miss);
+  }
+  assert(misses.length === 0, `Mobile Node topbar hit target blocked at: ${misses.join(", ")}`);
+}
+
 async function assertBottomTabsHitTarget(page) {
   const misses = await page.evaluate(() => {
     return [...document.querySelectorAll(".mobile-node-tabs button")].flatMap((button) => {
@@ -408,6 +428,16 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
   const label = `${viewport.width}x${viewport.height}`;
   const { context, page } = await openMobileNodePage(browser, baseUrl, viewport);
   try {
+    await page.locator(".mobile-node-brand strong").filter({ hasText: "Node" }).waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".mobile-node-brand").filter({ hasText: "OAuth" }).waitFor({ state: "visible", timeout: 5_000 });
+    const nodeTopbarHeight = await page.locator(".mobile-node-topbar").evaluate((el) => el.getBoundingClientRect().height);
+    assert(nodeTopbarHeight <= 70, `${label}: Node topbar should stay compact, got ${nodeTopbarHeight}px`);
+    await assertMobileNodeTopbarHitTarget(page);
+    await page.locator(".mobile-node-brand").click();
+    await page.locator(".mobile-node-session-sheet").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".mobile-node-session-sheet__backdrop").click();
+    await page.locator(".mobile-node-session-sheet").waitFor({ state: "hidden", timeout: 5_000 });
+
     const lanes = page.locator(".mobile-node-branch-lane");
     assert((await lanes.count()) >= 2, `${label}: expected multiple branch lanes`);
     const collapsedCount = await page.locator(".mobile-node-branch-lane.is-collapsed").count();
@@ -487,6 +517,8 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
   const label = `${viewport.width}x${viewport.height}`;
   const { context, page } = await openMobileClassicPage(browser, baseUrl, viewport);
   try {
+    await page.locator(".mobile-toolbar__title").filter({ hasText: "Classic" }).waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".mobile-toolbar__subtitle").filter({ hasText: "OAuth" }).waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".result-img").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".result-prompt").waitFor({ state: "visible", timeout: 5_000 });
     for (const name of ["Download", "Copy image", "Copy prompt", "Continue here"]) {
