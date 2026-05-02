@@ -118,6 +118,50 @@ function imageTransferLabelKey(mode: ImageTransferMode) {
   return "edgeBadge.imageParent";
 }
 
+function ClassicIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 6.5h14v11H5z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="m8 15 2.8-3 2 2 2.4-3 2.8 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="9" cy="9.5" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function LibraryIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 5h10a4 4 0 0 1 4 4v10H9a4 4 0 0 0-4 4V5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9 9h6M9 13h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function GalleryIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 7h16M7 7v10M4 17h16M17 7v10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function AddRootIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 8.6v6.8M8.6 12h6.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function nextImageTransferMode(mode: ImageTransferMode): ImageTransferMode {
   if (mode === "off") return "parent";
   if (mode === "parent") return "ancestor";
@@ -794,6 +838,15 @@ export function MobileNodeWorkspace() {
                 </button>
                 <button type="button" className="mobile-node-sort-toggle" onClick={() => setActiveView("map")}>
                   {t("mobileNode.openMapShort")}
+                </button>
+                <button
+                  type="button"
+                  className="mobile-node-heading-icon-button"
+                  onClick={addRoot}
+                  aria-label={t("nodeCanvas.addRootTitle")}
+                  title={t("nodeCanvas.addRootTitle")}
+                >
+                  <AddRootIcon />
                 </button>
               </div>
             </div>
@@ -1925,31 +1978,62 @@ export function MobileNodeWorkspace() {
           </span>
         </button>
         <div className="mobile-node-topbar__actions">
-          <button type="button" onClick={() => setUIMode("classic")}>
-            {t("uiMode.classic")}
+          <button
+            type="button"
+            className="mobile-node-topbar__icon-btn"
+            onClick={() => setUIMode("classic")}
+            aria-label={t("uiMode.classic")}
+            title={t("uiMode.classic")}
+          >
+            <ClassicIcon />
           </button>
-          {nodes.length ? (
-            <button type="button" onClick={showAllNodes}>
-              {t("mobileNode.tabs.all")}
-            </button>
-          ) : null}
-          <button type="button" onClick={addRoot}>
-            {t("mobileNode.addRootShort")}
-          </button>
-          <button type="button" onClick={undoGraph} disabled={!canUndoGraph} aria-label={t("nodeCanvas.undo")}>
+          <button
+            type="button"
+            className="mobile-node-topbar__icon-btn"
+            onClick={undoGraph}
+            disabled={!canUndoGraph}
+            aria-label={t("nodeCanvas.undo")}
+            title={t("nodeCanvas.undoTitle")}
+          >
             ↶
           </button>
-          <button type="button" onClick={redoGraph} disabled={!canRedoGraph} aria-label={t("nodeCanvas.redo")}>
+          <button
+            type="button"
+            className="mobile-node-topbar__icon-btn"
+            onClick={redoGraph}
+            disabled={!canRedoGraph}
+            aria-label={t("nodeCanvas.redo")}
+            title={t("nodeCanvas.redoTitle")}
+          >
             ↷
           </button>
-          <button type="button" onClick={() => void openPromptLibrary()}>
-            {t("promptLibrary.short")}
+          <button
+            type="button"
+            className="mobile-node-topbar__icon-btn"
+            onClick={() => void openPromptLibrary()}
+            aria-label={t("promptLibrary.open")}
+            title={t("promptLibrary.open")}
+          >
+            <LibraryIcon />
           </button>
-          <button type="button" onClick={openGallery}>
-            {t("gallery.title")}
+          <button
+            type="button"
+            className="mobile-node-topbar__icon-btn"
+            onClick={openGallery}
+            aria-label={t("history.openGalleryAria")}
+            title={t("history.openGalleryTitle")}
+          >
+            <GalleryIcon />
           </button>
-          <button type="button" onClick={jumpToSettings} disabled={!selected}>
-            {t("panel.settings")}
+          <button
+            type="button"
+            className="mobile-node-topbar__icon-btn"
+            onClick={jumpToSettings}
+            disabled={!selected}
+            aria-label={t("panel.settings")}
+            title={t("panel.settings")}
+          >
+            <SettingsIcon />
           </button>
           <LanguageToggle />
         </div>

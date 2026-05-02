@@ -98,7 +98,8 @@
 
 .mobile-node-topbar__actions > button,
 .mobile-node-topbar .lang-toggle__btn {
-  min-width: max-content;
+  flex: 0 0 auto;
+  width: 36px;
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -109,10 +110,15 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.02)),
     rgba(255, 255, 255, 0.035);
   color: var(--text);
-  padding: 0 10px;
+  padding: 0;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 17px;
   font-weight: 800;
+}
+
+.mobile-node-topbar__actions > button svg {
+  width: 18px;
+  height: 18px;
 }
 
 .mobile-node-topbar__actions > button:disabled {
@@ -130,11 +136,13 @@
 }
 
 .mobile-node-topbar .lang-toggle__btn {
+  width: auto;
   min-height: 30px;
   border-radius: 7px;
   border-color: transparent;
   background: transparent;
   padding: 0 8px;
+  font-size: 10px;
 }
 
 .mobile-node-topbar .lang-toggle__btn.is-active {
@@ -1723,6 +1731,7 @@
 .mobile-node-list-heading__actions {
   flex: 0 0 auto;
   display: flex;
+  align-items: center;
   gap: 6px;
 }
 
@@ -1742,6 +1751,24 @@
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 850;
+}
+
+.mobile-node-heading-icon-button {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #eeeaff;
+  padding: 0;
+}
+
+.mobile-node-heading-icon-button svg {
+  width: 17px;
+  height: 17px;
 }
 
 .mobile-node-list-heading small {

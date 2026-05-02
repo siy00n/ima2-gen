@@ -432,6 +432,13 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.locator(".mobile-node-brand").filter({ hasText: "OAuth" }).waitFor({ state: "visible", timeout: 5_000 });
     const nodeTopbarHeight = await page.locator(".mobile-node-topbar").evaluate((el) => el.getBoundingClientRect().height);
     assert(nodeTopbarHeight <= 70, `${label}: Node topbar should stay compact, got ${nodeTopbarHeight}px`);
+    const topbarActions = page.locator(".mobile-node-topbar__actions");
+    assert((await topbarActions.getByRole("button", { name: /^All$/ }).count()) === 0, `${label}: All should not be in Node topbar`);
+    assert((await topbarActions.getByRole("button", { name: /^\+ Root$/ }).count()) === 0, `${label}: + Root should not be in Node topbar`);
+    await topbarActions.getByRole("button", { name: "Classic" }).waitFor({ state: "visible", timeout: 5_000 });
+    await topbarActions.getByRole("button", { name: "Open prompt library" }).waitFor({ state: "visible", timeout: 5_000 });
+    await topbarActions.getByRole("button", { name: "Open gallery" }).waitFor({ state: "visible", timeout: 5_000 });
+    await topbarActions.getByRole("button", { name: "Settings" }).waitFor({ state: "visible", timeout: 5_000 });
     await assertMobileNodeTopbarHitTarget(page);
     await page.locator(".mobile-node-brand").click();
     await page.locator(".mobile-node-session-sheet").waitFor({ state: "visible", timeout: 5_000 });
@@ -442,6 +449,12 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     assert((await lanes.count()) >= 2, `${label}: expected multiple branch lanes`);
     const collapsedCount = await page.locator(".mobile-node-branch-lane.is-collapsed").count();
     assert(collapsedCount === (await lanes.count()), `${label}: all lanes should start collapsed`);
+    const initialLaneCount = await lanes.count();
+    await page.getByRole("button", { name: "Add root node" }).click();
+    await page.locator(".mobile-node-focus").waitFor({ state: "visible", timeout: 5_000 });
+    await clickBottomTab(page, "All");
+    await page.locator(".mobile-node-empty--navigator").waitFor({ state: "visible", timeout: 5_000 });
+    assert((await lanes.count()) === initialLaneCount + 1, `${label}: All heading add root should create a root lane`);
 
     await page.locator(".mobile-node-node-search").fill("paper cup");
     await page.locator(".mobile-node-list-card").filter({ hasText: "Paper cup" }).first().waitFor({ state: "visible", timeout: 5_000 });
@@ -460,7 +473,7 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
 
     await page.getByRole("button", { name: /Paper cup/ }).click();
     await page.locator(".mobile-node-focus").waitFor({ state: "visible", timeout: 5_000 });
-    await page.getByLabel("Prompt").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".mobile-node-prompt textarea").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".mobile-node-settings").evaluate((details) => {
       if (!(details instanceof HTMLDetailsElement)) throw new Error("settings is not a details element");
       if (details.open) throw new Error("node settings should be collapsed by default");
@@ -493,11 +506,11 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.locator(".mobile-node-branch-lane").filter({ hasText: "Apple root" }).locator(".mobile-node-branch-lane__header").click();
     await page.locator(".mobile-node-list-card").filter({ hasText: "Node 1" }).first().waitFor({ state: "visible", timeout: 5_000 });
 
-    await page.getByRole("button", { name: "Gallery" }).click();
+    await page.getByRole("button", { name: "Open gallery" }).click();
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
     await page.getByLabel("Close gallery").click();
     await page.locator(".gallery").waitFor({ state: "hidden", timeout: 5_000 });
-    await page.getByRole("button", { name: "Library" }).click();
+    await page.getByRole("button", { name: "Open prompt library" }).click();
     await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__close").click();
     await page.locator(".prompt-library-panel").waitFor({ state: "hidden", timeout: 5_000 });
