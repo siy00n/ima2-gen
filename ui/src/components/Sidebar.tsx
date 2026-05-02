@@ -63,6 +63,7 @@ export function Sidebar() {
   const hasMobileResult = isMobile && uiMode === "classic" && !!currentImage;
   const collapsed = hasMobileResult && !composerOpen;
   const isClassicDesktop = uiMode === "classic" && !isMobile;
+  const showModeSwitch = !(isMobile && uiMode === "classic");
 
   useEffect(() => {
     if (hasMobileResult) setComposerOpen(false);
@@ -189,7 +190,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`sidebar${isClassicDesktop ? " sidebar--classic-expanded" : ""}${isMobile && uiMode === "classic" ? " sidebar--mobile-composer" : ""}${isMobile && uiMode === "node" ? " sidebar--mobile-node" : ""}${collapsed ? " sidebar--prompt-collapsed" : ""}`}
+      className={`sidebar${isClassicDesktop ? " sidebar--classic-expanded" : ""}${isMobile && uiMode === "classic" ? " sidebar--mobile-composer" : ""}${isMobile && uiMode === "node" ? " sidebar--mobile-node" : ""}${hasMobileResult ? " sidebar--mobile-result" : ""}${collapsed ? " sidebar--prompt-collapsed" : ""}`}
     >
       {collapsed ? (
         <button
@@ -218,11 +219,13 @@ export function Sidebar() {
             className="mobile-dock-dismiss"
             onClick={() => setComposerOpen(false)}
             aria-expanded={true}
+            aria-label={t("prompt.collapseComposer")}
+            title={t("prompt.collapseComposer")}
           >
-            {t("prompt.collapseComposer")}
+            <span aria-hidden="true">⌄</span>
           </button>
         ) : null}
-        <UIModeSwitch />
+        {showModeSwitch ? <UIModeSwitch /> : null}
         {uiMode === "classic" ? (
           <>
             <PromptComposer />

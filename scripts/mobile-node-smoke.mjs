@@ -489,6 +489,10 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     assert((await summaryImg.textContent())?.trim() === "IMG -", `${label}: expected initial incoming IMG -`);
     await summaryImg.click();
     assert((await summaryImg.textContent())?.trim() === "IMG P", `${label}: IMG quick chip should cycle to parent`);
+    await summaryImg.click();
+    assert((await summaryImg.textContent())?.trim() === "IMG A", `${label}: IMG quick chip should cycle to ancestor`);
+    await summaryImg.click();
+    assert((await summaryImg.textContent())?.trim() === "IMG -", `${label}: IMG quick chip should cycle back to off`);
     await page.getByRole("button", { name: "Done" }).click();
     await page.locator(".mobile-node-focus").waitFor({ state: "visible", timeout: 5_000 });
 
@@ -573,6 +577,15 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
 
     await page.locator(".mobile-prompt-peek").click();
     await page.locator(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .composer__textarea").waitFor({ state: "visible", timeout: 5_000 });
+    assert(
+      (await page.locator(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .ui-mode-switch").count()) === 0,
+      `${label}: Classic composer should not show the Classic/Node mode switch`,
+    );
+    const dismissSize = await page.locator(".mobile-dock-dismiss").evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    });
+    assert(dismissSize.width <= 44 && dismissSize.height <= 44, `${label}: Hide prompt should be compact`);
     await page.getByRole("button", { name: "Hide prompt" }).click();
     await page.locator(".mobile-prompt-peek").waitFor({ state: "visible", timeout: 5_000 });
 
