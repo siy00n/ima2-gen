@@ -2073,18 +2073,6 @@ button.workflow-edge-badge__chip {
     box-shadow: 0 -24px 60px rgba(0, 0, 0, 0.55);
   }
 
-  .right-panel::before {
-    content: "";
-    position: absolute;
-    top: 10px;
-    left: 50%;
-    width: 42px;
-    height: 4px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.18);
-    transform: translateX(-50%);
-  }
-
   .right-panel.drawer-open {
     transform: translateY(0);
   }
@@ -2119,7 +2107,7 @@ button.workflow-edge-badge__chip {
   }
 
   .right-panel-body {
-    padding: 50px 12px max(16px, env(safe-area-inset-bottom));
+    padding: 16px 12px max(16px, env(safe-area-inset-bottom));
     gap: 12px;
   }
 
@@ -2127,7 +2115,6 @@ button.workflow-edge-badge__chip {
     min-width: 0;
     display: grid;
     gap: 3px;
-    padding-right: 44px;
   }
 
   .mobile-sheet-header h2 {
@@ -2340,7 +2327,7 @@ button.workflow-edge-badge__chip {
   }
 
   .gallery__header {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     padding: 14px 14px 12px;
   }
@@ -2368,11 +2355,6 @@ button.workflow-edge-badge__chip {
     grid-row: 2;
     min-height: 40px;
     font-size: 16px;
-  }
-
-  .gallery__close {
-    width: 44px;
-    height: 44px;
   }
 
   .gallery__group {
@@ -2471,9 +2453,7 @@ button.workflow-edge-badge__chip {
     border-radius: 0;
   }
 
-  .right-panel::before,
-  .prompt-library-panel__dialog::before,
-  .gallery::before {
+  .prompt-library-panel__dialog::before {
     content: "";
     position: absolute;
     top: 10px;
@@ -2725,7 +2705,7 @@ button.workflow-edge-badge__chip {
 
   .right-panel-body,
   .right-panel--node .right-panel-body {
-    padding: 48px 14px max(18px, env(safe-area-inset-bottom));
+    padding: 16px 14px max(18px, env(safe-area-inset-bottom));
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -3019,11 +2999,10 @@ button.workflow-edge-badge__chip {
     position: relative;
     height: min(92dvh, calc(100dvh - 12px));
     max-height: calc(100dvh - 12px);
-    padding-top: 10px;
   }
 
   .gallery__header {
-    grid-template-columns: minmax(0, 1fr) 44px;
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
   }
 
@@ -3064,7 +3043,13 @@ button.workflow-edge-badge__chip {
     border-radius: 18px 18px 0 0;
   }
 
-  .gallery__header,
+  .gallery__header {
+    gap: 10px;
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(17, 19, 26, 0.98);
+  }
+
   .prompt-library-panel__header {
     gap: 10px;
     padding: 28px 14px 12px;
@@ -3088,9 +3073,7 @@ button.workflow-edge-badge__chip {
     line-height: 1.3;
   }
 
-  .gallery__close,
-  .prompt-library-panel__close,
-  .right-panel-toggle {
+  .prompt-library-panel__close {
     width: 36px;
     height: 36px;
     min-width: 36px;

@@ -515,12 +515,10 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.getByRole("button", { name: "Open gallery" }).click();
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".gallery__search").waitFor({ state: "visible", timeout: 5_000 });
-    const nodeGalleryCloseSize = await page.getByLabel("Close gallery").evaluate((button) => {
-      const rect = button.getBoundingClientRect();
-      return { width: rect.width, height: rect.height };
-    });
-    assert(nodeGalleryCloseSize.width >= 36 && nodeGalleryCloseSize.height >= 36, `${label}: Gallery close should use mobile sheet sizing`);
-    await page.getByLabel("Close gallery").click();
+    assert((await page.locator(".gallery__close").count()) === 0, `${label}: Gallery should not show a visible close button`);
+    const nodeGalleryHandleContent = await page.locator(".gallery").evaluate((gallery) => getComputedStyle(gallery, "::before").content);
+    assert(nodeGalleryHandleContent === "none", `${label}: Gallery should not show a grab handle`);
+    await page.locator(".gallery-backdrop").click({ position: { x: 4, y: 4 } });
     await page.locator(".gallery").waitFor({ state: "hidden", timeout: 5_000 });
     await page.getByRole("button", { name: "Open prompt library" }).click();
     await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
@@ -622,14 +620,22 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     await page.getByRole("button", { name: "Open gallery" }).click();
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".gallery__search").waitFor({ state: "visible", timeout: 5_000 });
-    await page.getByLabel("Close gallery").click();
+    await page.locator(".gallery__favorite-filter").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".gallery__group-toggle").waitFor({ state: "visible", timeout: 5_000 });
+    assert((await page.locator(".gallery__close").count()) === 0, `${label}: Classic Gallery should not show a visible close button`);
+    const classicGalleryHandleContent = await page.locator(".gallery").evaluate((gallery) => getComputedStyle(gallery, "::before").content);
+    assert(classicGalleryHandleContent === "none", `${label}: Classic Gallery should not show a grab handle`);
+    await page.locator(".gallery-backdrop").click({ position: { x: 4, y: 4 } });
     await page.locator(".gallery").waitFor({ state: "hidden", timeout: 5_000 });
 
     await page.getByRole("button", { name: "Show settings" }).click();
     await page.locator(".right-panel.drawer-open").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".mobile-sheet-header--settings").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".right-panel").getByText("Size / Format").waitFor({ state: "visible", timeout: 5_000 });
-    await page.locator(".right-panel-toggle").click();
+    assert((await page.locator(".right-panel.drawer-open .right-panel-toggle").count()) === 0, `${label}: Classic Settings should not show a visible close button`);
+    const settingsHandleContent = await page.locator(".right-panel.drawer-open").evaluate((panel) => getComputedStyle(panel, "::before").content);
+    assert(settingsHandleContent === "none", `${label}: Classic Settings should not show a grab handle`);
+    await page.locator(".right-panel-backdrop").click({ position: { x: 4, y: 4 } });
     await page.locator(".right-panel.drawer-open").waitFor({ state: "hidden", timeout: 5_000 });
 
     await page.locator(".mobile-prompt-peek").click();

@@ -438,15 +438,6 @@ export function GalleryModal() {
               onChange={(e) => setQuery(e.target.value)}
               disabled={showSessions}
             />
-            <button
-              type="button"
-              className="gallery__close"
-              onClick={close}
-              aria-label={t("gallery.closeAria")}
-              title={t("gallery.closeTitle")}
-            >
-              ×
-            </button>
           </div>
 
           <div

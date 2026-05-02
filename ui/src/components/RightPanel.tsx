@@ -79,17 +79,19 @@ export function RightPanel() {
         className={`right-panel${uiMode === "node" ? " right-panel--node" : ""}${open ? "" : " collapsed"}${isMobile && drawerOpen ? " drawer-open" : ""}`}
         aria-label={t("panel.detailSettings")}
       >
-        <button
-          type="button"
-          className="right-panel-toggle"
-          aria-expanded={open}
-          aria-controls="right-panel-body"
-          onClick={() => (isMobile ? setOpen(false) : toggle())}
-          title={open ? t("panel.toggleHide") : t("panel.toggleShow")}
-          aria-label={isMobile ? t("panel.closeSettings") : open ? t("panel.toggleHide") : t("panel.toggleShow")}
-        >
-          {isMobile ? "×" : open ? ">" : "<"}
-        </button>
+        {!isMobile ? (
+          <button
+            type="button"
+            className="right-panel-toggle"
+            aria-expanded={open}
+            aria-controls="right-panel-body"
+            onClick={toggle}
+            title={open ? t("panel.toggleHide") : t("panel.toggleShow")}
+            aria-label={open ? t("panel.toggleHide") : t("panel.toggleShow")}
+          >
+            {open ? ">" : "<"}
+          </button>
+        ) : null}
         <div
           id="right-panel-body"
           className="right-panel-body"
