@@ -190,7 +190,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`sidebar${isClassicDesktop ? " sidebar--classic-expanded" : ""}${isMobile && uiMode === "classic" ? " sidebar--mobile-composer" : ""}${isMobile && uiMode === "node" ? " sidebar--mobile-node" : ""}${hasMobileResult ? " sidebar--mobile-result" : ""}${collapsed ? " sidebar--prompt-collapsed" : ""}`}
+      className={`sidebar${isClassicDesktop ? " sidebar--classic-expanded" : ""}${isMobile && uiMode === "classic" ? " sidebar--mobile-composer" : ""}${isMobile && uiMode === "node" ? " sidebar--mobile-node" : ""}${collapsed ? " sidebar--prompt-collapsed" : ""}`}
     >
       {collapsed ? (
         <button
@@ -213,22 +213,13 @@ export function Sidebar() {
           </div>
           <LanguageToggle />
         </div>
-        {hasMobileResult ? (
-          <button
-            type="button"
-            className="mobile-dock-dismiss"
-            onClick={() => setComposerOpen(false)}
-            aria-expanded={true}
-            aria-label={t("prompt.collapseComposer")}
-            title={t("prompt.collapseComposer")}
-          >
-            <span aria-hidden="true">⌄</span>
-          </button>
-        ) : null}
         {showModeSwitch ? <UIModeSwitch /> : null}
         {uiMode === "classic" ? (
           <>
-            <PromptComposer />
+            <PromptComposer
+              onCollapse={hasMobileResult ? () => setComposerOpen(false) : undefined}
+              collapseLabel={t("prompt.collapseComposer")}
+            />
             <GenerateButton />
             <InFlightList />
           </>

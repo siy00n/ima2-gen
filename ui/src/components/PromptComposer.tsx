@@ -6,9 +6,11 @@ const MAX_REFS = 5;
 
 type PromptComposerProps = {
   variant?: "sidebar" | "floating";
+  onCollapse?: () => void;
+  collapseLabel?: string;
 };
 
-export function PromptComposer({ variant = "sidebar" }: PromptComposerProps = {}) {
+export function PromptComposer({ variant = "sidebar", onCollapse, collapseLabel }: PromptComposerProps = {}) {
   const prompt = useAppStore((s) => s.prompt);
   const setPrompt = useAppStore((s) => s.setPrompt);
   const generate = useAppStore((s) => s.generate);
@@ -92,12 +94,25 @@ export function PromptComposer({ variant = "sidebar" }: PromptComposerProps = {}
       onPaste={onPaste}
     >
       <div className="composer__header">
-        <span className="section-title composer__label">{t("prompt.label")}</span>
-        {refs.length > 0 && (
-          <span className="composer__count">
-            {t("prompt.refCount", { count: refs.length, max: MAX_REFS })}
-          </span>
-        )}
+        <span className="composer__header-main">
+          <span className="section-title composer__label">{t("prompt.label")}</span>
+          {refs.length > 0 && (
+            <span className="composer__count">
+              {t("prompt.refCount", { count: refs.length, max: MAX_REFS })}
+            </span>
+          )}
+        </span>
+        {onCollapse ? (
+          <button
+            type="button"
+            className="composer__collapse"
+            onClick={onCollapse}
+            aria-label={collapseLabel}
+            title={collapseLabel}
+          >
+            <span aria-hidden="true">⌄</span>
+          </button>
+        ) : null}
       </div>
 
       {refs.length > 0 && (

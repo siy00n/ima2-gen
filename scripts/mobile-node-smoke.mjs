@@ -581,13 +581,21 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
       (await page.locator(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .ui-mode-switch").count()) === 0,
       `${label}: Classic composer should not show the Classic/Node mode switch`,
     );
-    const dismissSize = await page.locator(".mobile-dock-dismiss").evaluate((button) => {
+    assert((await page.locator(".mobile-dock-dismiss").count()) === 0, `${label}: floating Hide prompt button should be removed`);
+    const handleContent = await page
+      .locator(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed)")
+      .evaluate((sidebar) => getComputedStyle(sidebar, "::before").content);
+    assert(handleContent === "none", `${label}: Classic composer should not show a grab handle`);
+    const collapseButton = page.locator(".sidebar--mobile-composer .composer__collapse");
+    const dismissSize = await collapseButton.evaluate((button) => {
       const rect = button.getBoundingClientRect();
       return { width: rect.width, height: rect.height };
     });
     assert(dismissSize.width <= 44 && dismissSize.height <= 44, `${label}: Hide prompt should be compact`);
-    await page.getByRole("button", { name: "Hide prompt" }).click();
+    await collapseButton.click();
     await page.locator(".mobile-prompt-peek").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".mobile-prompt-peek").click();
+    await page.locator(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .composer__collapse").waitFor({ state: "visible", timeout: 5_000 });
 
     await page.getByRole("button", { name: "Node" }).click();
     await page.locator(".mobile-node-workspace").waitFor({ state: "visible", timeout: 5_000 });
