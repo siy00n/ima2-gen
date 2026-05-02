@@ -280,6 +280,15 @@ async function seedSession(baseUrl) {
     },
     body: JSON.stringify(graph),
   });
+  await jsonFetch(`${baseUrl}/api/prompts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "Smoke library prompt",
+      text: "A compact mobile prompt library row used to verify detail navigation and backdrop closing.",
+      tags: ["smoke", "mobile"],
+    }),
+  });
   return { sessionId, graph };
 }
 
@@ -522,12 +531,20 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.locator(".gallery").waitFor({ state: "hidden", timeout: 5_000 });
     await page.getByRole("button", { name: "Open prompt library" }).click();
     await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
-    const nodeLibraryCloseSize = await page.locator(".prompt-library-panel__close").evaluate((button) => {
-      const rect = button.getBoundingClientRect();
-      return { width: rect.width, height: rect.height };
-    });
-    assert(nodeLibraryCloseSize.width >= 36 && nodeLibraryCloseSize.height >= 36, `${label}: Prompt Library close should use mobile sheet sizing`);
-    await page.locator(".prompt-library-panel__close").click();
+    await page.locator(".prompt-library-panel__search").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__favorite-filter").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__add").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__import").waitFor({ state: "visible", timeout: 5_000 });
+    assert((await page.locator(".prompt-library-panel__close").count()) === 0, `${label}: Prompt Library should not show a visible close button`);
+    const nodeLibraryHandleContent = await page
+      .locator(".prompt-library-panel__dialog")
+      .evaluate((dialog) => getComputedStyle(dialog, "::before").content);
+    assert(nodeLibraryHandleContent === "none", `${label}: Prompt Library should not show a grab handle`);
+    await page.locator(".prompt-library-row").first().click();
+    await page.locator(".prompt-library-panel__back").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__back").click();
+    await page.locator(".prompt-library-panel__search").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__backdrop").click({ position: { x: 4, y: 4 } });
     await page.locator(".prompt-library-panel").waitFor({ state: "hidden", timeout: 5_000 });
     await assertBottomTabsHitTarget(page);
   } catch (err) {
@@ -614,7 +631,16 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     await page.getByRole("button", { name: "Open prompt library" }).click();
     await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__title").waitFor({ state: "visible", timeout: 5_000 });
-    await page.locator(".prompt-library-panel__close").click();
+    await page.locator(".prompt-library-panel__search").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__favorite-filter").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__add").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__import").waitFor({ state: "visible", timeout: 5_000 });
+    assert((await page.locator(".prompt-library-panel__close").count()) === 0, `${label}: Classic Prompt Library should not show a visible close button`);
+    const classicLibraryHandleContent = await page
+      .locator(".prompt-library-panel__dialog")
+      .evaluate((dialog) => getComputedStyle(dialog, "::before").content);
+    assert(classicLibraryHandleContent === "none", `${label}: Classic Prompt Library should not show a grab handle`);
+    await page.locator(".prompt-library-panel__backdrop").click({ position: { x: 4, y: 4 } });
     await page.locator(".prompt-library-panel").waitFor({ state: "hidden", timeout: 5_000 });
 
     await page.getByRole("button", { name: "Open gallery" }).click();

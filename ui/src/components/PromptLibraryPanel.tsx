@@ -241,7 +241,7 @@ export function PromptLibraryPanel({
                 />
               </>
             )}
-            {onClose && (
+            {onClose && !isMobile && (
               <button
                 type="button"
                 className="prompt-library-panel__close"

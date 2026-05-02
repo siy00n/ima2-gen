@@ -350,18 +350,13 @@
 
   .prompt-library-panel__actions {
     display: grid;
-    grid-template-columns: auto auto auto;
+    grid-template-columns: auto auto;
     justify-content: flex-end;
   }
 
   .prompt-library-panel__add,
-  .prompt-library-panel__import,
-  .prompt-library-panel__close {
+  .prompt-library-panel__import {
     min-height: 44px;
-  }
-
-  .prompt-library-panel__close {
-    position: static;
   }
 
   .prompt-library-panel__import-hint {
@@ -442,4 +437,3 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
-
