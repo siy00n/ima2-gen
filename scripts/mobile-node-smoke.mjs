@@ -582,6 +582,35 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     assert(resultLayout.primaryOk, `${label}: Classic Continue here primary action is too small`);
     assert(resultLayout.secondaryOk, `${label}: Classic secondary result actions are not tappable`);
 
+    const resultSurface = await page.evaluate(() => {
+      const panel = document.querySelector(".result-container.visible");
+      const stage = document.querySelector(".result-stage");
+      const prompt = document.querySelector(".result-prompt");
+      const primary = document.querySelector(".result-actions__primary");
+      if (!panel || !stage || !prompt || !primary) return null;
+      const panelStyle = getComputedStyle(panel);
+      const stageStyle = getComputedStyle(stage);
+      const promptStyle = getComputedStyle(prompt);
+      const primaryStyle = getComputedStyle(primary);
+      return {
+        panelRadius: Number.parseFloat(panelStyle.borderTopLeftRadius),
+        panelBorder: panelStyle.borderTopColor,
+        panelBg: panelStyle.backgroundColor,
+        stageRadius: Number.parseFloat(stageStyle.borderTopLeftRadius),
+        promptRadius: Number.parseFloat(promptStyle.borderTopLeftRadius),
+        primaryHeight: primary.getBoundingClientRect().height,
+        primaryBg: primaryStyle.backgroundColor,
+      };
+    });
+    assert(resultSurface, `${label}: Classic result surface is missing`);
+    assert(resultSurface.panelRadius >= 16, `${label}: Classic result panel should use unified rounded surface`);
+    assert(!resultSurface.panelBorder.includes("0, 0)"), `${label}: Classic result panel should have a visible border`);
+    assert(!resultSurface.panelBg.includes("0, 0)"), `${label}: Classic result panel should have a visible dark surface`);
+    assert(resultSurface.stageRadius >= 12, `${label}: Classic result stage should use panel radius`);
+    assert(resultSurface.promptRadius >= 12, `${label}: Classic prompt summary should use panel radius`);
+    assert(resultSurface.primaryHeight >= 44, `${label}: Classic primary action should keep touch height`);
+    assert(!resultSurface.primaryBg.includes("0, 0)"), `${label}: Classic primary action should keep visible accent surface`);
+
     await assertMobileToolbarHitTarget(page);
 
     await page.getByRole("button", { name: "Open prompt library" }).click();
@@ -620,8 +649,45 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
       return { width: rect.width, height: rect.height };
     });
     assert(dismissSize.width <= 44 && dismissSize.height <= 44, `${label}: Hide prompt should be compact`);
+    const composerSurface = await page.evaluate(() => {
+      const composer = document.querySelector(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .composer");
+      const textarea = document.querySelector(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .composer__textarea");
+      const tool = document.querySelector(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .composer__tool");
+      const generate = document.querySelector(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .generate-btn");
+      if (!composer || !textarea || !tool || !generate) return null;
+      const composerStyle = getComputedStyle(composer);
+      const textareaStyle = getComputedStyle(textarea);
+      const toolStyle = getComputedStyle(tool);
+      return {
+        composerRadius: Number.parseFloat(composerStyle.borderTopLeftRadius),
+        composerBorder: composerStyle.borderTopColor,
+        textareaRadius: Number.parseFloat(textareaStyle.borderTopLeftRadius),
+        toolHeight: tool.getBoundingClientRect().height,
+        toolRadius: Number.parseFloat(toolStyle.borderTopLeftRadius),
+        generateHeight: generate.getBoundingClientRect().height,
+      };
+    });
+    assert(composerSurface, `${label}: Classic composer surface is missing`);
+    assert(composerSurface.composerRadius >= 14, `${label}: Classic composer should use unified rounded surface`);
+    assert(!composerSurface.composerBorder.includes("0, 0)"), `${label}: Classic composer should have a visible border`);
+    assert(composerSurface.textareaRadius >= 10, `${label}: Classic composer textarea should use unified control radius`);
+    assert(composerSurface.toolHeight >= 40, `${label}: Classic composer tools should keep touch height`);
+    assert(composerSurface.toolRadius >= 9, `${label}: Classic composer tools should use unified control radius`);
+    assert(composerSurface.generateHeight >= 44, `${label}: Classic generate button should keep touch height`);
     await collapseButton.click();
     await page.locator(".mobile-prompt-peek").waitFor({ state: "visible", timeout: 5_000 });
+    const promptPeekSurface = await page.locator(".mobile-prompt-peek").evaluate((peek) => {
+      const style = getComputedStyle(peek);
+      const rect = peek.getBoundingClientRect();
+      return {
+        height: rect.height,
+        border: style.borderTopColor,
+        bg: style.backgroundColor,
+      };
+    });
+    assert(promptPeekSurface.height >= 50, `${label}: Classic prompt peek should keep tappable height`);
+    assert(!promptPeekSurface.border.includes("0, 0)"), `${label}: Classic prompt peek should have a visible top border`);
+    assert(!promptPeekSurface.bg.includes("0, 0)"), `${label}: Classic prompt peek should have a visible dark surface`);
     await page.locator(".mobile-prompt-peek").click();
     await page.locator(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .composer__collapse").waitFor({ state: "visible", timeout: 5_000 });
 
