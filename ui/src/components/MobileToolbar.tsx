@@ -31,10 +31,20 @@ function NodeIcon() {
   );
 }
 
+function LibraryIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 5h10a4 4 0 0 1 4 4v10H9a4 4 0 0 0-4 4V5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M9 9h6M9 13h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function MobileToolbar() {
   const { t } = useI18n();
   const isMobile = useIsMobile();
   const openGallery = useAppStore((s) => s.openGallery);
+  const openPromptLibrary = useAppStore((s) => s.openPromptLibrary);
   const provider = useAppStore((s) => s.provider);
   const setUIMode = useAppStore((s) => s.setUIMode);
   const setRightPanelOpen = useAppStore((s) => s.setRightPanelOpen);
@@ -61,7 +71,6 @@ export function MobileToolbar() {
         </div>
       </div>
       <div className="mobile-toolbar__actions">
-        <LanguageToggle />
         <button
           type="button"
           className="mobile-toolbar__icon-btn"
@@ -70,6 +79,15 @@ export function MobileToolbar() {
           title={t("uiMode.node")}
         >
           <NodeIcon />
+        </button>
+        <button
+          type="button"
+          className="mobile-toolbar__icon-btn"
+          onClick={() => void openPromptLibrary()}
+          aria-label={t("promptLibrary.open")}
+          title={t("promptLibrary.open")}
+        >
+          <LibraryIcon />
         </button>
         <button
           type="button"
@@ -89,6 +107,7 @@ export function MobileToolbar() {
         >
           <SettingsIcon />
         </button>
+        <LanguageToggle />
       </div>
     </header>
   );

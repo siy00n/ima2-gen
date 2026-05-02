@@ -82,6 +82,31 @@ function thumbnail(color, label) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+function tallResultImage() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="2400"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#111827"/><stop offset="0.52" stop-color="#0f766e"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs><rect width="900" height="2400" fill="url(#g)"/><circle cx="450" cy="650" r="230" fill="rgba(255,255,255,0.18)"/><rect x="210" y="1180" width="480" height="760" rx="84" fill="rgba(255,255,255,0.16)"/><text x="450" y="2130" text-anchor="middle" font-size="84" font-family="Arial" fill="white">Classic Tall</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function classicHistoryItems() {
+  return [
+    {
+      filename: "mobile-classic-tall.svg",
+      url: tallResultImage(),
+      createdAt: Date.now(),
+      prompt:
+        "A tall editorial product image for mobile layout testing, with a long prompt that should remain readable while Download, Copy image, Copy prompt, and Continue here stay tappable.",
+      quality: "low",
+      size: "1024x2736",
+      format: "png",
+      provider: "oauth",
+      usage: { total_tokens: 321 },
+      webSearchCalls: 0,
+      kind: "classic",
+      isFavorite: false,
+    },
+  ];
+}
+
 function graphNode(id, x, y, data) {
   return {
     id,
@@ -277,8 +302,65 @@ async function openMobileNodePage(browser, baseUrl, viewport) {
   return { context, page };
 }
 
+async function openMobileClassicPage(browser, baseUrl, viewport) {
+  const context = await browser.newContext({
+    baseURL: baseUrl,
+    viewport,
+    isMobile: true,
+    hasTouch: true,
+    deviceScaleFactor: 2,
+  });
+  const historyItems = classicHistoryItems();
+  await context.route("**/api/history**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("groupBy") === "session") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          sessions: [],
+          loose: historyItems,
+          total: historyItems.length,
+          nextCursor: null,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: historyItems,
+        total: historyItems.length,
+        nextCursor: null,
+      }),
+    });
+  });
+  await context.addInitScript(() => {
+    localStorage.setItem("ima2.uiMode", "classic");
+    localStorage.setItem("ima2.locale", "en");
+    localStorage.setItem("ima2.selectedFilename", "mobile-classic-tall.svg");
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  await page.locator(".mobile-toolbar").waitFor({ state: "visible", timeout: 15_000 });
+  await page.locator(".result-container.visible").waitFor({ state: "visible", timeout: 15_000 });
+  return { context, page };
+}
+
 async function clickBottomTab(page, name) {
   await page.locator(".mobile-node-tabs").getByRole("button", { name }).click();
+}
+
+async function assertMobileToolbarHitTarget(page) {
+  const misses = await page.evaluate(() => {
+    return [...document.querySelectorAll(".mobile-toolbar__actions button, .mobile-toolbar .lang-toggle__btn")].flatMap((button) => {
+      const rect = button.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const target = document.elementFromPoint(x, y);
+      return target?.closest("button") === button ? [] : [button.getAttribute("aria-label") || button.textContent?.trim() || "toolbar button"];
+    });
+  });
+  assert(misses.length === 0, `Mobile toolbar hit target blocked at: ${misses.join(", ")}`);
 }
 
 async function assertBottomTabsHitTarget(page) {
@@ -401,6 +483,67 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
   }
 }
 
+async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
+  const label = `${viewport.width}x${viewport.height}`;
+  const { context, page } = await openMobileClassicPage(browser, baseUrl, viewport);
+  try {
+    await page.locator(".result-img").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".result-prompt").waitFor({ state: "visible", timeout: 5_000 });
+    for (const name of ["Download", "Copy image", "Copy prompt", "Continue here"]) {
+      await page.locator(".result-actions").getByRole("button", { name, exact: true }).waitFor({ state: "visible", timeout: 5_000 });
+    }
+
+    const resultLayout = await page.evaluate(() => {
+      const image = document.querySelector(".result-img")?.getBoundingClientRect();
+      const prompt = document.querySelector(".result-prompt")?.getBoundingClientRect();
+      const actions = document.querySelector(".result-actions")?.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      return {
+        imageOk: !!image && image.width > 40 && image.height > 80 && image.bottom <= viewportHeight,
+        promptOk: !!prompt && prompt.height > 20 && prompt.bottom <= viewportHeight,
+        actionsOk: !!actions && actions.height > 40 && actions.bottom <= viewportHeight + 1,
+      };
+    });
+    assert(resultLayout.imageOk, `${label}: Classic tall image is not contained in viewport`);
+    assert(resultLayout.promptOk, `${label}: Classic prompt summary is not reachable`);
+    assert(resultLayout.actionsOk, `${label}: Classic action bar is not reachable`);
+
+    await assertMobileToolbarHitTarget(page);
+
+    await page.getByRole("button", { name: "Open prompt library" }).click();
+    await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__close").click();
+    await page.locator(".prompt-library-panel").waitFor({ state: "hidden", timeout: 5_000 });
+
+    await page.getByRole("button", { name: "Open gallery" }).click();
+    await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
+    await page.getByLabel("Close gallery").click();
+    await page.locator(".gallery").waitFor({ state: "hidden", timeout: 5_000 });
+
+    await page.getByRole("button", { name: "Show settings" }).click();
+    await page.locator(".right-panel.drawer-open").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".right-panel").getByText("Size / Format").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".right-panel-toggle").click();
+    await page.locator(".right-panel.drawer-open").waitFor({ state: "hidden", timeout: 5_000 });
+
+    await page.locator(".mobile-prompt-peek").click();
+    await page.locator(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .composer__textarea").waitFor({ state: "visible", timeout: 5_000 });
+    await page.getByRole("button", { name: "Hide prompt" }).click();
+    await page.locator(".mobile-prompt-peek").waitFor({ state: "visible", timeout: 5_000 });
+
+    await page.getByRole("button", { name: "Node" }).click();
+    await page.locator(".mobile-node-workspace").waitFor({ state: "visible", timeout: 5_000 });
+  } catch (err) {
+    await mkdir(screenshotDir, { recursive: true });
+    const screenshotPath = join(screenshotDir, `mobile-classic-smoke-${label}.png`);
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    err.message = `${err.message}\nScreenshot: ${screenshotPath}`;
+    throw err;
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   if (!existsSync(DIST_INDEX)) {
     throw new Error("ui/dist/index.html is missing. Run `npm run build` before `npm run test:mobile`.");
@@ -437,9 +580,10 @@ async function main() {
     await seedSession(baseUrl);
     browser = await chromium.launch({ headless: true });
     for (const viewport of VIEWPORTS) {
+      await runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir);
       await runViewportSmoke(browser, baseUrl, viewport, screenshotDir);
     }
-    console.log("Mobile Node smoke passed for 390x844 and 430x932.");
+    console.log("Mobile Classic and Node smoke passed for 390x844 and 430x932.");
   } catch (err) {
     keepArtifacts = true;
     console.error(serverOutput.trim());
