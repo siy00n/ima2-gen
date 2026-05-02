@@ -151,9 +151,12 @@ function MobileMapConnector({
     <span
       className="mobile-node-map-connector"
       data-active={active ? "true" : undefined}
+      data-edge-id={edge.id}
       data-has-context={edgeData.transferContext ? "true" : undefined}
       data-has-settings={edgeData.transferSettings ? "true" : undefined}
       data-image-transfer={edgeData.imageTransfer}
+      data-source={edge.source}
+      data-target={edge.target}
       style={
         {
           "--map-depth": depth,
