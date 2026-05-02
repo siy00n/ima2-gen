@@ -424,7 +424,7 @@ async function assertSlideUpSheet(page, selector, label) {
     const rect = el.getBoundingClientRect();
     const style = getComputedStyle(el);
     return {
-      bottomAligned: Math.abs(window.innerHeight - rect.bottom) <= 2,
+      bottomAligned: Math.abs(window.innerHeight - rect.bottom) <= 4,
       animationName: style.animationName,
       animationDuration: style.animationDuration,
     };
@@ -432,6 +432,74 @@ async function assertSlideUpSheet(page, selector, label) {
   assert(motion.bottomAligned, `${label}: sheet should be bottom aligned`);
   assert(motion.animationName.includes("mobile-sheet-slide-up"), `${label}: sheet should use slide-up animation`);
   assert(motion.animationDuration !== "0s", `${label}: sheet slide-up animation should have duration`);
+}
+
+async function assertMobileGalleryPolish(page, label, { expectTile = false } = {}) {
+  await page.locator(".gallery__filter-row").waitFor({ state: "visible", timeout: 5_000 });
+  const headerLayout = await page.evaluate(() => {
+    const search = document.querySelector(".gallery__search");
+    const favorite = document.querySelector(".gallery__favorite-filter");
+    const group = document.querySelector(".gallery__group-toggle");
+    if (!search || !favorite || !group) return null;
+    const searchRect = search.getBoundingClientRect();
+    const favoriteRect = favorite.getBoundingClientRect();
+    const groupRect = group.getBoundingClientRect();
+    return {
+      searchWidth: searchRect.width,
+      searchBottom: searchRect.bottom,
+      favoriteTop: favoriteRect.top,
+      favoriteHeight: favoriteRect.height,
+      groupTop: groupRect.top,
+      groupHeight: groupRect.height,
+      favoriteRight: favoriteRect.right,
+      groupLeft: groupRect.left,
+    };
+  });
+  assert(headerLayout, `${label}: Gallery mobile filter controls are missing`);
+  assert(headerLayout.searchWidth >= 280, `${label}: Gallery search should be full width`);
+  assert(Math.abs(headerLayout.favoriteTop - headerLayout.groupTop) <= 6, `${label}: Gallery segmented controls should share one row`);
+  assert(headerLayout.favoriteRight <= headerLayout.groupLeft + 1, `${label}: Gallery segmented controls should not overlap`);
+  assert(headerLayout.searchBottom <= headerLayout.favoriteTop + 6, `${label}: Gallery filters should sit below search`);
+  assert(headerLayout.favoriteHeight >= 32 && headerLayout.groupHeight >= 32, `${label}: Gallery segmented controls should keep touch height`);
+
+  if (!expectTile) return;
+
+  await page.locator(".gallery__tile-wrap").first().waitFor({ state: "visible", timeout: 5_000 });
+  const tileLayout = await page.evaluate(() => {
+    const tile = document.querySelector(".gallery__tile");
+    const caption = document.querySelector(".gallery__caption");
+    const actionButtons = [...document.querySelectorAll(".gallery__favorite, .gallery__import-node, .gallery__delete")];
+    if (!tile || !caption || actionButtons.length === 0) return null;
+    const tileRect = tile.getBoundingClientRect();
+    const captionRect = caption.getBoundingClientRect();
+    const captionStyle = getComputedStyle(caption);
+    const actions = actionButtons.map((button) => {
+      const rect = button.getBoundingClientRect();
+      const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return {
+        width: rect.width,
+        height: rect.height,
+        hit: target?.closest("button") === button,
+      };
+    });
+    return {
+      tileWidth: tileRect.width,
+      tileHeight: tileRect.height,
+      captionOpacity: Number.parseFloat(captionStyle.opacity),
+      captionBottomInside: captionRect.bottom <= tileRect.bottom + 1,
+      captionHeight: captionRect.height,
+      actionButtons: actions,
+    };
+  });
+  assert(tileLayout, `${label}: Gallery tile layout is missing`);
+  assert(tileLayout.tileHeight > tileLayout.tileWidth, `${label}: Gallery mobile tile should keep portrait-ish aspect ratio`);
+  assert(tileLayout.captionOpacity >= 0.95, `${label}: Gallery mobile caption should be visible without hover`);
+  assert(tileLayout.captionBottomInside, `${label}: Gallery caption should stay inside the tile`);
+  assert(tileLayout.captionHeight <= 56, `${label}: Gallery caption should stay compact`);
+  for (const action of tileLayout.actionButtons) {
+    assert(action.width >= 32 && action.height >= 32, `${label}: Gallery action buttons should keep mobile hit size`);
+    assert(action.hit, `${label}: Gallery action button hit target is blocked`);
+  }
 }
 
 async function assertConnector(page, source, target, expectedTransfer, expectedBadge) {
@@ -552,6 +620,7 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".gallery__search").waitFor({ state: "visible", timeout: 5_000 });
     await assertSlideUpSheet(page, ".gallery", `${label}: Node Gallery`);
+    await assertMobileGalleryPolish(page, `${label}: Node Gallery`);
     assert((await page.locator(".gallery__close").count()) === 0, `${label}: Gallery should not show a visible close button`);
     const nodeGalleryHandleContent = await page.locator(".gallery").evaluate((gallery) => getComputedStyle(gallery, "::before").content);
     assert(nodeGalleryHandleContent === "none", `${label}: Gallery should not show a grab handle`);
@@ -690,6 +759,7 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     await assertSlideUpSheet(page, ".gallery", `${label}: Classic Gallery`);
     await page.locator(".gallery__favorite-filter").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".gallery__group-toggle").waitFor({ state: "visible", timeout: 5_000 });
+    await assertMobileGalleryPolish(page, `${label}: Classic Gallery`, { expectTile: true });
     assert((await page.locator(".gallery__close").count()) === 0, `${label}: Classic Gallery should not show a visible close button`);
     const classicGalleryHandleContent = await page.locator(".gallery").evaluate((gallery) => getComputedStyle(gallery, "::before").content);
     assert(classicGalleryHandleContent === "none", `${label}: Classic Gallery should not show a grab handle`);

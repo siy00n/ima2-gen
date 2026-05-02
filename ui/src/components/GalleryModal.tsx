@@ -387,11 +387,21 @@ export function GalleryModal() {
         >
           <div className="gallery__header">
             <div className="gallery__title-row">
-              <div className="gallery__title">{t("gallery.title")}</div>
+              <h2 className="gallery__title">{t("gallery.title")}</h2>
               <div className="gallery__meta">
                 {t("gallery.total", { n: totalVisible })}
                 {query || favoritesOnly ? t("gallery.totalFiltered", { n: history.length }) : ""}
               </div>
+            </div>
+            <input
+              type="search"
+              className="gallery__search"
+              placeholder={showSessions ? t("gallery.searchDisabledPlaceholder") : t("gallery.searchPlaceholder")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              disabled={showSessions}
+            />
+            <div className="gallery__filter-row">
               <div className="gallery__favorite-filter" role="tablist" aria-label={t("gallery.favoriteFilterAria")}>
                 <button
                   type="button"
@@ -433,14 +443,6 @@ export function GalleryModal() {
                 </button>
               </div>
             </div>
-            <input
-              type="search"
-              className="gallery__search"
-              placeholder={showSessions ? t("gallery.searchDisabledPlaceholder") : t("gallery.searchPlaceholder")}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              disabled={showSessions}
-            />
           </div>
 
           <div
