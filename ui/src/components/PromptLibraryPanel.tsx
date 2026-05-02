@@ -247,6 +247,7 @@ export function PromptLibraryPanel({
                 className="prompt-library-panel__close"
                 onClick={onClose}
                 aria-label={labels.close || "Close"}
+                title={labels.close || "Close"}
               >
                 ×
               </button>

@@ -485,6 +485,8 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
 
     await page.locator(".mobile-node-connection-summary__main").click();
     await page.locator(".mobile-node-panel--connection").waitFor({ state: "visible", timeout: 5_000 });
+    const connectionDoneHeight = await page.locator(".mobile-node-panel--connection .mobile-node-panel__header").getByRole("button", { name: "Done" }).evaluate((button) => button.getBoundingClientRect().height);
+    assert(connectionDoneHeight >= 36, `${label}: Connection Done button should use sheet header sizing`);
     const summaryImg = page.locator(".mobile-node-connection-context__summary .mobile-node-edge-chip--image");
     assert((await summaryImg.textContent())?.trim() === "IMG -", `${label}: expected initial incoming IMG -`);
     await summaryImg.click();
@@ -512,10 +514,21 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
 
     await page.getByRole("button", { name: "Open gallery" }).click();
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".gallery__search").waitFor({ state: "visible", timeout: 5_000 });
+    const nodeGalleryCloseSize = await page.getByLabel("Close gallery").evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    });
+    assert(nodeGalleryCloseSize.width >= 36 && nodeGalleryCloseSize.height >= 36, `${label}: Gallery close should use mobile sheet sizing`);
     await page.getByLabel("Close gallery").click();
     await page.locator(".gallery").waitFor({ state: "hidden", timeout: 5_000 });
     await page.getByRole("button", { name: "Open prompt library" }).click();
     await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
+    const nodeLibraryCloseSize = await page.locator(".prompt-library-panel__close").evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    });
+    assert(nodeLibraryCloseSize.width >= 36 && nodeLibraryCloseSize.height >= 36, `${label}: Prompt Library close should use mobile sheet sizing`);
     await page.locator(".prompt-library-panel__close").click();
     await page.locator(".prompt-library-panel").waitFor({ state: "hidden", timeout: 5_000 });
     await assertBottomTabsHitTarget(page);
@@ -573,16 +586,19 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
 
     await page.getByRole("button", { name: "Open prompt library" }).click();
     await page.locator(".prompt-library-panel").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".prompt-library-panel__title").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__close").click();
     await page.locator(".prompt-library-panel").waitFor({ state: "hidden", timeout: 5_000 });
 
     await page.getByRole("button", { name: "Open gallery" }).click();
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".gallery__search").waitFor({ state: "visible", timeout: 5_000 });
     await page.getByLabel("Close gallery").click();
     await page.locator(".gallery").waitFor({ state: "hidden", timeout: 5_000 });
 
     await page.getByRole("button", { name: "Show settings" }).click();
     await page.locator(".right-panel.drawer-open").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".mobile-sheet-header--settings").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".right-panel").getByText("Size / Format").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".right-panel-toggle").click();
     await page.locator(".right-panel.drawer-open").waitFor({ state: "hidden", timeout: 5_000 });

@@ -86,14 +86,23 @@ export function RightPanel() {
           aria-controls="right-panel-body"
           onClick={() => (isMobile ? setOpen(false) : toggle())}
           title={open ? t("panel.toggleHide") : t("panel.toggleShow")}
+          aria-label={isMobile ? t("panel.closeSettings") : open ? t("panel.toggleHide") : t("panel.toggleShow")}
         >
-          {isMobile ? (open ? t("panel.close") : t("panel.open")) : open ? ">" : "<"}
+          {isMobile ? "×" : open ? ">" : "<"}
         </button>
         <div
           id="right-panel-body"
           className="right-panel-body"
           hidden={!open}
         >
+          {isMobile ? (
+            <header className="mobile-sheet-header mobile-sheet-header--settings">
+              <div>
+                <h2>{t("panel.detailSettings")}</h2>
+                <p>{model} · {quality} · {resolvedSize}</p>
+              </div>
+            </header>
+          ) : null}
           <BillingBar />
           {uiMode === "node" ? (
             <NodeInspector />
