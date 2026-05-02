@@ -2633,6 +2633,50 @@ button.workflow-edge-badge__chip {
     font-weight: 800;
   }
 
+  .result-actions--mobile {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .result-actions__primary {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .result-actions__primary svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .result-actions__secondary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .result-actions__secondary-btn {
+    min-height: 42px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 4px;
+    color: #d8d6e6;
+    font-size: 10px;
+    line-height: 1.1;
+  }
+
+  .result-actions__secondary-btn svg {
+    width: 15px;
+    height: 15px;
+    opacity: 0.82;
+  }
+
   .right-panel {
     height: min(86dvh, 760px);
     max-height: calc(100dvh - 12px);

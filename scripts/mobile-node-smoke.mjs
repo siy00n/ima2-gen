@@ -541,21 +541,33 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     for (const name of ["Download", "Copy image", "Copy prompt", "Continue here"]) {
       await page.locator(".result-actions").getByRole("button", { name, exact: true }).waitFor({ state: "visible", timeout: 5_000 });
     }
+    await page.locator(".result-actions__primary").filter({ hasText: "Continue here" }).waitFor({ state: "visible", timeout: 5_000 });
+    for (const name of ["Copy image", "Download", "Copy prompt"]) {
+      await page.locator(".result-actions__secondary").getByRole("button", { name, exact: true }).waitFor({ state: "visible", timeout: 5_000 });
+    }
 
     const resultLayout = await page.evaluate(() => {
       const image = document.querySelector(".result-img")?.getBoundingClientRect();
       const prompt = document.querySelector(".result-prompt")?.getBoundingClientRect();
       const actions = document.querySelector(".result-actions")?.getBoundingClientRect();
+      const primary = document.querySelector(".result-actions__primary")?.getBoundingClientRect();
+      const secondaryButtons = [...document.querySelectorAll(".result-actions__secondary button")].map((button) =>
+        button.getBoundingClientRect(),
+      );
       const viewportHeight = window.innerHeight;
       return {
         imageOk: !!image && image.width > 40 && image.height > 80 && image.bottom <= viewportHeight,
         promptOk: !!prompt && prompt.height > 20 && prompt.bottom <= viewportHeight,
         actionsOk: !!actions && actions.height > 40 && actions.bottom <= viewportHeight + 1,
+        primaryOk: !!primary && primary.height >= 44,
+        secondaryOk: secondaryButtons.length === 3 && secondaryButtons.every((button) => button.width > 40 && button.height >= 40),
       };
     });
     assert(resultLayout.imageOk, `${label}: Classic tall image is not contained in viewport`);
     assert(resultLayout.promptOk, `${label}: Classic prompt summary is not reachable`);
     assert(resultLayout.actionsOk, `${label}: Classic action bar is not reachable`);
+    assert(resultLayout.primaryOk, `${label}: Classic Continue here primary action is too small`);
+    assert(resultLayout.secondaryOk, `${label}: Classic secondary result actions are not tappable`);
 
     await assertMobileToolbarHitTarget(page);
 
