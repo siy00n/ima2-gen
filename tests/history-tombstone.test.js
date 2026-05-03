@@ -44,7 +44,14 @@ describe("History: delete tombstone + pagination", () => {
       const ts = Date.now() + i;
       const fn = `${TEST_PREFIX}${ts}_${i}.png`;
       writeFileSync(join(GEN_DIR, fn), pngStub);
+      writeFileSync(join(GEN_DIR, `${fn}.json`), JSON.stringify({
+        createdAt: ts,
+        prompt: `server-search-${TEST_PREFIX}-${i}`,
+        kind: "classic",
+        provider: "oauth",
+      }));
       createdFiles.push(fn);
+      createdFiles.push(`${fn}.json`);
     }
     const invalidFn = `${TEST_PREFIX}invalid.png`;
     writeFileSync(join(GEN_DIR, invalidFn), "hello");
@@ -147,7 +154,8 @@ describe("History: delete tombstone + pagination", () => {
     const body = await res.json();
     const invalid = body.items.find((item) => item.filename?.endsWith("invalid.png"));
     assert.strictEqual(invalid, undefined, "invalid png is hidden from history");
-    const seeded = body.items.find((item) => item.filename === createdFiles[1]);
+    const seededFilename = createdFiles.find((name) => name.endsWith("_1.png"));
+    const seeded = body.items.find((item) => item.filename === seededFilename);
     assert.ok(seeded?.thumb?.startsWith("/api/history/thumbnail?"), "thumbnail URL is exposed");
 
     const thumbRes = await fetch(`${base}${seeded.thumb}`);
@@ -155,5 +163,44 @@ describe("History: delete tombstone + pagination", () => {
     assert.match(thumbRes.headers.get("content-type") || "", /^image\/webp/);
     const thumbBytes = Buffer.from(await thumbRes.arrayBuffer());
     assert.ok(thumbBytes.length > 0, "thumbnail body is non-empty");
+  });
+
+  it("history search and favorite filters paginate over the filtered result set", async () => {
+    const query = `server-search-${TEST_PREFIX}`;
+    const searchRes1 = await fetch(`${base}/api/history?limit=2&q=${encodeURIComponent(query)}`);
+    assert.strictEqual(searchRes1.status, 200);
+    const searchPage1 = await searchRes1.json();
+    assert.strictEqual(searchPage1.total, 3, "search total is filtered");
+    assert.strictEqual(searchPage1.items.length, 2, "search page respects limit");
+    assert.ok(searchPage1.items.every((item) => item.prompt?.includes(query)), "search only returns matching prompts");
+    assert.ok(searchPage1.nextCursor, "search page exposes cursor");
+
+    const { before, beforeFilename } = searchPage1.nextCursor;
+    const searchRes2 = await fetch(
+      `${base}/api/history?limit=2&q=${encodeURIComponent(query)}&before=${before}&beforeFilename=${encodeURIComponent(beforeFilename)}`,
+    );
+    assert.strictEqual(searchRes2.status, 200);
+    const searchPage2 = await searchRes2.json();
+    assert.strictEqual(searchPage2.total, 3, "cursor search keeps filtered total");
+    assert.strictEqual(searchPage2.items.length, 1, "cursor returns remaining filtered result");
+    assert.ok(
+      !searchPage2.items.some((b) => searchPage1.items.some((a) => a.filename === b.filename)),
+      "search cursor has no overlap",
+    );
+
+    const favoriteTarget = createdFiles.find((name) => name.endsWith("_1.png"));
+    const favoriteRes = await fetch(`${base}/api/history/${encodeURIComponent(favoriteTarget)}/favorite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorite: true }),
+    });
+    assert.strictEqual(favoriteRes.status, 200);
+
+    const favoritesRes = await fetch(`${base}/api/history?favoritesOnly=true&q=${encodeURIComponent(query)}&limit=10`);
+    assert.strictEqual(favoritesRes.status, 200);
+    const favoritesPage = await favoritesRes.json();
+    assert.strictEqual(favoritesPage.total, 1, "favorites total is filtered");
+    assert.strictEqual(favoritesPage.items[0]?.filename, favoriteTarget);
+    assert.strictEqual(favoritesPage.items[0]?.isFavorite, true);
   });
 });

@@ -130,7 +130,14 @@ export type HistoryGroupedPage = {
 };
 
 export function getHistory(
-  params: { limit?: number; since?: number; cursor?: HistoryCursor; sessionId?: string } = {},
+  params: {
+    limit?: number;
+    since?: number;
+    cursor?: HistoryCursor;
+    sessionId?: string;
+    q?: string;
+    favoritesOnly?: boolean;
+  } = {},
 ): Promise<HistoryPage> {
   const qs = new URLSearchParams();
   qs.set("limit", String(params.limit ?? 50));
@@ -140,6 +147,8 @@ export function getHistory(
     qs.set("beforeFilename", params.cursor.beforeFilename);
   }
   if (params.sessionId) qs.set("sessionId", params.sessionId);
+  if (params.q) qs.set("q", params.q);
+  if (params.favoritesOnly) qs.set("favoritesOnly", "true");
   return jsonFetch(`/api/history?${qs.toString()}`);
 }
 

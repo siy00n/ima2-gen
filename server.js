@@ -820,6 +820,13 @@ app.get("/api/history", async (req, res) => {
     const sinceTs = parseInt(req.query.since);
     const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : null;
     const groupBy = req.query.groupBy === "session" ? "session" : null;
+    const searchQuery = groupBy
+      ? ""
+      : typeof req.query.q === "string"
+        ? req.query.q.trim().toLowerCase()
+        : "";
+    const favoritesOnly =
+      !groupBy && (req.query.favoritesOnly === "1" || req.query.favoritesOnly === "true");
 
     const imgs = await listImages(dir);
     const favorites = listGalleryFavoriteFilenames();
@@ -864,6 +871,21 @@ app.get("/api/history", async (req, res) => {
     });
 
     let filtered = rows;
+    if (searchQuery) {
+      filtered = filtered.filter((r) => {
+        const prompt = String(r.prompt || "").toLowerCase();
+        const filename = String(r.filename || "").toLowerCase();
+        return prompt.includes(searchQuery) || filename.includes(searchQuery);
+      });
+    }
+    if (favoritesOnly) {
+      filtered = filtered.filter((r) => r.isFavorite);
+    }
+    if (sessionId) {
+      filtered = filtered.filter((r) => r.sessionId === sessionId);
+    }
+    const total = filtered.length;
+
     if (Number.isFinite(sinceTs)) {
       filtered = filtered.filter((r) => r.createdAt > sinceTs);
     }
@@ -874,10 +896,6 @@ app.get("/api/history", async (req, res) => {
         return false;
       });
     }
-    if (sessionId) {
-      filtered = filtered.filter((r) => r.sessionId === sessionId);
-    }
-
     const page = filtered.slice(0, limit);
     const nextCursor = page.length === limit && filtered.length > limit
       ? { before: page[page.length - 1].createdAt, beforeFilename: page[page.length - 1].filename }
@@ -904,7 +922,7 @@ app.get("/api/history", async (req, res) => {
       return res.json({ sessions, loose, total: rows.length, nextCursor });
     }
 
-    res.json({ items: page, total: rows.length, nextCursor });
+    res.json({ items: page, total, nextCursor });
   } catch (err) {
     console.error("[history] error:", err.message);
     res.status(500).json({ error: err.message });

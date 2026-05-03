@@ -482,7 +482,7 @@ async function assertSlideUpSheet(page, selector, label) {
   assert(motion.animationDuration !== "0s", `${label}: sheet slide-up animation should have duration`);
 }
 
-async function assertMobileGalleryPolish(page, label, { expectTile = false } = {}) {
+async function assertMobileGalleryPolish(page, label, { expectTile = false, expectServerSearch = false } = {}) {
   await page.locator(".gallery__filter-row").waitFor({ state: "visible", timeout: 5_000 });
   const headerLayout = await page.evaluate(() => {
     const search = document.querySelector(".gallery__search");
@@ -611,6 +611,25 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
       `${label}: Gallery reopen should preserve the newest item order after Load more`,
     );
   }
+
+  if (expectServerSearch) {
+    await page.locator(".gallery__search").fill("fixture 83");
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll(".gallery__caption-text")]
+        .some((caption) => (caption.textContent || "").includes("fixture 83")),
+    );
+    const searchState = await page.evaluate(() => ({
+      tileCount: document.querySelectorAll(".gallery__tile-wrap").length,
+      captions: [...document.querySelectorAll(".gallery__caption-text")].map((caption) => caption.textContent || ""),
+      imageSources: [...document.querySelectorAll(".gallery__tile img")].map((img) => img.getAttribute("src") || ""),
+    }));
+    assert(searchState.tileCount >= 1, `${label}: server search should return at least one tile`);
+    assert(searchState.tileCount <= 72, `${label}: server search should keep initial page bounded`);
+    assert(searchState.captions.every((caption) => caption.includes("fixture 83")), `${label}: server search should filter Gallery captions`);
+    assert(searchState.imageSources.every((src) => src.startsWith("data:") || src.includes("/api/history/thumbnail?")), `${label}: server search should use thumbnails`);
+    await page.locator(".gallery__search").fill("");
+    await page.waitForFunction(() => document.querySelectorAll(".gallery__tile-wrap").length > 1);
+  }
 }
 
 async function assertConnector(page, source, target, expectedTransfer, expectedBadge) {
@@ -731,7 +750,7 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".gallery__search").waitFor({ state: "visible", timeout: 5_000 });
     await assertSlideUpSheet(page, ".gallery", `${label}: Node Gallery`);
-    await assertMobileGalleryPolish(page, `${label}: Node Gallery`, { expectTile: true });
+    await assertMobileGalleryPolish(page, `${label}: Node Gallery`, { expectTile: true, expectServerSearch: true });
     assert((await page.locator(".gallery__close").count()) === 0, `${label}: Gallery should not show a visible close button`);
     const nodeGalleryHandleContent = await page.locator(".gallery").evaluate((gallery) => getComputedStyle(gallery, "::before").content);
     assert(nodeGalleryHandleContent === "none", `${label}: Gallery should not show a grab handle`);

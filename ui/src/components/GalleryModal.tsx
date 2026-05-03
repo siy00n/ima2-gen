@@ -3,8 +3,10 @@ import { useAppStore } from "../store/useAppStore";
 import type { GenerateItem } from "../types";
 import {
   deleteHistoryItem,
+  getHistory,
   restoreHistoryItem,
   getHistoryGrouped,
+  toggleHistoryFavorite as toggleHistoryFavoriteApi,
   type HistoryCursor,
   type HistoryItem,
 } from "../lib/api";
@@ -130,6 +132,16 @@ function mergeSessionGroups(
   return Array.from(bySession.values());
 }
 
+function itemMatchesDateSearch(item: GenerateItem, query: string, favoritesOnly: boolean): boolean {
+  if (favoritesOnly && !item.isFavorite) return false;
+  const q = query.trim().toLowerCase().normalize("NFC");
+  if (!q) return true;
+  return (
+    (item.prompt ?? "").toLowerCase().normalize("NFC").includes(q) ||
+    (item.filename ?? "").toLowerCase().normalize("NFC").includes(q)
+  );
+}
+
 export function GalleryModal() {
   const { t } = useI18n();
   const open = useAppStore((s) => s.galleryOpen);
@@ -156,6 +168,11 @@ export function GalleryModal() {
   const [groupCursor, setGroupCursor] = useState<HistoryCursor | null>(null);
   const [groupTotal, setGroupTotal] = useState(0);
   const [groupLoadingMore, setGroupLoadingMore] = useState(false);
+  const [searchItems, setSearchItems] = useState<GenerateItem[]>([]);
+  const [searchCursor, setSearchCursor] = useState<HistoryCursor | null>(null);
+  const [searchTotal, setSearchTotal] = useState(0);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchLoadingMore, setSearchLoadingMore] = useState(false);
   const [pending, setPending] = useState<TrashPending | null>(null);
   const [previewItem, setPreviewItem] = useState<GenerateItem | null>(null);
   const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(() => new Set());
@@ -167,6 +184,9 @@ export function GalleryModal() {
   const restoreScrollTopRef = useRef<number | null>(null);
 
   const dismissGallery = useMobileBackDismiss(open, close);
+  const showSessions = groupBy === "session";
+  const dateSearchQuery = query.trim();
+  const dateSearchActive = !showSessions && (dateSearchQuery.length > 0 || favoritesOnly);
 
   useEffect(() => {
     if (!open) return;
@@ -232,18 +252,54 @@ export function GalleryModal() {
     setGroupLoadingMore(false);
   }, [groupBy, open]);
 
+  useEffect(() => {
+    if (!open || !dateSearchActive) {
+      setSearchItems([]);
+      setSearchCursor(null);
+      setSearchTotal(0);
+      setSearchLoading(false);
+      setSearchLoadingMore(false);
+      return;
+    }
+    let cancelled = false;
+    restoreScrollTopRef.current = 0;
+    lastScrollTopRef.current = 0;
+    (async () => {
+      try {
+        setSearchLoading(true);
+        setSearchItems([]);
+        setSearchCursor(null);
+        setSearchTotal(0);
+        const page = await getHistory({
+          limit: HISTORY_INITIAL_PAGE_SIZE,
+          q: dateSearchQuery || undefined,
+          favoritesOnly,
+        });
+        if (cancelled) return;
+        const items = page.items
+          .map(historyItemToGalleryItem)
+          .filter((item) => isVisibleGalleryItem(item, historyTombstones));
+        setSearchItems(items);
+        setSearchCursor(page.nextCursor);
+        setSearchTotal(page.total);
+      } catch (err) {
+        if (!cancelled) console.warn("[gallery] search failed", err);
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dateSearchActive, dateSearchQuery, favoritesOnly, historyTombstones, open]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase().normalize("NFC");
-    return history.filter((h) => {
+    const source = dateSearchActive ? searchItems : history;
+    return source.filter((h) => {
       if (!isVisibleGalleryItem(h, historyTombstones)) return false;
-      if (favoritesOnly && !h.isFavorite) return false;
-      if (!q) return true;
-      return (
-        (h.prompt ?? "").toLowerCase().normalize("NFC").includes(q) ||
-        (h.filename ?? "").toLowerCase().normalize("NFC").includes(q)
-      );
+      return !dateSearchActive || itemMatchesDateSearch(h, dateSearchQuery, favoritesOnly);
     });
-  }, [history, historyTombstones, query, favoritesOnly]);
+  }, [dateSearchActive, dateSearchQuery, favoritesOnly, history, historyTombstones, searchItems]);
 
   const visibleSessionGroups = useMemo(() => {
     return sessionGroups
@@ -272,16 +328,19 @@ export function GalleryModal() {
     return Array.from(map.entries());
   }, [filtered]);
 
-  const showSessions = groupBy === "session";
   const totalVisible = showSessions
     ? visibleSessionGroups.reduce((a, g) => a + g.items.length, 0) + visibleLoose.length
-    : filtered.length;
-  const hasMoreItems = showSessions ? !!groupCursor : historyHasMore;
-  const loadingMore = showSessions ? groupLoadingMore : historyLoadingMore;
+    : dateSearchActive
+      ? searchTotal
+      : filtered.length;
+  const hasMoreItems = showSessions ? !!groupCursor : dateSearchActive ? !!searchCursor : historyHasMore;
+  const loadingMore = showSessions ? groupLoadingMore : dateSearchActive ? searchLoadingMore : historyLoadingMore;
   const shownItemCount = showSessions
     ? sessionGroups.reduce((a, g) => a + g.items.length, 0) + loose.length
-    : history.length;
-  const totalItemCount = showSessions ? groupTotal : historyTotal;
+    : dateSearchActive
+      ? searchItems.length
+      : history.length;
+  const totalItemCount = showSessions ? groupTotal : dateSearchActive ? searchTotal : historyTotal;
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -344,6 +403,27 @@ export function GalleryModal() {
       }
       return;
     }
+    if (dateSearchActive) {
+      if (!searchCursor) return;
+      setSearchLoadingMore(true);
+      try {
+        const page = await getHistory({
+          limit: HISTORY_PAGE_SIZE,
+          cursor: searchCursor,
+          q: dateSearchQuery || undefined,
+          favoritesOnly,
+        });
+        const nextItems = page.items
+          .map(historyItemToGalleryItem)
+          .filter((item) => isVisibleGalleryItem(item, historyTombstones));
+        setSearchItems((items) => mergeGalleryItems(items, nextItems, historyTombstones));
+        setSearchCursor(page.nextCursor);
+        setSearchTotal(page.total);
+      } finally {
+        setSearchLoadingMore(false);
+      }
+      return;
+    }
     await loadMoreHistory();
   }
 
@@ -365,6 +445,8 @@ export function GalleryModal() {
     try {
       const r = await deleteHistoryItem(item.filename);
       removeFromHistory(item.filename);
+      setSearchItems((items) => items.filter((candidate) => candidate.filename !== item.filename));
+      setSearchTotal((total) => Math.max(0, total - 1));
       setPending({
         filename: item.filename,
         trashId: r.trashId,
@@ -385,11 +467,10 @@ export function GalleryModal() {
 
   function handleToggleFavorite(item: GenerateItem, e: MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
-    if (!item.filename || !toggleGalleryFavorite) return;
+    if (!item.filename) return;
     if (historyTombstones.includes(item.filename)) return;
     const storeItem = history.find((candidate) => candidate.filename === item.filename);
-    if (!storeItem) return;
-    const nextFavorite = !(storeItem.isFavorite ?? item.isFavorite ?? false);
+    const nextFavorite = !(storeItem?.isFavorite ?? item.isFavorite ?? false);
     const updateItem = (candidate: GenerateItem): GenerateItem =>
       candidate.filename === item.filename ? { ...candidate, isFavorite: nextFavorite } : candidate;
     setSessionGroups((groups) =>
@@ -399,8 +480,23 @@ export function GalleryModal() {
       })),
     );
     setLoose((items) => items.map(updateItem));
+    setSearchItems((items) => {
+      const next = items.map(updateItem);
+      return favoritesOnly && !nextFavorite
+        ? next.filter((candidate) => candidate.filename !== item.filename)
+        : next;
+    });
+    if (favoritesOnly && !nextFavorite) {
+      setSearchTotal((total) => Math.max(0, total - 1));
+    }
     setPreviewItem((preview) => preview && preview.filename === item.filename ? { ...preview, isFavorite: nextFavorite } : preview);
-    void toggleGalleryFavorite(item.filename);
+    if (storeItem && toggleGalleryFavorite) {
+      void toggleGalleryFavorite(item.filename);
+    } else {
+      void toggleHistoryFavoriteApi(item.filename, nextFavorite).catch((err) => {
+        console.error("[gallery] favorite failed", err);
+      });
+    }
   }
 
   function handleTileClick(item: GenerateItem) {
@@ -417,6 +513,10 @@ export function GalleryModal() {
     try {
       await restoreHistoryItem(pending.filename, pending.trashId);
       addHistoryItem(pending.item);
+      if (dateSearchActive && itemMatchesDateSearch(pending.item, dateSearchQuery, favoritesOnly)) {
+        setSearchItems((items) => mergeGalleryItems(items, [pending.item], historyTombstones));
+        setSearchTotal((total) => total + 1);
+      }
     } catch (err) {
       console.error("[gallery] restore failed", err);
     } finally {
@@ -535,7 +635,7 @@ export function GalleryModal() {
               <h2 className="gallery__title">{t("gallery.title")}</h2>
               <div className="gallery__meta">
                 {t("gallery.total", { n: totalVisible })}
-                {query || favoritesOnly ? t("gallery.totalFiltered", { n: history.length }) : ""}
+                {dateSearchActive ? "" : query || favoritesOnly ? t("gallery.totalFiltered", { n: history.length }) : ""}
               </div>
             </div>
             <input
@@ -597,7 +697,9 @@ export function GalleryModal() {
               lastScrollTopRef.current = scrollRef.current?.scrollTop ?? 0;
             }}
           >
-            {showSessions ? (
+            {searchLoading && !showSessions ? (
+              <div className="gallery__empty">{t("gallery.loadingMore")}</div>
+            ) : showSessions ? (
               <>
                 {visibleSessionGroups.map((g) => (
                   <section key={g.sessionId} className="gallery__group">
@@ -629,7 +731,7 @@ export function GalleryModal() {
               </>
             ) : filtered.length === 0 ? (
               <div className="gallery__empty">
-                {history.length === 0
+                {!dateSearchActive && history.length === 0
                   ? t("gallery.emptyAll")
                   : favoritesOnly
                     ? t("gallery.emptyFavorites")
