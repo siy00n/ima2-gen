@@ -229,6 +229,7 @@
     "undo": "Undo",
     "secondsSuffix": "{n}s",
     "loadMore": "Load more ({shown}/{total})",
+    "loadingMore": "Loading...",
     "favoriteTitle": "Add to favorites",
     "unfavoriteTitle": "Remove from favorites",
     "favoriteAria": "Add to favorites",

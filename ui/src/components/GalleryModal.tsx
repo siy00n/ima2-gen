@@ -1,11 +1,18 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useAppStore } from "../store/useAppStore";
 import type { GenerateItem } from "../types";
-import { deleteHistoryItem, restoreHistoryItem, getHistoryGrouped } from "../lib/api";
+import {
+  deleteHistoryItem,
+  restoreHistoryItem,
+  getHistoryGrouped,
+  type HistoryCursor,
+  type HistoryItem,
+} from "../lib/api";
 import { getGalleryItemKey, getGalleryItemReactKey } from "../lib/galleryNavigation";
 import { useI18n } from "../i18n";
 import { useMobileBackDismiss } from "../hooks/useMobileBackDismiss";
 import { ImageLightbox } from "./ImageLightbox";
+import { HISTORY_INITIAL_PAGE_SIZE, HISTORY_PAGE_SIZE, narrowGenerateKind } from "../store/historyHelpers";
 
 type TrashPending = {
   filename: string;
@@ -24,9 +31,6 @@ type DateBucketKey = "earlier" | "today" | "yesterday" | "thisWeek" | string;
 type FavoriteActions = {
   toggleGalleryFavorite?: (filename: string) => void | Promise<void>;
 };
-
-const GALLERY_INITIAL_LIMIT = 72;
-const GALLERY_LOAD_MORE_STEP = 48;
 
 function dateBucket(createdAt: number | undefined): DateBucketKey {
   if (!createdAt) return "earlier";
@@ -72,36 +76,53 @@ function isVisibleGalleryItem(item: GenerateItem, tombstones: string[]): boolean
   return true;
 }
 
-function limitDateGroups(
-  groups: Array<[string, GenerateItem[]]>,
-  limit: number,
-): Array<[string, GenerateItem[], number]> {
-  let remaining = limit;
-  const limited: Array<[string, GenerateItem[], number]> = [];
-  for (const [label, items] of groups) {
-    if (remaining <= 0) break;
-    const shown = items.slice(0, remaining);
-    if (shown.length > 0) limited.push([label, shown, items.length]);
-    remaining -= shown.length;
-  }
-  return limited;
+function historyItemToGalleryItem(h: HistoryItem): GenerateItem {
+  return {
+    image: h.url,
+    url: h.url,
+    thumb: h.thumb ?? h.url,
+    filename: h.filename,
+    prompt: h.prompt ?? undefined,
+    size: h.size ?? undefined,
+    quality: h.quality ?? undefined,
+    provider: h.provider,
+    model: h.model ?? undefined,
+    createdAt: h.createdAt,
+    sessionId: h.sessionId ?? null,
+    nodeId: h.nodeId ?? null,
+    clientNodeId: h.clientNodeId ?? null,
+    kind: narrowGenerateKind(h.kind),
+    isFavorite: h.isFavorite ?? false,
+  };
 }
 
-function limitSessionGroups(
-  groups: SessionGroup[],
-  looseItems: GenerateItem[],
-  limit: number,
-): { groups: Array<SessionGroup & { total: number }>; loose: GenerateItem[]; looseTotal: number } {
-  let remaining = limit;
-  const limitedGroups: Array<SessionGroup & { total: number }> = [];
-  for (const group of groups) {
-    if (remaining <= 0) break;
-    const shown = group.items.slice(0, remaining);
-    if (shown.length > 0) limitedGroups.push({ ...group, items: shown, total: group.items.length });
-    remaining -= shown.length;
+function mergeGalleryItems(existing: GenerateItem[], incoming: GenerateItem[]): GenerateItem[] {
+  const next = [...existing];
+  const seen = new Set(next.map(getGalleryItemKey));
+  for (const item of incoming) {
+    const key = getGalleryItemKey(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(item);
   }
-  const loose = remaining > 0 ? looseItems.slice(0, remaining) : [];
-  return { groups: limitedGroups, loose, looseTotal: looseItems.length };
+  return next;
+}
+
+function mergeSessionGroups(existing: SessionGroup[], incoming: SessionGroup[]): SessionGroup[] {
+  const bySession = new Map(existing.map((group) => [group.sessionId, {
+    ...group,
+    items: [...group.items],
+  }]));
+  for (const group of incoming) {
+    const current = bySession.get(group.sessionId);
+    if (!current) {
+      bySession.set(group.sessionId, { ...group, items: [...group.items] });
+      continue;
+    }
+    current.label = group.label || current.label;
+    current.items = mergeGalleryItems(current.items, group.items);
+  }
+  return Array.from(bySession.values());
 }
 
 export function GalleryModal() {
@@ -110,6 +131,10 @@ export function GalleryModal() {
   const close = useAppStore((s) => s.closeGallery);
   const uiMode = useAppStore((s) => s.uiMode);
   const history = useAppStore((s) => s.history);
+  const historyTotal = useAppStore((s) => s.historyTotal);
+  const historyHasMore = useAppStore((s) => s.historyHasMore);
+  const historyLoadingMore = useAppStore((s) => s.historyLoadingMore);
+  const loadMoreHistory = useAppStore((s) => s.loadMoreHistory);
   const historyTombstones = useAppStore((s) => s.historyTombstones);
   const selectHistory = useAppStore((s) => s.selectHistory);
   const currentImage = useAppStore((s) => s.currentImage);
@@ -123,9 +148,11 @@ export function GalleryModal() {
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [sessionGroups, setSessionGroups] = useState<SessionGroup[]>([]);
   const [loose, setLoose] = useState<GenerateItem[]>([]);
+  const [groupCursor, setGroupCursor] = useState<HistoryCursor | null>(null);
+  const [groupTotal, setGroupTotal] = useState(0);
+  const [groupLoadingMore, setGroupLoadingMore] = useState(false);
   const [pending, setPending] = useState<TrashPending | null>(null);
   const [previewItem, setPreviewItem] = useState<GenerateItem | null>(null);
-  const [visibleLimit, setVisibleLimit] = useState(GALLERY_INITIAL_LIMIT);
   const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(() => new Set());
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -157,38 +184,26 @@ export function GalleryModal() {
     let cancelled = false;
     (async () => {
       try {
-        const page = await getHistoryGrouped({ limit: 500 });
+        setGroupLoadingMore(true);
+        setSessionGroups([]);
+        setLoose([]);
+        setGroupCursor(null);
+        setGroupTotal(0);
+        const page = await getHistoryGrouped({ limit: HISTORY_INITIAL_PAGE_SIZE });
         if (cancelled) return;
-        const toItem = (h: (typeof page.loose)[number]): GenerateItem => {
-          const k = h.kind;
-          const narrowedKind: GenerateItem["kind"] =
-            k === "classic" || k === "edit" || k === "generate" || k === "import" ? k : null;
-          return {
-            image: h.url,
-            url: h.url,
-            thumb: h.thumb ?? h.url,
-            filename: h.filename,
-            prompt: h.prompt ?? undefined,
-            size: h.size ?? undefined,
-            quality: h.quality ?? undefined,
-            provider: h.provider,
-            createdAt: h.createdAt,
-            sessionId: h.sessionId ?? null,
-            nodeId: h.nodeId ?? null,
-            clientNodeId: h.clientNodeId ?? null,
-            kind: narrowedKind,
-            isFavorite: (h as typeof h & { isFavorite?: boolean }).isFavorite ?? false,
-          };
-        };
         setSessionGroups(
           page.sessions.map((s) => ({
             sessionId: s.sessionId,
             label: s.sessionId.slice(0, 8),
-            items: s.items.map(toItem).filter((item) => isVisibleGalleryItem(item, historyTombstones)),
+            items: s.items.map(historyItemToGalleryItem).filter((item) => isVisibleGalleryItem(item, historyTombstones)),
           })).filter((group) => group.items.length > 0),
         );
-        setLoose(page.loose.map(toItem).filter((item) => isVisibleGalleryItem(item, historyTombstones)));
+        setLoose(page.loose.map(historyItemToGalleryItem).filter((item) => isVisibleGalleryItem(item, historyTombstones)));
+        setGroupCursor(page.nextCursor);
+        setGroupTotal(page.total);
+        setGroupLoadingMore(false);
       } catch {
+        setGroupLoadingMore(false);
         // Fallback: use current history only.
       }
     })();
@@ -196,6 +211,13 @@ export function GalleryModal() {
       cancelled = true;
     };
   }, [open, groupBy, historyTombstones]);
+
+  useEffect(() => {
+    if (!open || groupBy !== "date") return;
+    setGroupCursor(null);
+    setGroupTotal(0);
+    setGroupLoadingMore(false);
+  }, [groupBy, open]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase().normalize("NFC");
@@ -211,19 +233,21 @@ export function GalleryModal() {
   }, [history, historyTombstones, query, favoritesOnly]);
 
   const visibleSessionGroups = useMemo(() => {
-    if (!favoritesOnly) return sessionGroups;
     return sessionGroups
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => item.isFavorite),
+        items: group.items
+          .filter((item) => isVisibleGalleryItem(item, historyTombstones))
+          .filter((item) => !favoritesOnly || item.isFavorite),
       }))
       .filter((group) => group.items.length > 0);
-  }, [sessionGroups, favoritesOnly]);
+  }, [sessionGroups, historyTombstones, favoritesOnly]);
 
   const visibleLoose = useMemo(() => {
-    if (!favoritesOnly) return loose;
-    return loose.filter((item) => item.isFavorite);
-  }, [loose, favoritesOnly]);
+    return loose
+      .filter((item) => isVisibleGalleryItem(item, historyTombstones))
+      .filter((item) => !favoritesOnly || item.isFavorite);
+  }, [loose, historyTombstones, favoritesOnly]);
 
   const dateGroups = useMemo(() => {
     const map = new Map<string, GenerateItem[]>();
@@ -239,33 +263,12 @@ export function GalleryModal() {
   const totalVisible = showSessions
     ? visibleSessionGroups.reduce((a, g) => a + g.items.length, 0) + visibleLoose.length
     : filtered.length;
-  const flatVisibleItems = useMemo(
-    () => (showSessions ? [...visibleSessionGroups.flatMap((group) => group.items), ...visibleLoose] : filtered),
-    [filtered, showSessions, visibleLoose, visibleSessionGroups],
-  );
-  const selectedVisibleIndex = useMemo(() => {
-    if (!currentImage) return -1;
-    const selectedKey = getGalleryItemKey(currentImage);
-    return flatVisibleItems.findIndex((item) => getGalleryItemKey(item) === selectedKey);
-  }, [currentImage, flatVisibleItems]);
-  const effectiveVisibleLimit = Math.max(
-    visibleLimit,
-    selectedVisibleIndex >= 0 ? selectedVisibleIndex + 1 : GALLERY_INITIAL_LIMIT,
-  );
-  const limitedDateGroups = useMemo(
-    () => limitDateGroups(dateGroups, effectiveVisibleLimit),
-    [dateGroups, effectiveVisibleLimit],
-  );
-  const limitedSessionGroups = useMemo(
-    () => limitSessionGroups(visibleSessionGroups, visibleLoose, effectiveVisibleLimit),
-    [effectiveVisibleLimit, visibleLoose, visibleSessionGroups],
-  );
-  const hasMoreItems = totalVisible > effectiveVisibleLimit;
-  const shownItemCount = Math.min(totalVisible, effectiveVisibleLimit);
-
-  useEffect(() => {
-    if (open) setVisibleLimit(GALLERY_INITIAL_LIMIT);
-  }, [favoritesOnly, groupBy, open, query]);
+  const hasMoreItems = showSessions ? !!groupCursor : historyHasMore;
+  const loadingMore = showSessions ? groupLoadingMore : historyLoadingMore;
+  const shownItemCount = showSessions
+    ? sessionGroups.reduce((a, g) => a + g.items.length, 0) + loose.length
+    : history.length;
+  const totalItemCount = showSessions ? groupTotal : historyTotal;
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -279,13 +282,44 @@ export function GalleryModal() {
   }, [
     open,
     currentImage,
-    effectiveVisibleLimit,
     groupBy,
     totalVisible,
     dateGroups.length,
     visibleSessionGroups.length,
     visibleLoose.length,
   ]);
+
+  async function loadMoreGalleryItems() {
+    if (loadingMore) return;
+    if (showSessions) {
+      if (!groupCursor) return;
+      setGroupLoadingMore(true);
+      try {
+        const page = await getHistoryGrouped({
+          limit: HISTORY_PAGE_SIZE,
+          cursor: groupCursor,
+        });
+        const nextGroups = page.sessions.map((s) => ({
+          sessionId: s.sessionId,
+          label: s.sessionId.slice(0, 8),
+          items: s.items
+            .map(historyItemToGalleryItem)
+            .filter((item) => isVisibleGalleryItem(item, historyTombstones)),
+        })).filter((group) => group.items.length > 0);
+        const nextLoose = page.loose
+          .map(historyItemToGalleryItem)
+          .filter((item) => isVisibleGalleryItem(item, historyTombstones));
+        setSessionGroups((groups) => mergeSessionGroups(groups, nextGroups));
+        setLoose((items) => mergeGalleryItems(items, nextLoose));
+        setGroupCursor(page.nextCursor);
+        setGroupTotal(page.total);
+      } finally {
+        setGroupLoadingMore(false);
+      }
+      return;
+    }
+    await loadMoreHistory();
+  }
 
   useEffect(() => {
     if (!pending) return;
@@ -539,25 +573,25 @@ export function GalleryModal() {
           >
             {showSessions ? (
               <>
-                {limitedSessionGroups.groups.map((g) => (
+                {visibleSessionGroups.map((g) => (
                   <section key={g.sessionId} className="gallery__group">
                     <header className="gallery__group-header">
                       <span className="gallery__group-label">{t("gallery.sessionLabel", { name: g.label })}</span>
-                      <span className="gallery__group-count">{g.total}</span>
+                      <span className="gallery__group-count">{g.items.length}</span>
                     </header>
                     <div className="gallery__grid">
                       {g.items.map((item) => renderTile(item, g.sessionId))}
                     </div>
                   </section>
                 ))}
-                {limitedSessionGroups.loose.length > 0 && (
+                {visibleLoose.length > 0 && (
                   <section className="gallery__group">
                     <header className="gallery__group-header">
                       <span className="gallery__group-label">{t("gallery.standalone")}</span>
-                      <span className="gallery__group-count">{limitedSessionGroups.looseTotal}</span>
+                      <span className="gallery__group-count">{visibleLoose.length}</span>
                     </header>
                     <div className="gallery__grid">
-                      {limitedSessionGroups.loose.map((item) => renderTile(item, "loose"))}
+                      {visibleLoose.map((item) => renderTile(item, "loose"))}
                     </div>
                   </section>
                 )}
@@ -576,11 +610,11 @@ export function GalleryModal() {
                   : t("gallery.noResults")}
               </div>
             ) : (
-              limitedDateGroups.map(([label, items, total]) => (
+              dateGroups.map(([label, items]) => (
                 <section key={label} className="gallery__group">
                   <header className="gallery__group-header">
                     <span className="gallery__group-label">{localizeBucket(label)}</span>
-                    <span className="gallery__group-count">{total}</span>
+                    <span className="gallery__group-count">{items.length}</span>
                   </header>
                   <div className="gallery__grid">
                     {items.map((item) => renderTile(item, label))}
@@ -592,9 +626,12 @@ export function GalleryModal() {
               <div className="gallery__load-more">
                 <button
                   type="button"
-                  onClick={() => setVisibleLimit((limit) => limit + GALLERY_LOAD_MORE_STEP)}
+                  onClick={() => void loadMoreGalleryItems()}
+                  disabled={loadingMore}
                 >
-                  {t("gallery.loadMore", { shown: shownItemCount, total: totalVisible })}
+                  {loadingMore
+                    ? t("gallery.loadingMore")
+                    : t("gallery.loadMore", { shown: shownItemCount, total: totalItemCount })}
                 </button>
               </div>
             )}

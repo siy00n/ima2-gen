@@ -115,31 +115,36 @@ async function seedSmokeGeneratedAssets() {
   const generatedDir = join(ROOT, "generated");
   await mkdir(generatedDir, { recursive: true });
   const prefix = `mobile_smoke_${Date.now()}`;
-  const valid = `${prefix}_valid.png`;
   const invalid = `${prefix}_invalid.png`;
-  const validPath = join(generatedDir, valid);
   const invalidPath = join(generatedDir, invalid);
-  const validMetaPath = `${validPath}.json`;
   const invalidMetaPath = `${invalidPath}.json`;
-  await writeFile(validPath, SMOKE_PNG);
-  await writeFile(validMetaPath, JSON.stringify({
-    createdAt: Date.now() + 10_000,
-    prompt: "Mobile smoke gallery thumbnail fixture",
-    kind: "classic",
-    provider: "oauth",
-  }));
+  const created = [];
+  const now = Date.now();
+  for (let i = 0; i < 84; i += 1) {
+    const valid = `${prefix}_valid_${String(i).padStart(3, "0")}.png`;
+    const validPath = join(generatedDir, valid);
+    const validMetaPath = `${validPath}.json`;
+    await writeFile(validPath, SMOKE_PNG);
+    await writeFile(validMetaPath, JSON.stringify({
+      createdAt: now + 20_000 + i,
+      prompt: `Mobile smoke gallery thumbnail fixture ${i}`,
+      kind: "classic",
+      provider: "oauth",
+    }));
+    created.push(validPath, validMetaPath);
+  }
   await writeFile(invalidPath, "hello");
   await writeFile(invalidMetaPath, JSON.stringify({
-    createdAt: Date.now() + 20_000,
+    createdAt: now + 40_000,
     prompt: "Invalid smoke gallery fixture should be hidden",
     kind: "classic",
     provider: "oauth",
   }));
+  created.push(invalidPath, invalidMetaPath);
   return async () => {
-    await rm(validPath, { force: true }).catch(() => {});
-    await rm(validMetaPath, { force: true }).catch(() => {});
-    await rm(invalidPath, { force: true }).catch(() => {});
-    await rm(invalidMetaPath, { force: true }).catch(() => {});
+    for (const file of created) {
+      await rm(file, { force: true }).catch(() => {});
+    }
   };
 }
 
@@ -552,6 +557,24 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
     assert(action.width >= 32 && action.height >= 32, `${label}: Gallery action buttons should keep mobile hit size`);
     assert(action.hit, `${label}: Gallery action button hit target is blocked`);
     assert(action.backdropFilter === "none", `${label}: Gallery action buttons should not use backdrop-filter`);
+  }
+
+  const loadMore = page.locator(".gallery__load-more button");
+  if (await loadMore.isVisible().catch(() => false)) {
+    const beforeCount = tileLayout.tileCount;
+    await loadMore.click();
+    await page.waitForFunction(
+      (previous) => document.querySelectorAll(".gallery__tile-wrap").length > previous,
+      beforeCount,
+      { timeout: 8_000 },
+    );
+    const afterLoad = await page.evaluate(() => ({
+      tileCount: document.querySelectorAll(".gallery__tile-wrap").length,
+      imageSources: [...document.querySelectorAll(".gallery__tile img")].map((img) => img.getAttribute("src") || ""),
+    }));
+    assert(afterLoad.tileCount > beforeCount, `${label}: Load more should append more Gallery tiles`);
+    assert(afterLoad.tileCount <= 120, `${label}: Load more should append one bounded page`);
+    assert(afterLoad.imageSources.every((src) => src.startsWith("data:") || src.includes("/api/history/thumbnail?")), `${label}: Load more tiles should use thumbnails`);
   }
 }
 

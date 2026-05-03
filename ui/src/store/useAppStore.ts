@@ -29,6 +29,7 @@ import {
   deleteSession as apiDeleteSession,
   saveSessionGraph,
   type HistoryItem,
+  type HistoryCursor,
   type SessionGraphEdge,
   type SessionGraphNode,
   type SessionSummary,
@@ -77,7 +78,9 @@ import {
   type ImageNodeStatus,
 } from "./nodeGraphHelpers";
 import {
+  HISTORY_INITIAL_PAGE_SIZE,
   HISTORY_LIMIT,
+  HISTORY_PAGE_SIZE,
   currentHistoryIndex,
   currentImageFromHistory,
   isNodeOwnedImport,
@@ -166,6 +169,28 @@ function saveInFlight(list: PersistedInFlight[]): void {
 
 type ToastState = { message: string; error: boolean; id: number } | null;
 
+function historyItemFromApi(it: HistoryItem): GenerateItem {
+  return {
+    image: it.url,
+    url: it.url,
+    filename: it.filename,
+    prompt: it.prompt || undefined,
+    provider: it.provider,
+    quality: it.quality || undefined,
+    size: it.size || undefined,
+    format: it.format as Format | undefined,
+    model: it.model ?? undefined,
+    usage: (it.usage as GenerateItem["usage"]) ?? undefined,
+    thumb: it.thumb ?? it.url,
+    createdAt: it.createdAt,
+    sessionId: it.sessionId ?? null,
+    nodeId: it.nodeId ?? null,
+    clientNodeId: it.clientNodeId ?? null,
+    kind: narrowGenerateKind(it.kind),
+    isFavorite: it.isFavorite ?? false,
+  };
+}
+
 export type AppState = {
   provider: Provider;
   model: ImageModel;
@@ -191,7 +216,12 @@ export type AppState = {
   syncFromStorage: () => void;
   currentImage: GenerateItem | null;
   history: GenerateItem[];
+  historyCursor: HistoryCursor | null;
+  historyTotal: number;
+  historyHasMore: boolean;
+  historyLoadingMore: boolean;
   historyTombstones: string[];
+  loadMoreHistory: () => Promise<void>;
   toggleGalleryFavorite: (filename: string) => Promise<void>;
   promptLibraryOpen: boolean;
   promptLibraryItems: PromptItem[];
@@ -519,31 +549,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         const canceled = new Set(get().canceledRequestIds);
         const arr: GenerateItem[] = items
           .filter((it) => !canceled.has(it.requestId ?? ""))
-          .map((it) => ({
-            image: it.url,
-            url: it.url,
-            filename: it.filename,
-            thumb: it.thumb ?? it.url,
-            prompt: it.prompt ?? undefined,
-            size: it.size ?? undefined,
-            quality: it.quality ?? undefined,
-            format: it.format as Format | undefined,
-            model: it.model ?? undefined,
-            createdAt: it.createdAt,
-            sessionId: it.sessionId ?? null,
-            nodeId: it.nodeId ?? null,
-            clientNodeId: it.clientNodeId ?? null,
-            kind: narrowGenerateKind(it.kind),
-            isFavorite: it.isFavorite ?? false,
-          }));
+          .map(historyItemFromApi);
         if (arr.length > 0) {
           set((s) => {
+            const known = new Set(s.history.map((item) => item.filename).filter(Boolean));
+            const newCount = arr.filter((item) => item.filename && !known.has(item.filename)).length;
             const history = upsertHistoryItems(s.history, arr, s.historyTombstones);
             const currentImage = currentImageFromHistory(history, s.currentImage);
             if (!s.currentImage && currentImage?.filename) {
               saveSelectedFilename(currentImage.filename);
             }
-            return { history, currentImage };
+            return {
+              history,
+              currentImage,
+              historyTotal: Math.max(history.length, s.historyTotal + newCount),
+            };
           });
         }
         // Prune strategy: TTL-based only. Do not attempt to correlate
@@ -610,6 +630,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   currentImage: null,
   history: [],
+  historyCursor: null,
+  historyTotal: 0,
+  historyHasMore: false,
+  historyLoadingMore: false,
   historyTombstones: [],
   ...createPromptLibrarySlice(set, get),
   toast: null,
@@ -2018,7 +2042,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       const currentImage =
         s.currentImage?.filename === filename ? history[0] ?? null : s.currentImage;
       saveSelectedFilename(currentImage?.filename ?? null);
-      return { history, historyTombstones, currentImage };
+      return {
+        history,
+        historyTombstones,
+        currentImage,
+        historyTotal: Math.max(history.length, s.historyTotal - 1),
+      };
     });
   },
 
@@ -2026,6 +2055,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const normalized = normalizeGenerateItem(item);
     if (isNodeOwnedImport(normalized)) return;
     set((s) => {
+      const wasKnown = normalized.filename
+        ? s.history.some((candidate) => candidate.filename === normalized.filename)
+        : s.history.some((candidate) => sameGenerateItem(candidate, normalized));
       const historyTombstones = normalized.filename
         ? s.historyTombstones.filter((filename) => filename !== normalized.filename)
         : s.historyTombstones;
@@ -2036,6 +2068,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         history,
         historyTombstones,
         currentImage: currentImageFromHistory(history, s.currentImage),
+        historyTotal: Math.max(history.length, s.historyTotal + (wasKnown ? 0 : 1)),
       };
     });
   },
@@ -2172,37 +2205,66 @@ export const useAppStore = create<AppState>((set, get) => ({
   hydrateHistory() {
     void (async () => {
       try {
-        const res = await getHistory({ limit: HISTORY_LIMIT });
-        const historyItems: GenerateItem[] = res.items.map((it) => ({
-          image: it.url,
-          url: it.url,
-          filename: it.filename,
-          prompt: it.prompt || undefined,
-          provider: it.provider,
-          quality: it.quality || undefined,
-          size: it.size || undefined,
-          usage: (it.usage as GenerateItem["usage"]) ?? undefined,
-          thumb: it.thumb ?? it.url,
-          createdAt: it.createdAt,
-          sessionId: it.sessionId ?? null,
-          nodeId: it.nodeId ?? null,
-          clientNodeId: it.clientNodeId ?? null,
-          kind: narrowGenerateKind(it.kind),
-          isFavorite: it.isFavorite ?? false,
-        }));
+        const res = await getHistory({ limit: HISTORY_INITIAL_PAGE_SIZE });
+        const historyItems = res.items.map(historyItemFromApi);
         const history = upsertHistoryItems([], historyItems, get().historyTombstones);
         if (history.length > 0) {
           const selected = loadSelectedFilename();
           const matched = selected
             ? history.find((it) => it.filename === selected)
             : null;
-          set({ history, currentImage: matched ?? history[0] });
+          set({
+            history,
+            currentImage: matched ?? history[0],
+            historyCursor: res.nextCursor,
+            historyTotal: res.total,
+            historyHasMore: !!res.nextCursor,
+            historyLoadingMore: false,
+          });
           if (!matched) saveSelectedFilename(history[0]?.filename ?? null);
+        } else {
+          saveSelectedFilename(null);
+          set({
+            history: [],
+            currentImage: null,
+            historyCursor: res.nextCursor,
+            historyTotal: res.total,
+            historyHasMore: !!res.nextCursor,
+            historyLoadingMore: false,
+          });
         }
       } catch (err) {
+        set({ historyLoadingMore: false });
         console.warn("[history] load failed:", err);
       }
     })();
+  },
+
+  loadMoreHistory: async () => {
+    const s = get();
+    if (s.historyLoadingMore || !s.historyHasMore || !s.historyCursor) return;
+    set({ historyLoadingMore: true });
+    try {
+      const res = await getHistory({
+        limit: HISTORY_PAGE_SIZE,
+        cursor: s.historyCursor,
+      });
+      const historyItems = res.items.map(historyItemFromApi);
+      set((state) => {
+        const history = upsertHistoryItems(state.history, historyItems, state.historyTombstones);
+        return {
+          history,
+          currentImage: currentImageFromHistory(history, state.currentImage),
+          historyCursor: res.nextCursor,
+          historyTotal: res.total,
+          historyHasMore: !!res.nextCursor,
+          historyLoadingMore: false,
+        };
+      });
+    } catch (err) {
+      set({ historyLoadingMore: false });
+      console.warn("[history] load more failed:", err);
+    }
   },
 
   showToast(message, error = false) {
@@ -2480,10 +2542,18 @@ async function addHistory(
   const historyTombstones = withThumb.filename
     ? s.historyTombstones.filter((filename) => filename !== withThumb.filename)
     : s.historyTombstones;
+  const wasKnown = withThumb.filename
+    ? s.history.some((candidate) => candidate.filename === withThumb.filename)
+    : s.history.some((candidate) => sameGenerateItem(candidate, withThumb));
   const history = upsertHistoryItems(s.history, [withThumb], historyTombstones, {
     ignoreTombstones: true,
   });
   const currentImage = history.find((candidate) => sameGenerateItem(candidate, withThumb)) ?? withThumb;
   saveSelectedFilename(currentImage.filename ?? null);
-  set({ history, historyTombstones, currentImage });
+  set({
+    history,
+    historyTombstones,
+    currentImage,
+    historyTotal: Math.max(history.length, s.historyTotal + (wasKnown ? 0 : 1)),
+  });
 }

@@ -2,6 +2,8 @@ import type { GenerateItem } from "../types";
 import { saveSelectedFilename } from "./storage";
 
 export const HISTORY_LIMIT = 500;
+export const HISTORY_INITIAL_PAGE_SIZE = 72;
+export const HISTORY_PAGE_SIZE = 48;
 
 export function narrowGenerateKind(k?: string | null): GenerateItem["kind"] {
   return k === "classic" || k === "edit" || k === "generate" || k === "import" ? k : null;
