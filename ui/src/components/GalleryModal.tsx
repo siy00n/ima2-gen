@@ -12,7 +12,12 @@ import { getGalleryItemKey, getGalleryItemReactKey } from "../lib/galleryNavigat
 import { useI18n } from "../i18n";
 import { useMobileBackDismiss } from "../hooks/useMobileBackDismiss";
 import { ImageLightbox } from "./ImageLightbox";
-import { HISTORY_INITIAL_PAGE_SIZE, HISTORY_PAGE_SIZE, narrowGenerateKind } from "../store/historyHelpers";
+import {
+  HISTORY_INITIAL_PAGE_SIZE,
+  HISTORY_PAGE_SIZE,
+  mergeHistoryPageItems,
+  narrowGenerateKind,
+} from "../store/historyHelpers";
 
 type TrashPending = {
   filename: string;
@@ -96,19 +101,19 @@ function historyItemToGalleryItem(h: HistoryItem): GenerateItem {
   };
 }
 
-function mergeGalleryItems(existing: GenerateItem[], incoming: GenerateItem[]): GenerateItem[] {
-  const next = [...existing];
-  const seen = new Set(next.map(getGalleryItemKey));
-  for (const item of incoming) {
-    const key = getGalleryItemKey(item);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    next.push(item);
-  }
-  return next;
+function mergeGalleryItems(
+  existing: GenerateItem[],
+  incoming: GenerateItem[],
+  tombstones: string[],
+): GenerateItem[] {
+  return mergeHistoryPageItems(existing, incoming, tombstones);
 }
 
-function mergeSessionGroups(existing: SessionGroup[], incoming: SessionGroup[]): SessionGroup[] {
+function mergeSessionGroups(
+  existing: SessionGroup[],
+  incoming: SessionGroup[],
+  tombstones: string[],
+): SessionGroup[] {
   const bySession = new Map(existing.map((group) => [group.sessionId, {
     ...group,
     items: [...group.items],
@@ -120,7 +125,7 @@ function mergeSessionGroups(existing: SessionGroup[], incoming: SessionGroup[]):
       continue;
     }
     current.label = group.label || current.label;
-    current.items = mergeGalleryItems(current.items, group.items);
+    current.items = mergeGalleryItems(current.items, group.items, tombstones);
   }
   return Array.from(bySession.values());
 }
@@ -309,8 +314,8 @@ export function GalleryModal() {
         const nextLoose = page.loose
           .map(historyItemToGalleryItem)
           .filter((item) => isVisibleGalleryItem(item, historyTombstones));
-        setSessionGroups((groups) => mergeSessionGroups(groups, nextGroups));
-        setLoose((items) => mergeGalleryItems(items, nextLoose));
+        setSessionGroups((groups) => mergeSessionGroups(groups, nextGroups, historyTombstones));
+        setLoose((items) => mergeGalleryItems(items, nextLoose, historyTombstones));
         setGroupCursor(page.nextCursor);
         setGroupTotal(page.total);
       } finally {

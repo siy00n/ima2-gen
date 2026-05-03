@@ -55,6 +55,12 @@ function mergeGenerateItem(existing: GenerateItem, incoming: GenerateItem): Gene
   };
 }
 
+function compareHistoryItems(a: GenerateItem, b: GenerateItem): number {
+  const timeDelta = (b.createdAt ?? 0) - (a.createdAt ?? 0);
+  if (timeDelta !== 0) return timeDelta;
+  return (b.filename ?? historyItemKey(b)).localeCompare(a.filename ?? historyItemKey(a));
+}
+
 export function upsertHistoryItems(
   history: GenerateItem[],
   incoming: GenerateItem[],
@@ -80,6 +86,25 @@ export function upsertHistoryItems(
   }
 
   return next.slice(0, HISTORY_LIMIT);
+}
+
+export function mergeHistoryPageItems(
+  history: GenerateItem[],
+  incoming: GenerateItem[],
+  tombstones: string[],
+  options: { includeNodeImports?: boolean; ignoreTombstones?: boolean } = {},
+): GenerateItem[] {
+  const byKey = new Map<string, GenerateItem>();
+  for (const raw of [...history, ...incoming]) {
+    const item = normalizeGenerateItem(raw);
+    if (!options.includeNodeImports && isNodeOwnedImport(item)) continue;
+    if (!options.ignoreTombstones && isHistoryTombstoned(item, tombstones)) continue;
+    const key = historyItemKey(item);
+    if (!key) continue;
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? mergeGenerateItem(existing, item) : item);
+  }
+  return Array.from(byKey.values()).sort(compareHistoryItems).slice(0, HISTORY_LIMIT);
 }
 
 export function currentImageFromHistory(

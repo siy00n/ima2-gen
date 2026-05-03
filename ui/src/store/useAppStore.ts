@@ -84,6 +84,7 @@ import {
   currentHistoryIndex,
   currentImageFromHistory,
   isNodeOwnedImport,
+  mergeHistoryPageItems,
   narrowGenerateKind,
   normalizeGenerateItem,
   selectHistoryItem,
@@ -2207,7 +2208,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         const res = await getHistory({ limit: HISTORY_INITIAL_PAGE_SIZE });
         const historyItems = res.items.map(historyItemFromApi);
-        const history = upsertHistoryItems([], historyItems, get().historyTombstones);
+        const history = mergeHistoryPageItems([], historyItems, get().historyTombstones);
         if (history.length > 0) {
           const selected = loadSelectedFilename();
           const matched = selected
@@ -2251,7 +2252,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       const historyItems = res.items.map(historyItemFromApi);
       set((state) => {
-        const history = upsertHistoryItems(state.history, historyItems, state.historyTombstones);
+        const history = mergeHistoryPageItems(state.history, historyItems, state.historyTombstones);
         return {
           history,
           currentImage: currentImageFromHistory(history, state.currentImage),

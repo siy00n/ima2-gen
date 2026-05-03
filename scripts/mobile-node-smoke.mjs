@@ -34,6 +34,13 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function assertArrayEqual(actual, expected, message) {
+  assert(actual.length === expected.length, `${message}: length ${actual.length} !== ${expected.length}`);
+  for (let i = 0; i < expected.length; i += 1) {
+    assert(actual[i] === expected[i], `${message}: item ${i} ${actual[i]} !== ${expected[i]}`);
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 }
@@ -562,6 +569,7 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
   const loadMore = page.locator(".gallery__load-more button");
   if (await loadMore.isVisible().catch(() => false)) {
     const beforeCount = tileLayout.tileCount;
+    const beforeSources = tileLayout.imageSources;
     await loadMore.click();
     await page.waitForFunction(
       (previous) => document.querySelectorAll(".gallery__tile-wrap").length > previous,
@@ -575,6 +583,29 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
     assert(afterLoad.tileCount > beforeCount, `${label}: Load more should append more Gallery tiles`);
     assert(afterLoad.tileCount <= 120, `${label}: Load more should append one bounded page`);
     assert(afterLoad.imageSources.every((src) => src.startsWith("data:") || src.includes("/api/history/thumbnail?")), `${label}: Load more tiles should use thumbnails`);
+    assertArrayEqual(
+      afterLoad.imageSources.slice(0, beforeSources.length),
+      beforeSources,
+      `${label}: Load more should preserve the existing newest Gallery order`,
+    );
+
+    await mobileBack(page);
+    await page.locator(".gallery").waitFor({ state: "hidden", timeout: 5_000 });
+    await page.getByRole("button", { name: "Open gallery" }).click();
+    await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
+    await page.locator(".gallery__tile-wrap").first().waitFor({ state: "visible", timeout: 5_000 });
+    const afterReopen = await page.evaluate((expectedTopCount) => ({
+      tileCount: document.querySelectorAll(".gallery__tile-wrap").length,
+      imageSources: [...document.querySelectorAll(".gallery__tile img")]
+        .slice(0, expectedTopCount)
+        .map((img) => img.getAttribute("src") || ""),
+    }), beforeSources.length);
+    assert(afterReopen.tileCount >= afterLoad.tileCount, `${label}: Gallery should keep loaded items after reopen`);
+    assertArrayEqual(
+      afterReopen.imageSources,
+      beforeSources,
+      `${label}: Gallery reopen should preserve the newest item order after Load more`,
+    );
   }
 }
 
