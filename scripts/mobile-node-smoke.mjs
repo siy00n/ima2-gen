@@ -570,6 +570,8 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
   if (await loadMore.isVisible().catch(() => false)) {
     const beforeCount = tileLayout.tileCount;
     const beforeSources = tileLayout.imageSources;
+    await page.locator(".gallery__load-more").scrollIntoViewIfNeeded();
+    const beforeScrollTop = await page.locator(".gallery__scroll").evaluate((el) => el.scrollTop);
     await loadMore.click();
     await page.waitForFunction(
       (previous) => document.querySelectorAll(".gallery__tile-wrap").length > previous,
@@ -579,9 +581,11 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
     const afterLoad = await page.evaluate(() => ({
       tileCount: document.querySelectorAll(".gallery__tile-wrap").length,
       imageSources: [...document.querySelectorAll(".gallery__tile img")].map((img) => img.getAttribute("src") || ""),
+      scrollTop: document.querySelector(".gallery__scroll")?.scrollTop ?? 0,
     }));
     assert(afterLoad.tileCount > beforeCount, `${label}: Load more should append more Gallery tiles`);
     assert(afterLoad.tileCount <= 120, `${label}: Load more should append one bounded page`);
+    assert(afterLoad.scrollTop >= beforeScrollTop - 24, `${label}: Load more should not jump Gallery scroll upward`);
     assert(afterLoad.imageSources.every((src) => src.startsWith("data:") || src.includes("/api/history/thumbnail?")), `${label}: Load more tiles should use thumbnails`);
     assertArrayEqual(
       afterLoad.imageSources.slice(0, beforeSources.length),

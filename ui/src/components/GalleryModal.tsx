@@ -162,6 +162,9 @@ export function GalleryModal() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLElement | null>>({});
   const lastScrollTopRef = useRef(0);
+  const didInitialScrollRef = useRef(false);
+  const lastOpenRef = useRef(false);
+  const restoreScrollTopRef = useRef<number | null>(null);
 
   const dismissGallery = useMobileBackDismiss(open, close);
 
@@ -176,6 +179,11 @@ export function GalleryModal() {
   }, [open, dismissGallery, previewItem]);
 
   useEffect(() => {
+    if (open && !lastOpenRef.current) {
+      didInitialScrollRef.current = false;
+      restoreScrollTopRef.current = null;
+    }
+    lastOpenRef.current = open;
     if (!open) {
       setQuery("");
       setPending(null);
@@ -277,13 +285,25 @@ export function GalleryModal() {
 
   useLayoutEffect(() => {
     if (!open) return;
-    const selectedKey = currentImage ? getGalleryItemKey(currentImage) : null;
-    const selectedEl = selectedKey ? itemRefs.current[selectedKey] : null;
-    if (selectedEl) {
-      selectedEl.scrollIntoView({ block: "center" });
+    if (restoreScrollTopRef.current != null) {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = restoreScrollTopRef.current;
+        lastScrollTopRef.current = restoreScrollTopRef.current;
+      }
+      restoreScrollTopRef.current = null;
       return;
     }
-    if (scrollRef.current) scrollRef.current.scrollTop = lastScrollTopRef.current;
+    if (!didInitialScrollRef.current) {
+      didInitialScrollRef.current = true;
+      const selectedKey = currentImage ? getGalleryItemKey(currentImage) : null;
+      const selectedEl = selectedKey ? itemRefs.current[selectedKey] : null;
+      if (selectedEl) {
+        selectedEl.scrollIntoView({ block: "center" });
+        lastScrollTopRef.current = scrollRef.current?.scrollTop ?? lastScrollTopRef.current;
+        return;
+      }
+      if (scrollRef.current) scrollRef.current.scrollTop = lastScrollTopRef.current;
+    }
   }, [
     open,
     currentImage,
@@ -296,6 +316,7 @@ export function GalleryModal() {
 
   async function loadMoreGalleryItems() {
     if (loadingMore) return;
+    restoreScrollTopRef.current = scrollRef.current?.scrollTop ?? lastScrollTopRef.current;
     if (showSessions) {
       if (!groupCursor) return;
       setGroupLoadingMore(true);
