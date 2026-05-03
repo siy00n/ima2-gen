@@ -36,16 +36,19 @@ describe("History: delete tombstone + pagination", () => {
 
   before(async () => {
     mkdirSync(GEN_DIR, { recursive: true });
-    // Seed 3 tiny fake png files (valid PNG signature enough for listImages)
-    const pngStub = Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    ]);
+    const pngStub = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      "base64",
+    );
     for (let i = 0; i < 3; i++) {
       const ts = Date.now() + i;
       const fn = `${TEST_PREFIX}${ts}_${i}.png`;
       writeFileSync(join(GEN_DIR, fn), pngStub);
       createdFiles.push(fn);
     }
+    const invalidFn = `${TEST_PREFIX}invalid.png`;
+    writeFileSync(join(GEN_DIR, invalidFn), "hello");
+    createdFiles.push(invalidFn);
 
     child = spawn("node", ["server.js"], {
       env: {
@@ -136,5 +139,21 @@ describe("History: delete tombstone + pagination", () => {
     const body = await res.json();
     assert.ok(Array.isArray(body.sessions), "sessions array");
     assert.ok(Array.isArray(body.loose), "loose array");
+  });
+
+  it("history exposes thumbnails and hides invalid image files", async () => {
+    const res = await fetch(`${base}/api/history?limit=100`);
+    assert.strictEqual(res.status, 200);
+    const body = await res.json();
+    const invalid = body.items.find((item) => item.filename?.endsWith("invalid.png"));
+    assert.strictEqual(invalid, undefined, "invalid png is hidden from history");
+    const seeded = body.items.find((item) => item.filename === createdFiles[1]);
+    assert.ok(seeded?.thumb?.startsWith("/api/history/thumbnail?"), "thumbnail URL is exposed");
+
+    const thumbRes = await fetch(`${base}${seeded.thumb}`);
+    assert.strictEqual(thumbRes.status, 200);
+    assert.match(thumbRes.headers.get("content-type") || "", /^image\/webp/);
+    const thumbBytes = Buffer.from(await thumbRes.arrayBuffer());
+    assert.ok(thumbBytes.length > 0, "thumbnail body is non-empty");
   });
 });

@@ -228,6 +228,7 @@
     "deleted": "삭제됨: {filename}",
     "undo": "되돌리기",
     "secondsSuffix": "{n}초",
+    "loadMore": "더 보기 ({shown}/{total})",
     "favoriteTitle": "즐겨찾기에 추가",
     "unfavoriteTitle": "즐겨찾기에서 제거",
     "favoriteAria": "즐겨찾기에 추가",

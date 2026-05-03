@@ -17,6 +17,11 @@ const FAKE_HOME = mkdtempSync(join(tmpdir(), "ima2-node-import-home-"));
 const GEN_DIR = join(process.cwd(), "generated");
 const TEST_PREFIX = `node_import_${Date.now()}_`;
 const SOURCE_FILENAME = `${TEST_PREFIX}source.png`;
+const VALID_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64",
+);
+const VALID_WEBP_B64 = "UklGRj4AAABXRUJQVlA4IDIAAADQAQCdASoBAAEAAUAmJaACdLoB+AADsAD+6SIf+8+fufP3Pn/Rn/+U/fI4/kcf/KBAAA==";
 
 async function waitForHealth(base, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
@@ -39,10 +44,7 @@ describe("Node import API", () => {
 
   before(async () => {
     mkdirSync(GEN_DIR, { recursive: true });
-    const pngStub = Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    ]);
-    writeFileSync(join(GEN_DIR, SOURCE_FILENAME), pngStub);
+    writeFileSync(join(GEN_DIR, SOURCE_FILENAME), VALID_PNG);
     writeFileSync(
       join(GEN_DIR, `${SOURCE_FILENAME}.json`),
       JSON.stringify({
@@ -147,7 +149,7 @@ describe("Node import API", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        image: "data:image/webp;base64,UklGRg==",
+        image: `data:image/webp;base64,${VALID_WEBP_B64}`,
         prompt: "uploaded start",
         sessionId: "session-attach",
         clientNodeId: "client-node-attach",

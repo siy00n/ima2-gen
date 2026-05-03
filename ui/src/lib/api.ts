@@ -88,6 +88,7 @@ export function postEdit(payload: GenerateRequest): Promise<GenerateResponse> {
 export type HistoryItem = {
   filename: string;
   url: string;
+  thumb?: string | null;
   createdAt: number;
   prompt: string | null;
   quality: string | null;

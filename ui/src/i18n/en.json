@@ -228,6 +228,7 @@
     "deleted": "Deleted: {filename}",
     "undo": "Undo",
     "secondsSuffix": "{n}s",
+    "loadMore": "Load more ({shown}/{total})",
     "favoriteTitle": "Add to favorites",
     "unfavoriteTitle": "Remove from favorites",
     "favoriteAria": "Add to favorites",

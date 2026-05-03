@@ -1,13 +1,14 @@
 import "dotenv/config";
 import express from "express";
-import { writeFile, mkdir, readFile, readdir, stat } from "fs/promises";
+import { writeFile, mkdir, readFile, readdir, stat, open as openFile } from "fs/promises";
 import { join, dirname, extname, resolve, sep } from "path";
 import { fileURLToPath } from "url";
 import { spawn } from "child_process";
+import sharp from "sharp";
 import { spawnBin, onShutdown } from "./bin/lib/platform.js";
 import { existsSync, writeFileSync, unlinkSync, mkdirSync, readFileSync as fsReadFileSync } from "fs";
 import { homedir } from "os";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
 import {
   newNodeId,
   saveNode,
@@ -721,13 +722,81 @@ app.get("/api/health", (_req, res) => {
 });
 
 // ── History (disk-backed — authoritative source for UI history list) ──
+async function isSupportedImageFile(full, name) {
+  const ext = extname(name).toLowerCase();
+  const buffer = Buffer.alloc(12);
+  let handle = null;
+  try {
+    handle = await openFile(full, "r");
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    const hasExpectedMagic =
+      (ext === ".png" &&
+        bytesRead >= 8 &&
+        buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) ||
+      ((ext === ".jpg" || ext === ".jpeg") &&
+        bytesRead >= 3 &&
+        buffer[0] === 0xff &&
+        buffer[1] === 0xd8 &&
+        buffer[2] === 0xff) ||
+      (ext === ".webp" &&
+        bytesRead >= 12 &&
+        buffer.toString("ascii", 0, 4) === "RIFF" &&
+        buffer.toString("ascii", 8, 12) === "WEBP");
+    if (!hasExpectedMagic) return false;
+    const metadata = await sharp(full, { failOn: "none" }).metadata();
+    return Number.isFinite(metadata.width) && Number.isFinite(metadata.height);
+  } catch {
+    return false;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+function generatedUrlForRel(rel) {
+  return `/generated/${rel.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function historyThumbUrlForRel(rel, mtimeMs) {
+  const qs = new URLSearchParams({
+    file: rel,
+    v: String(Math.floor(mtimeMs || 0)),
+  });
+  return `/api/history/thumbnail?${qs.toString()}`;
+}
+
+function resolveGeneratedFile(rel) {
+  if (typeof rel !== "string" || rel.length === 0 || rel.includes("\0")) return null;
+  if (rel.split(/[\\/]/).some((part) => part === ".trash" || part === ".thumbs")) return null;
+  const generatedRoot = resolve(__dirname, "generated");
+  const full = resolve(generatedRoot, rel);
+  if (full !== generatedRoot && full.startsWith(generatedRoot + sep)) {
+    return { root: generatedRoot, full, rel: rel.replace(/\\/g, "/") };
+  }
+  return null;
+}
+
+async function thumbnailPathForImage(rel, full, st) {
+  const thumbDir = join(__dirname, "generated", ".thumbs");
+  await mkdir(thumbDir, { recursive: true });
+  const key = createHash("sha1").update(rel).digest("hex");
+  const thumbPath = join(thumbDir, `${key}-${Math.floor(st.mtimeMs || 0)}.webp`);
+  if (!existsSync(thumbPath)) {
+    await sharp(full, { failOn: "none" })
+      .rotate()
+      .resize({ width: 360, height: 360, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 72 })
+      .toFile(thumbPath);
+  }
+  return thumbPath;
+}
+
 // Recursively list image files up to 2 levels deep (for 0.04 session/node subdirs)
 async function listImages(baseDir) {
   const out = [];
   async function walk(dir, depth) {
     const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
     for (const e of entries) {
-      if (e.name === ".trash") continue;
+      if (e.name === ".trash" || e.name === ".thumbs") continue;
       const full = join(dir, e.name);
       if (e.isDirectory() && depth > 0) {
         await walk(full, depth - 1);
@@ -754,8 +823,9 @@ app.get("/api/history", async (req, res) => {
 
     const imgs = await listImages(dir);
     const favorites = listGalleryFavoriteFilenames();
-    const rows = await Promise.all(imgs.map(async ({ full, rel, name }) => {
+    const maybeRows = await Promise.all(imgs.map(async ({ full, rel, name }) => {
       const st = await stat(full).catch(() => null);
+      if (!st || !(await isSupportedImageFile(full, name))) return null;
       let meta = null;
       try {
         const raw = await readFile(full + ".json", "utf-8");
@@ -765,7 +835,8 @@ app.get("/api/history", async (req, res) => {
       }
       return {
         filename: rel,
-        url: `/generated/${rel.split("/").map(encodeURIComponent).join("/")}`,
+        url: generatedUrlForRel(rel),
+        thumb: historyThumbUrlForRel(rel, st.mtimeMs),
         createdAt: meta?.createdAt || st?.mtimeMs || 0,
         prompt: meta?.prompt || null,
         quality: meta?.quality || null,
@@ -784,6 +855,7 @@ app.get("/api/history", async (req, res) => {
         isFavorite: favorites.has(rel),
       };
     }));
+    const rows = maybeRows.filter(Boolean);
 
     // composite sort: createdAt DESC, filename DESC (stable tiebreaker)
     rows.sort((a, b) => {
@@ -836,6 +908,25 @@ app.get("/api/history", async (req, res) => {
   } catch (err) {
     console.error("[history] error:", err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/history/thumbnail", async (req, res) => {
+  try {
+    const resolved = resolveGeneratedFile(req.query.file);
+    if (!resolved) return res.status(400).json({ error: "Invalid file" });
+    const name = resolved.rel.split("/").pop() || resolved.rel;
+    const st = await stat(resolved.full).catch(() => null);
+    if (!st || !(await isSupportedImageFile(resolved.full, name))) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+    const thumbPath = await thumbnailPathForImage(resolved.rel, resolved.full, st);
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.type("image/webp");
+    res.sendFile(thumbPath, { dotfiles: "allow" });
+  } catch (err) {
+    console.error("[history] thumbnail error:", err.message);
+    res.status(415).json({ error: "Thumbnail unavailable" });
   }
 });
 

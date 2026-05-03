@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,10 @@ const VIEWPORTS = [
   { width: 390, height: 844 },
   { width: 430, height: 932 },
 ];
+const SMOKE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+  "base64",
+);
 
 const SETTINGS = {
   model: "gpt-5.4-mini",
@@ -105,6 +109,38 @@ function classicHistoryItems() {
       isFavorite: false,
     },
   ];
+}
+
+async function seedSmokeGeneratedAssets() {
+  const generatedDir = join(ROOT, "generated");
+  await mkdir(generatedDir, { recursive: true });
+  const prefix = `mobile_smoke_${Date.now()}`;
+  const valid = `${prefix}_valid.png`;
+  const invalid = `${prefix}_invalid.png`;
+  const validPath = join(generatedDir, valid);
+  const invalidPath = join(generatedDir, invalid);
+  const validMetaPath = `${validPath}.json`;
+  const invalidMetaPath = `${invalidPath}.json`;
+  await writeFile(validPath, SMOKE_PNG);
+  await writeFile(validMetaPath, JSON.stringify({
+    createdAt: Date.now() + 10_000,
+    prompt: "Mobile smoke gallery thumbnail fixture",
+    kind: "classic",
+    provider: "oauth",
+  }));
+  await writeFile(invalidPath, "hello");
+  await writeFile(invalidMetaPath, JSON.stringify({
+    createdAt: Date.now() + 20_000,
+    prompt: "Invalid smoke gallery fixture should be hidden",
+    kind: "classic",
+    provider: "oauth",
+  }));
+  return async () => {
+    await rm(validPath, { force: true }).catch(() => {});
+    await rm(validMetaPath, { force: true }).catch(() => {});
+    await rm(invalidPath, { force: true }).catch(() => {});
+    await rm(invalidMetaPath, { force: true }).catch(() => {});
+  };
 }
 
 function graphNode(id, x, y, data) {
@@ -468,6 +504,7 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
   const tileLayout = await page.evaluate(() => {
     const tile = document.querySelector(".gallery__tile");
     const caption = document.querySelector(".gallery__caption");
+    const tileImages = [...document.querySelectorAll(".gallery__tile img")];
     const actionButtons = [...document.querySelectorAll(".gallery__favorite, .gallery__import-node, .gallery__delete")];
     if (!tile || !caption || actionButtons.length === 0) return null;
     const tileRect = tile.getBoundingClientRect();
@@ -475,14 +512,26 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
     const captionStyle = getComputedStyle(caption);
     const actions = actionButtons.map((button) => {
       const rect = button.getBoundingClientRect();
+      const isVisible =
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.bottom > 0 &&
+        rect.right > 0 &&
+        rect.top < window.innerHeight &&
+        rect.left < window.innerWidth;
       const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
       return {
         width: rect.width,
         height: rect.height,
-        hit: target?.closest("button") === button,
+        isVisible,
+        hit: !isVisible || target?.closest("button") === button,
+        backdropFilter: getComputedStyle(button).backdropFilter,
       };
     });
     return {
+      tileCount: document.querySelectorAll(".gallery__tile-wrap").length,
+      imageSources: tileImages.map((img) => img.getAttribute("src") || ""),
+      captions: [...document.querySelectorAll(".gallery__caption-text")].map((captionText) => captionText.textContent || ""),
       tileWidth: tileRect.width,
       tileHeight: tileRect.height,
       captionOpacity: Number.parseFloat(captionStyle.opacity),
@@ -492,6 +541,9 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
     };
   });
   assert(tileLayout, `${label}: Gallery tile layout is missing`);
+  assert(tileLayout.tileCount <= 72, `${label}: Gallery should not render more than the initial tile window`);
+  assert(tileLayout.imageSources.every((src) => src.startsWith("data:") || src.includes("/api/history/thumbnail?")), `${label}: Gallery tiles should use thumbnails, not original generated images`);
+  assert(!tileLayout.captions.some((text) => text.includes("Invalid smoke gallery fixture")), `${label}: invalid image fixtures should be hidden`);
   assert(tileLayout.tileHeight > tileLayout.tileWidth, `${label}: Gallery mobile tile should keep portrait-ish aspect ratio`);
   assert(tileLayout.captionOpacity >= 0.95, `${label}: Gallery mobile caption should be visible without hover`);
   assert(tileLayout.captionBottomInside, `${label}: Gallery caption should stay inside the tile`);
@@ -499,6 +551,7 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false } = {
   for (const action of tileLayout.actionButtons) {
     assert(action.width >= 32 && action.height >= 32, `${label}: Gallery action buttons should keep mobile hit size`);
     assert(action.hit, `${label}: Gallery action button hit target is blocked`);
+    assert(action.backdropFilter === "none", `${label}: Gallery action buttons should not use backdrop-filter`);
   }
 }
 
@@ -620,7 +673,7 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.locator(".gallery").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".gallery__search").waitFor({ state: "visible", timeout: 5_000 });
     await assertSlideUpSheet(page, ".gallery", `${label}: Node Gallery`);
-    await assertMobileGalleryPolish(page, `${label}: Node Gallery`);
+    await assertMobileGalleryPolish(page, `${label}: Node Gallery`, { expectTile: true });
     assert((await page.locator(".gallery__close").count()) === 0, `${label}: Gallery should not show a visible close button`);
     const nodeGalleryHandleContent = await page.locator(".gallery").evaluate((gallery) => getComputedStyle(gallery, "::before").content);
     assert(nodeGalleryHandleContent === "none", `${label}: Gallery should not show a grab handle`);
@@ -883,7 +936,9 @@ async function main() {
 
   let browser = null;
   let keepArtifacts = false;
+  let cleanupGeneratedAssets = async () => {};
   try {
+    cleanupGeneratedAssets = await seedSmokeGeneratedAssets();
     await waitForHealth(baseUrl);
     await seedSession(baseUrl);
     browser = await chromium.launch({ headless: true });
@@ -898,6 +953,7 @@ async function main() {
     throw err;
   } finally {
     if (browser) await browser.close().catch(() => {});
+    await cleanupGeneratedAssets().catch(() => {});
     server.kill("SIGTERM");
     await new Promise((resolveExit) => {
       const timeout = setTimeout(resolveExit, 2_000);

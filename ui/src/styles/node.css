@@ -3073,7 +3073,7 @@ button.workflow-edge-badge__chip {
     padding: 16px 8px 7px;
     font-size: 10.5px;
     line-height: 1.25;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.78) 34%, rgba(0, 0, 0, 0));
+    background: rgba(0, 0, 0, 0.62);
   }
 
   .gallery__favorite,
@@ -3084,9 +3084,9 @@ button.workflow-edge-badge__chip {
     height: 34px;
     border: 1px solid rgba(255, 255, 255, 0.13);
     border-radius: 11px;
-    background: rgba(12, 14, 20, 0.72);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
-    backdrop-filter: blur(12px);
+    background: rgba(12, 14, 20, 0.88);
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   .gallery__favorite {
@@ -3116,6 +3116,27 @@ button.workflow-edge-badge__chip {
     background: rgba(255, 255, 255, 0.04);
     color: var(--text-dim);
     font-size: 13px;
+  }
+
+  .gallery__image-placeholder {
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(235, 232, 255, 0.58);
+    font-size: 11px;
+  }
+
+  .gallery__load-more {
+    padding: 14px 14px max(18px, env(safe-area-inset-bottom));
+  }
+
+  .gallery__load-more button {
+    width: 100%;
+    min-height: 42px;
+    border-color: rgba(255, 255, 255, 0.1);
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.055);
+    color: #f6f4ff;
+    font-weight: 800;
   }
 
   .gallery__undo {

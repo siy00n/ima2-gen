@@ -25,6 +25,9 @@ type FavoriteActions = {
   toggleGalleryFavorite?: (filename: string) => void | Promise<void>;
 };
 
+const GALLERY_INITIAL_LIMIT = 72;
+const GALLERY_LOAD_MORE_STEP = 48;
+
 function dateBucket(createdAt: number | undefined): DateBucketKey {
   if (!createdAt) return "earlier";
   const d = new Date(createdAt);
@@ -69,6 +72,38 @@ function isVisibleGalleryItem(item: GenerateItem, tombstones: string[]): boolean
   return true;
 }
 
+function limitDateGroups(
+  groups: Array<[string, GenerateItem[]]>,
+  limit: number,
+): Array<[string, GenerateItem[], number]> {
+  let remaining = limit;
+  const limited: Array<[string, GenerateItem[], number]> = [];
+  for (const [label, items] of groups) {
+    if (remaining <= 0) break;
+    const shown = items.slice(0, remaining);
+    if (shown.length > 0) limited.push([label, shown, items.length]);
+    remaining -= shown.length;
+  }
+  return limited;
+}
+
+function limitSessionGroups(
+  groups: SessionGroup[],
+  looseItems: GenerateItem[],
+  limit: number,
+): { groups: Array<SessionGroup & { total: number }>; loose: GenerateItem[]; looseTotal: number } {
+  let remaining = limit;
+  const limitedGroups: Array<SessionGroup & { total: number }> = [];
+  for (const group of groups) {
+    if (remaining <= 0) break;
+    const shown = group.items.slice(0, remaining);
+    if (shown.length > 0) limitedGroups.push({ ...group, items: shown, total: group.items.length });
+    remaining -= shown.length;
+  }
+  const loose = remaining > 0 ? looseItems.slice(0, remaining) : [];
+  return { groups: limitedGroups, loose, looseTotal: looseItems.length };
+}
+
 export function GalleryModal() {
   const { t } = useI18n();
   const open = useAppStore((s) => s.galleryOpen);
@@ -90,6 +125,8 @@ export function GalleryModal() {
   const [loose, setLoose] = useState<GenerateItem[]>([]);
   const [pending, setPending] = useState<TrashPending | null>(null);
   const [previewItem, setPreviewItem] = useState<GenerateItem | null>(null);
+  const [visibleLimit, setVisibleLimit] = useState(GALLERY_INITIAL_LIMIT);
+  const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(() => new Set());
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLElement | null>>({});
   const lastScrollTopRef = useRef(0);
@@ -111,6 +148,7 @@ export function GalleryModal() {
       setQuery("");
       setPending(null);
       setPreviewItem(null);
+      setBrokenImageKeys(new Set());
     }
   }, [open]);
 
@@ -128,6 +166,7 @@ export function GalleryModal() {
           return {
             image: h.url,
             url: h.url,
+            thumb: h.thumb ?? h.url,
             filename: h.filename,
             prompt: h.prompt ?? undefined,
             size: h.size ?? undefined,
@@ -200,6 +239,33 @@ export function GalleryModal() {
   const totalVisible = showSessions
     ? visibleSessionGroups.reduce((a, g) => a + g.items.length, 0) + visibleLoose.length
     : filtered.length;
+  const flatVisibleItems = useMemo(
+    () => (showSessions ? [...visibleSessionGroups.flatMap((group) => group.items), ...visibleLoose] : filtered),
+    [filtered, showSessions, visibleLoose, visibleSessionGroups],
+  );
+  const selectedVisibleIndex = useMemo(() => {
+    if (!currentImage) return -1;
+    const selectedKey = getGalleryItemKey(currentImage);
+    return flatVisibleItems.findIndex((item) => getGalleryItemKey(item) === selectedKey);
+  }, [currentImage, flatVisibleItems]);
+  const effectiveVisibleLimit = Math.max(
+    visibleLimit,
+    selectedVisibleIndex >= 0 ? selectedVisibleIndex + 1 : GALLERY_INITIAL_LIMIT,
+  );
+  const limitedDateGroups = useMemo(
+    () => limitDateGroups(dateGroups, effectiveVisibleLimit),
+    [dateGroups, effectiveVisibleLimit],
+  );
+  const limitedSessionGroups = useMemo(
+    () => limitSessionGroups(visibleSessionGroups, visibleLoose, effectiveVisibleLimit),
+    [effectiveVisibleLimit, visibleLoose, visibleSessionGroups],
+  );
+  const hasMoreItems = totalVisible > effectiveVisibleLimit;
+  const shownItemCount = Math.min(totalVisible, effectiveVisibleLimit);
+
+  useEffect(() => {
+    if (open) setVisibleLimit(GALLERY_INITIAL_LIMIT);
+  }, [favoritesOnly, groupBy, open, query]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -213,6 +279,7 @@ export function GalleryModal() {
   }, [
     open,
     currentImage,
+    effectiveVisibleLimit,
     groupBy,
     totalVisible,
     dateGroups.length,
@@ -310,6 +377,7 @@ export function GalleryModal() {
     const active = currentImage?.image === item.image;
     const opensPreview = uiMode === "node";
     const itemKey = getGalleryItemKey(item);
+    const imageFailed = brokenImageKeys.has(itemKey);
     const setItemRef = (node: HTMLDivElement | null) => {
       itemRefs.current[itemKey] = node;
     };
@@ -326,7 +394,24 @@ export function GalleryModal() {
           title={opensPreview ? t("gallery.openPreviewTitle") : item.prompt ?? ""}
           aria-label={opensPreview ? t("gallery.openPreviewAria") : undefined}
         >
-          <img src={item.thumb || item.image} alt={item.prompt ?? t("gallery.imageAltFallback")} loading="lazy" decoding="async" />
+          {imageFailed ? (
+            <span className="gallery__image-placeholder">{t("gallery.imageAltFallback")}</span>
+          ) : (
+            <img
+              src={item.thumb || item.image}
+              alt={item.prompt ?? t("gallery.imageAltFallback")}
+              loading="lazy"
+              decoding="async"
+              onError={() => {
+                setBrokenImageKeys((prev) => {
+                  if (prev.has(itemKey)) return prev;
+                  const next = new Set(prev);
+                  next.add(itemKey);
+                  return next;
+                });
+              }}
+            />
+          )}
           {item.prompt && (
             <div className="gallery__caption">
               <span className="gallery__caption-text">{item.prompt}</span>
@@ -454,25 +539,25 @@ export function GalleryModal() {
           >
             {showSessions ? (
               <>
-                {visibleSessionGroups.map((g) => (
+                {limitedSessionGroups.groups.map((g) => (
                   <section key={g.sessionId} className="gallery__group">
                     <header className="gallery__group-header">
                       <span className="gallery__group-label">{t("gallery.sessionLabel", { name: g.label })}</span>
-                      <span className="gallery__group-count">{g.items.length}</span>
+                      <span className="gallery__group-count">{g.total}</span>
                     </header>
                     <div className="gallery__grid">
                       {g.items.map((item) => renderTile(item, g.sessionId))}
                     </div>
                   </section>
                 ))}
-                {visibleLoose.length > 0 && (
+                {limitedSessionGroups.loose.length > 0 && (
                   <section className="gallery__group">
                     <header className="gallery__group-header">
                       <span className="gallery__group-label">{t("gallery.standalone")}</span>
-                      <span className="gallery__group-count">{visibleLoose.length}</span>
+                      <span className="gallery__group-count">{limitedSessionGroups.looseTotal}</span>
                     </header>
                     <div className="gallery__grid">
-                      {visibleLoose.map((item) => renderTile(item, "loose"))}
+                      {limitedSessionGroups.loose.map((item) => renderTile(item, "loose"))}
                     </div>
                   </section>
                 )}
@@ -491,17 +576,27 @@ export function GalleryModal() {
                   : t("gallery.noResults")}
               </div>
             ) : (
-              dateGroups.map(([label, items]) => (
+              limitedDateGroups.map(([label, items, total]) => (
                 <section key={label} className="gallery__group">
                   <header className="gallery__group-header">
                     <span className="gallery__group-label">{localizeBucket(label)}</span>
-                    <span className="gallery__group-count">{items.length}</span>
+                    <span className="gallery__group-count">{total}</span>
                   </header>
                   <div className="gallery__grid">
                     {items.map((item) => renderTile(item, label))}
                   </div>
                 </section>
               ))
+            )}
+            {hasMoreItems && (
+              <div className="gallery__load-more">
+                <button
+                  type="button"
+                  onClick={() => setVisibleLimit((limit) => limit + GALLERY_LOAD_MORE_STEP)}
+                >
+                  {t("gallery.loadMore", { shown: shownItemCount, total: totalVisible })}
+                </button>
+              </div>
             )}
           </div>
 
