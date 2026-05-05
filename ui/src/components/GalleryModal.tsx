@@ -132,7 +132,7 @@ function mergeSessionGroups(
   return Array.from(bySession.values());
 }
 
-function itemMatchesDateSearch(item: GenerateItem, query: string, favoritesOnly: boolean): boolean {
+function itemMatchesGalleryFilter(item: GenerateItem, query: string, favoritesOnly: boolean): boolean {
   if (favoritesOnly && !item.isFavorite) return false;
   const q = query.trim().toLowerCase().normalize("NFC");
   if (!q) return true;
@@ -140,6 +140,15 @@ function itemMatchesDateSearch(item: GenerateItem, query: string, favoritesOnly:
     (item.prompt ?? "").toLowerCase().normalize("NFC").includes(q) ||
     (item.filename ?? "").toLowerCase().normalize("NFC").includes(q)
   );
+}
+
+function removeGalleryItemFromGroups(groups: SessionGroup[], filename: string): SessionGroup[] {
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.filename !== filename),
+    }))
+    .filter((group) => group.items.length > 0);
 }
 
 export function GalleryModal() {
@@ -222,7 +231,11 @@ export function GalleryModal() {
         setLoose([]);
         setGroupCursor(null);
         setGroupTotal(0);
-        const page = await getHistoryGrouped({ limit: HISTORY_INITIAL_PAGE_SIZE });
+        const page = await getHistoryGrouped({
+          limit: HISTORY_INITIAL_PAGE_SIZE,
+          q: dateSearchQuery || undefined,
+          favoritesOnly,
+        });
         if (cancelled) return;
         setSessionGroups(
           page.sessions.map((s) => ({
@@ -234,16 +247,16 @@ export function GalleryModal() {
         setLoose(page.loose.map(historyItemToGalleryItem).filter((item) => isVisibleGalleryItem(item, historyTombstones)));
         setGroupCursor(page.nextCursor);
         setGroupTotal(page.total);
-        setGroupLoadingMore(false);
-      } catch {
-        setGroupLoadingMore(false);
-        // Fallback: use current history only.
+      } catch (err) {
+        if (!cancelled) console.warn("[gallery] session load failed", err);
+      } finally {
+        if (!cancelled) setGroupLoadingMore(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [open, groupBy, historyTombstones]);
+  }, [dateSearchQuery, favoritesOnly, open, groupBy, historyTombstones]);
 
   useEffect(() => {
     if (!open || groupBy !== "date") return;
@@ -297,7 +310,7 @@ export function GalleryModal() {
     const source = dateSearchActive ? searchItems : history;
     return source.filter((h) => {
       if (!isVisibleGalleryItem(h, historyTombstones)) return false;
-      return !dateSearchActive || itemMatchesDateSearch(h, dateSearchQuery, favoritesOnly);
+      return !dateSearchActive || itemMatchesGalleryFilter(h, dateSearchQuery, favoritesOnly);
     });
   }, [dateSearchActive, dateSearchQuery, favoritesOnly, history, historyTombstones, searchItems]);
 
@@ -329,7 +342,7 @@ export function GalleryModal() {
   }, [filtered]);
 
   const totalVisible = showSessions
-    ? visibleSessionGroups.reduce((a, g) => a + g.items.length, 0) + visibleLoose.length
+    ? groupTotal
     : dateSearchActive
       ? searchTotal
       : filtered.length;
@@ -383,6 +396,8 @@ export function GalleryModal() {
         const page = await getHistoryGrouped({
           limit: HISTORY_PAGE_SIZE,
           cursor: groupCursor,
+          q: dateSearchQuery || undefined,
+          favoritesOnly,
         });
         const nextGroups = page.sessions.map((s) => ({
           sessionId: s.sessionId,
@@ -447,6 +462,9 @@ export function GalleryModal() {
       removeFromHistory(item.filename);
       setSearchItems((items) => items.filter((candidate) => candidate.filename !== item.filename));
       setSearchTotal((total) => Math.max(0, total - 1));
+      setSessionGroups((groups) => removeGalleryItemFromGroups(groups, item.filename!));
+      setLoose((items) => items.filter((candidate) => candidate.filename !== item.filename));
+      setGroupTotal((total) => Math.max(0, total - 1));
       setPending({
         filename: item.filename,
         trashId: r.trashId,
@@ -474,12 +492,20 @@ export function GalleryModal() {
     const updateItem = (candidate: GenerateItem): GenerateItem =>
       candidate.filename === item.filename ? { ...candidate, isFavorite: nextFavorite } : candidate;
     setSessionGroups((groups) =>
-      groups.map((group) => ({
-        ...group,
-        items: group.items.map(updateItem),
-      })),
+      groups
+        .map((group) => ({
+          ...group,
+          items: group.items
+            .map(updateItem)
+            .filter((candidate) => !favoritesOnly || candidate.isFavorite),
+        }))
+        .filter((group) => group.items.length > 0),
     );
-    setLoose((items) => items.map(updateItem));
+    setLoose((items) =>
+      items
+        .map(updateItem)
+        .filter((candidate) => !favoritesOnly || candidate.isFavorite),
+    );
     setSearchItems((items) => {
       const next = items.map(updateItem);
       return favoritesOnly && !nextFavorite
@@ -488,6 +514,7 @@ export function GalleryModal() {
     });
     if (favoritesOnly && !nextFavorite) {
       setSearchTotal((total) => Math.max(0, total - 1));
+      setGroupTotal((total) => Math.max(0, total - 1));
     }
     setPreviewItem((preview) => preview && preview.filename === item.filename ? { ...preview, isFavorite: nextFavorite } : preview);
     if (storeItem && toggleGalleryFavorite) {
@@ -513,9 +540,27 @@ export function GalleryModal() {
     try {
       await restoreHistoryItem(pending.filename, pending.trashId);
       addHistoryItem(pending.item);
-      if (dateSearchActive && itemMatchesDateSearch(pending.item, dateSearchQuery, favoritesOnly)) {
+      if (dateSearchActive && itemMatchesGalleryFilter(pending.item, dateSearchQuery, favoritesOnly)) {
         setSearchItems((items) => mergeGalleryItems(items, [pending.item], historyTombstones));
         setSearchTotal((total) => total + 1);
+      }
+      if (showSessions && itemMatchesGalleryFilter(pending.item, dateSearchQuery, favoritesOnly)) {
+        if (pending.item.sessionId) {
+          setSessionGroups((groups) =>
+            mergeSessionGroups(
+              groups,
+              [{
+                sessionId: pending.item.sessionId!,
+                label: pending.item.sessionId!.slice(0, 8),
+                items: [pending.item],
+              }],
+              historyTombstones,
+            ),
+          );
+        } else {
+          setLoose((items) => mergeGalleryItems(items, [pending.item], historyTombstones));
+        }
+        setGroupTotal((total) => total + 1);
       }
     } catch (err) {
       console.error("[gallery] restore failed", err);
@@ -635,16 +680,14 @@ export function GalleryModal() {
               <h2 className="gallery__title">{t("gallery.title")}</h2>
               <div className="gallery__meta">
                 {t("gallery.total", { n: totalVisible })}
-                {dateSearchActive ? "" : query || favoritesOnly ? t("gallery.totalFiltered", { n: history.length }) : ""}
               </div>
             </div>
             <input
               type="search"
               className="gallery__search"
-              placeholder={showSessions ? t("gallery.searchDisabledPlaceholder") : t("gallery.searchPlaceholder")}
+              placeholder={t("gallery.searchPlaceholder")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              disabled={showSessions}
             />
             <div className="gallery__filter-row">
               <div className="gallery__favorite-filter" role="tablist" aria-label={t("gallery.favoriteFilterAria")}>
@@ -697,7 +740,8 @@ export function GalleryModal() {
               lastScrollTopRef.current = scrollRef.current?.scrollTop ?? 0;
             }}
           >
-            {searchLoading && !showSessions ? (
+            {(searchLoading && !showSessions) ||
+            (showSessions && groupLoadingMore && sessionGroups.length === 0 && loose.length === 0) ? (
               <div className="gallery__empty">{t("gallery.loadingMore")}</div>
             ) : showSessions ? (
               <>

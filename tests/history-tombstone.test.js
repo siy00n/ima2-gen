@@ -49,6 +49,7 @@ describe("History: delete tombstone + pagination", () => {
         prompt: `server-search-${TEST_PREFIX}-${i}`,
         kind: "classic",
         provider: "oauth",
+        sessionId: `${TEST_PREFIX}session-${i % 2}`,
       }));
       createdFiles.push(fn);
       createdFiles.push(`${fn}.json`);
@@ -202,5 +203,27 @@ describe("History: delete tombstone + pagination", () => {
     assert.strictEqual(favoritesPage.total, 1, "favorites total is filtered");
     assert.strictEqual(favoritesPage.items[0]?.filename, favoriteTarget);
     assert.strictEqual(favoritesPage.items[0]?.isFavorite, true);
+
+    const groupedSearchRes = await fetch(`${base}/api/history?groupBy=session&q=${encodeURIComponent(query)}&limit=2`);
+    assert.strictEqual(groupedSearchRes.status, 200);
+    const groupedSearch = await groupedSearchRes.json();
+    const groupedItems = [
+      ...groupedSearch.sessions.flatMap((group) => group.items),
+      ...groupedSearch.loose,
+    ];
+    assert.strictEqual(groupedSearch.total, 3, "grouped search total is filtered");
+    assert.strictEqual(groupedItems.length, 2, "grouped search page respects limit");
+    assert.ok(groupedItems.every((item) => item.prompt?.includes(query)), "grouped search only returns matching prompts");
+
+    const groupedFavoritesRes = await fetch(`${base}/api/history?groupBy=session&favoritesOnly=true&q=${encodeURIComponent(query)}&limit=10`);
+    assert.strictEqual(groupedFavoritesRes.status, 200);
+    const groupedFavorites = await groupedFavoritesRes.json();
+    const groupedFavoriteItems = [
+      ...groupedFavorites.sessions.flatMap((group) => group.items),
+      ...groupedFavorites.loose,
+    ];
+    assert.strictEqual(groupedFavorites.total, 1, "grouped favorites total is filtered");
+    assert.strictEqual(groupedFavoriteItems[0]?.filename, favoriteTarget);
+    assert.strictEqual(groupedFavoriteItems[0]?.isFavorite, true);
   });
 });

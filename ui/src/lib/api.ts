@@ -153,7 +153,7 @@ export function getHistory(
 }
 
 export function getHistoryGrouped(
-  params: { limit?: number; cursor?: HistoryCursor } = {},
+  params: { limit?: number; cursor?: HistoryCursor; q?: string; favoritesOnly?: boolean } = {},
 ): Promise<HistoryGroupedPage> {
   const qs = new URLSearchParams();
   qs.set("groupBy", "session");
@@ -162,6 +162,8 @@ export function getHistoryGrouped(
     qs.set("before", String(params.cursor.before));
     qs.set("beforeFilename", params.cursor.beforeFilename);
   }
+  if (params.q) qs.set("q", params.q);
+  if (params.favoritesOnly) qs.set("favoritesOnly", "true");
   return jsonFetch(`/api/history?${qs.toString()}`);
 }
 

@@ -137,6 +137,7 @@ async function seedSmokeGeneratedAssets() {
       prompt: `Mobile smoke gallery thumbnail fixture ${i}`,
       kind: "classic",
       provider: "oauth",
+      sessionId: `mobile-smoke-session-${i % 3}`,
     }));
     created.push(validPath, validMetaPath);
   }
@@ -627,6 +628,29 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false, expe
     assert(searchState.tileCount <= 72, `${label}: server search should keep initial page bounded`);
     assert(searchState.captions.every((caption) => caption.includes("fixture 83")), `${label}: server search should filter Gallery captions`);
     assert(searchState.imageSources.every((src) => src.startsWith("data:") || src.includes("/api/history/thumbnail?")), `${label}: server search should use thumbnails`);
+    await page.locator(".gallery__search").fill("");
+    await page.waitForFunction(() => document.querySelectorAll(".gallery__tile-wrap").length > 1);
+    await page.locator(".gallery__group-toggle").getByRole("tab", { name: "Session" }).click();
+    await page.locator(".gallery__search").fill("fixture 83");
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll(".gallery__caption-text")]
+        .some((caption) => (caption.textContent || "").includes("fixture 83")),
+    );
+    const sessionSearchState = await page.evaluate(() => {
+      const search = document.querySelector(".gallery__search");
+      return {
+        inputDisabled: search instanceof HTMLInputElement ? search.disabled : true,
+        tileCount: document.querySelectorAll(".gallery__tile-wrap").length,
+        groupCount: document.querySelectorAll(".gallery__group").length,
+        captions: [...document.querySelectorAll(".gallery__caption-text")].map((caption) => caption.textContent || ""),
+      };
+    });
+    assert(!sessionSearchState.inputDisabled, `${label}: Session Gallery search input should be enabled`);
+    assert(sessionSearchState.tileCount >= 1, `${label}: Session server search should return at least one tile`);
+    assert(sessionSearchState.tileCount <= 72, `${label}: Session server search should keep initial page bounded`);
+    assert(sessionSearchState.groupCount >= 1, `${label}: Session server search should keep grouped sections`);
+    assert(sessionSearchState.captions.every((caption) => caption.includes("fixture 83")), `${label}: Session server search should filter captions`);
+    await page.locator(".gallery__group-toggle").getByRole("tab", { name: "Date" }).click();
     await page.locator(".gallery__search").fill("");
     await page.waitForFunction(() => document.querySelectorAll(".gallery__tile-wrap").length > 1);
   }

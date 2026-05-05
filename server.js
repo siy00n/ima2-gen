@@ -820,13 +820,11 @@ app.get("/api/history", async (req, res) => {
     const sinceTs = parseInt(req.query.since);
     const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : null;
     const groupBy = req.query.groupBy === "session" ? "session" : null;
-    const searchQuery = groupBy
-      ? ""
-      : typeof req.query.q === "string"
-        ? req.query.q.trim().toLowerCase()
-        : "";
+    const searchQuery = typeof req.query.q === "string"
+      ? req.query.q.trim().normalize("NFC").toLowerCase()
+      : "";
     const favoritesOnly =
-      !groupBy && (req.query.favoritesOnly === "1" || req.query.favoritesOnly === "true");
+      req.query.favoritesOnly === "1" || req.query.favoritesOnly === "true";
 
     const imgs = await listImages(dir);
     const favorites = listGalleryFavoriteFilenames();
@@ -873,8 +871,8 @@ app.get("/api/history", async (req, res) => {
     let filtered = rows;
     if (searchQuery) {
       filtered = filtered.filter((r) => {
-        const prompt = String(r.prompt || "").toLowerCase();
-        const filename = String(r.filename || "").toLowerCase();
+        const prompt = String(r.prompt || "").normalize("NFC").toLowerCase();
+        const filename = String(r.filename || "").normalize("NFC").toLowerCase();
         return prompt.includes(searchQuery) || filename.includes(searchQuery);
       });
     }
@@ -919,7 +917,7 @@ app.get("/api/history", async (req, res) => {
         }
       }
       const sessions = Array.from(groups.values()).sort((a, b) => b.lastUsedAt - a.lastUsedAt);
-      return res.json({ sessions, loose, total: rows.length, nextCursor });
+      return res.json({ sessions, loose, total, nextCursor });
     }
 
     res.json({ items: page, total, nextCursor });
