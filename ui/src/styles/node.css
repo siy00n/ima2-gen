@@ -2552,24 +2552,29 @@ button.workflow-edge-badge__chip {
 
   .sidebar--mobile-composer .composer__header {
     min-height: 32px;
+    gap: 8px;
   }
 
   .sidebar--mobile-composer .composer__header-main {
     flex: 1 1 auto;
+    min-width: 0;
   }
 
   .composer__collapse {
     flex: 0 0 auto;
-    width: 30px;
-    height: 30px;
+    min-width: 44px;
+    min-height: 32px;
+    padding: 0 8px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 0;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.045);
+    background: transparent;
     color: var(--text-dim);
-    font-size: 17px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0;
     line-height: 1;
     cursor: pointer;
   }
@@ -3501,6 +3506,7 @@ button.workflow-edge-badge__chip {
 
   .sidebar--mobile-composer .composer__header {
     min-height: 34px;
+    gap: 8px;
   }
 
   .sidebar--mobile-composer .composer__label {
@@ -3514,14 +3520,28 @@ button.workflow-edge-badge__chip {
   }
 
   .composer__collapse {
-    width: 32px;
+    min-width: 44px;
+    min-height: 32px;
+    width: auto;
     height: 32px;
-    border-color: var(--mobile-app-border);
-    border-radius: 10px;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.02)),
-      var(--mobile-app-surface-soft);
+    padding: 0 8px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
     color: var(--mobile-app-muted);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .composer__collapse:active,
+  .composer__collapse:focus-visible {
+    background: rgba(255, 255, 255, 0.07);
+    color: #f6f4ff;
+  }
+
+  .composer__collapse:focus-visible {
+    outline: 2px solid rgba(125, 211, 252, 0.35);
+    outline-offset: 2px;
   }
 
   .sidebar--mobile-composer .composer__textarea {

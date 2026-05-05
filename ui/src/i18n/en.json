@@ -145,7 +145,8 @@
     "dropHere": "Drop to attach as reference (up to {max})",
     "floatingComposer": "Classic prompt composer",
     "openComposer": "Tap to edit or generate another image",
-    "collapseComposer": "Hide prompt"
+    "collapseComposer": "Hide prompt",
+    "done": "Done"
   },
   "promptLibrary": {
     "title": "Prompt library",

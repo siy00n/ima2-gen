@@ -8,9 +8,15 @@ type PromptComposerProps = {
   variant?: "sidebar" | "floating";
   onCollapse?: () => void;
   collapseLabel?: string;
+  collapseText?: string;
 };
 
-export function PromptComposer({ variant = "sidebar", onCollapse, collapseLabel }: PromptComposerProps = {}) {
+export function PromptComposer({
+  variant = "sidebar",
+  onCollapse,
+  collapseLabel,
+  collapseText,
+}: PromptComposerProps = {}) {
   const prompt = useAppStore((s) => s.prompt);
   const setPrompt = useAppStore((s) => s.setPrompt);
   const generate = useAppStore((s) => s.generate);
@@ -110,7 +116,7 @@ export function PromptComposer({ variant = "sidebar", onCollapse, collapseLabel 
             aria-label={collapseLabel}
             title={collapseLabel}
           >
-            <span aria-hidden="true">⌄</span>
+            {collapseText || <span aria-hidden="true">⌄</span>}
           </button>
         ) : null}
       </div>

@@ -219,6 +219,7 @@ export function Sidebar() {
             <PromptComposer
               onCollapse={hasMobileResult ? () => setComposerOpen(false) : undefined}
               collapseLabel={t("prompt.collapseComposer")}
+              collapseText={hasMobileResult ? t("prompt.done") : undefined}
             />
             <GenerateButton />
             <InFlightList />

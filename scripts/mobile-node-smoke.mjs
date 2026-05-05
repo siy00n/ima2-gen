@@ -1036,11 +1036,15 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
       .evaluate((sidebar) => getComputedStyle(sidebar, "::before").content);
     assert(handleContent === "none", `${label}: Classic composer should not show a grab handle`);
     const collapseButton = page.locator(".sidebar--mobile-composer .composer__collapse");
-    const dismissSize = await collapseButton.evaluate((button) => {
+    const dismissMetrics = await collapseButton.evaluate((button) => {
       const rect = button.getBoundingClientRect();
-      return { width: rect.width, height: rect.height };
+      return { text: button.textContent?.trim() || "", width: rect.width, height: rect.height };
     });
-    assert(dismissSize.width <= 44 && dismissSize.height <= 44, `${label}: Hide prompt should be compact`);
+    assert(/^Done$|^완료$/.test(dismissMetrics.text), `${label}: composer collapse should use Done text`);
+    assert(
+      dismissMetrics.width >= 44 && dismissMetrics.height <= 44,
+      `${label}: Hide prompt should stay touchable without becoming tall`,
+    );
     const composerSurface = await page.evaluate(() => {
       const composer = document.querySelector(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .composer");
       const textarea = document.querySelector(".sidebar--mobile-composer:not(.sidebar--prompt-collapsed) .composer__textarea");
