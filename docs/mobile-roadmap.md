@@ -14,6 +14,27 @@ Finish the ima2-gen mobile UI finalization on custom/my-version using docs/mobil
 
 ## Current Status
 
+Finalization status: completed on 2026-05-06.
+
+Completed implementation commits:
+
+- `9cc76d6` Polish mobile prompt library
+- `9efa910` Polish mobile settings controls
+- `dd44d7d` Refine mobile node secondary actions
+- `206fb59` Polish gallery sessions and cleanup docs
+- `ccec83d` Consolidate mobile UI styling
+
+Final verification completed:
+
+- `git diff --check`
+- `npm run build`
+- `npm test`
+- `npm run test:mobile`
+- `npm run cleanup:invalid` dry-run
+
+`npm run cleanup:invalid` found invalid generated assets in the local
+`generated/` folder and did not move files because it was run in dry-run mode.
+
 The main mobile redesign is already implemented.
 
 - Mobile Node has a dedicated workspace with `Node`, `All`, `Branches`, and `Map` views.
@@ -199,4 +220,3 @@ Commit target:
 - Preserve user data and generated assets; cleanup commands must default to dry-run or move-to-trash behavior.
 - After each successful implementation commit, push to `origin/custom/my-version`.
 - If a stage reveals a new product decision, pause and record the options instead of silently expanding scope.
-
