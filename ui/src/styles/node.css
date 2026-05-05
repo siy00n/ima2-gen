@@ -2752,8 +2752,61 @@ button.workflow-edge-badge__chip {
     -webkit-overflow-scrolling: touch;
   }
 
+  .right-panel--classic .right-panel-body {
+    gap: 10px;
+  }
+
+  .right-panel--classic .mobile-sheet-header {
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
   .right-panel--node .billing-bar {
     display: none;
+  }
+
+  .right-panel--classic .billing-bar {
+    margin: 0;
+    padding: 8px 0;
+  }
+
+  .right-panel--classic .provider-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .right-panel--classic .provider-pill {
+    min-height: 42px;
+    justify-content: center;
+    border-color: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+      rgba(255, 255, 255, 0.035);
+    font-size: 12px;
+    font-weight: 750;
+  }
+
+  .right-panel--classic .provider-pill.selected {
+    border-color: rgba(125, 211, 252, 0.48);
+    background: rgba(14, 165, 233, 0.11);
+    color: #f6f4ff;
+  }
+
+  .right-panel--classic .option-group {
+    gap: 7px;
+    margin: 0;
+  }
+
+  .right-panel--classic .option-group > .section-title {
+    margin: 0;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .mobile-settings-advanced,
@@ -2797,13 +2850,19 @@ button.workflow-edge-badge__chip {
   .mobile-settings-advanced__body {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 0 12px 12px;
+    gap: 10px;
+    padding: 10px 12px 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
   }
 
   .mobile-settings-advanced {
     flex: 0 0 auto;
     overflow: visible;
+  }
+
+  .right-panel--classic .mobile-settings-advanced {
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
   }
 
   .sidebar--mobile-node {
@@ -2985,9 +3044,53 @@ button.workflow-edge-badge__chip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .right-panel--classic .option-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
   .node-inspector__settings .option-btn,
   .right-panel .option-btn {
     min-height: 44px;
+  }
+
+  .right-panel--classic .option-btn {
+    padding: 7px 5px;
+    border-color: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.042), rgba(255, 255, 255, 0.018)),
+      rgba(255, 255, 255, 0.03);
+    color: #d8d6e6;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1.15;
+  }
+
+  .right-panel--classic .option-btn.active {
+    border-color: rgba(125, 211, 252, 0.5);
+    background: rgba(14, 165, 233, 0.12);
+    color: #f6f4ff;
+  }
+
+  .right-panel--classic .option-sub {
+    font-size: 9px;
+  }
+
+  .right-panel--classic .custom-size-input {
+    min-height: 44px;
+    border-radius: 10px;
+    font-size: 16px;
+  }
+
+  .right-panel--classic .option-help,
+  .right-panel--classic .size-hint,
+  .right-panel--classic .cost-estimate {
+    margin: 0;
+    padding: 0;
+    color: var(--text-dim);
+    font-size: 11px;
   }
 
   .node-inspector--edge {

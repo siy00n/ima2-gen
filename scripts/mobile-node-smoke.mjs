@@ -692,6 +692,37 @@ async function assertMobilePromptLibraryPolish(page, label) {
   assert(rowLayout.hiddenSecondaryButtons, `${label}: Prompt Library list cards should keep secondary actions out of the row`);
 }
 
+async function assertMobileSettingsPolish(page, label) {
+  const panel = page.locator(".right-panel.drawer-open");
+  await panel.waitFor({ state: "visible", timeout: 5_000 });
+  const settingsLayout = await panel.evaluate((el) => {
+    const body = el.querySelector(".right-panel-body");
+    const advanced = el.querySelector(".mobile-settings-advanced");
+    const providerButtons = [...el.querySelectorAll(".provider-pill")].map((button) => button.getBoundingClientRect());
+    const optionButtons = [...el.querySelectorAll(".option-btn")]
+      .map((button) => button.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    const activeOptions = [...el.querySelectorAll(".option-btn.active")].length;
+    const bodyStyle = body ? getComputedStyle(body) : null;
+    return {
+      bodyOverflowY: bodyStyle?.overflowY || "",
+      advancedOpen: advanced instanceof HTMLDetailsElement ? advanced.open : false,
+      providerCount: providerButtons.length,
+      providerMinHeight: Math.min(...providerButtons.map((rect) => rect.height)),
+      optionCount: optionButtons.length,
+      optionMinHeight: Math.min(...optionButtons.map((rect) => rect.height)),
+      activeOptions,
+    };
+  });
+  assert(settingsLayout.bodyOverflowY === "auto", `${label}: Settings body should be vertically scrollable`);
+  assert(settingsLayout.advancedOpen, `${label}: Size/Format settings should be open by default`);
+  assert(settingsLayout.providerCount >= 2, `${label}: Settings should expose provider controls`);
+  assert(settingsLayout.providerMinHeight >= 40, `${label}: Provider controls should keep touch height`);
+  assert(settingsLayout.optionCount >= 12, `${label}: Settings should expose model, quality, size, format, and related options`);
+  assert(settingsLayout.optionMinHeight >= 44, `${label}: Settings option buttons should keep touch height`);
+  assert(settingsLayout.activeOptions >= 3, `${label}: Settings should visibly mark selected option groups`);
+}
+
 async function assertConnector(page, source, target, expectedTransfer, expectedBadge) {
   const connector = page.locator(`.mobile-node-map-connector[data-source="${source}"][data-target="${target}"]`);
   await connector.waitFor({ state: "attached", timeout: 5_000 });
@@ -970,6 +1001,7 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     await page.locator(".right-panel.drawer-open").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".mobile-sheet-header--settings").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".right-panel").getByText("Size / Format").waitFor({ state: "visible", timeout: 5_000 });
+    await assertMobileSettingsPolish(page, `${label}: Classic Settings`);
     assert((await page.locator(".right-panel.drawer-open .right-panel-toggle").count()) === 0, `${label}: Classic Settings should not show a visible close button`);
     const settingsHandleContent = await page.locator(".right-panel.drawer-open").evaluate((panel) => getComputedStyle(panel, "::before").content);
     assert(settingsHandleContent === "none", `${label}: Classic Settings should not show a grab handle`);

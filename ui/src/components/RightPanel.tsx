@@ -78,7 +78,7 @@ export function RightPanel() {
         />
       ) : null}
       <aside
-        className={`right-panel${uiMode === "node" ? " right-panel--node" : ""}${open ? "" : " collapsed"}${isMobile && drawerOpen ? " drawer-open" : ""}`}
+        className={`right-panel${uiMode === "node" ? " right-panel--node" : " right-panel--classic"}${open ? "" : " collapsed"}${isMobile && drawerOpen ? " drawer-open" : ""}`}
         aria-label={t("panel.detailSettings")}
       >
         {!isMobile ? (
