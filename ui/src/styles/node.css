@@ -2403,6 +2403,28 @@ button.workflow-edge-badge__chip {
     border-bottom-color: rgba(255, 255, 255, 0.06);
   }
 
+  .gallery__group-header--session {
+    background:
+      linear-gradient(90deg, rgba(125, 211, 252, 0.08), transparent 44%),
+      rgba(17, 19, 26, 0.96);
+  }
+
+  .gallery__group-label {
+    max-width: 62vw;
+    font-size: 11px;
+  }
+
+  .gallery__group-count {
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 10px;
+  }
+
   .gallery__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;

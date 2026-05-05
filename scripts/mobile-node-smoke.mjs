@@ -642,6 +642,7 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false, expe
         inputDisabled: search instanceof HTMLInputElement ? search.disabled : true,
         tileCount: document.querySelectorAll(".gallery__tile-wrap").length,
         groupCount: document.querySelectorAll(".gallery__group").length,
+        groupCounts: [...document.querySelectorAll(".gallery__group-count")].map((count) => count.textContent || ""),
         captions: [...document.querySelectorAll(".gallery__caption-text")].map((caption) => caption.textContent || ""),
       };
     });
@@ -649,6 +650,7 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false, expe
     assert(sessionSearchState.tileCount >= 1, `${label}: Session server search should return at least one tile`);
     assert(sessionSearchState.tileCount <= 72, `${label}: Session server search should keep initial page bounded`);
     assert(sessionSearchState.groupCount >= 1, `${label}: Session server search should keep grouped sections`);
+    assert(sessionSearchState.groupCounts.every((text) => text.includes("images")), `${label}: Session groups should show readable image counts`);
     assert(sessionSearchState.captions.every((caption) => caption.includes("fixture 83")), `${label}: Session server search should filter captions`);
     await page.locator(".gallery__group-toggle").getByRole("tab", { name: "Date" }).click();
     await page.locator(".gallery__search").fill("");

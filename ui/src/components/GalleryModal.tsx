@@ -747,9 +747,12 @@ export function GalleryModal() {
               <>
                 {visibleSessionGroups.map((g) => (
                   <section key={g.sessionId} className="gallery__group">
-                    <header className="gallery__group-header">
-                      <span className="gallery__group-label">{t("gallery.sessionLabel", { name: g.label })}</span>
-                      <span className="gallery__group-count">{g.items.length}</span>
+                    <header className="gallery__group-header gallery__group-header--session">
+                      <span className="gallery__group-heading">
+                        <span className="gallery__group-marker" aria-hidden="true" />
+                        <span className="gallery__group-label">{t("gallery.sessionLabel", { name: g.label })}</span>
+                      </span>
+                      <span className="gallery__group-count">{t("gallery.groupCount", { count: g.items.length })}</span>
                     </header>
                     <div className="gallery__grid">
                       {g.items.map((item) => renderTile(item, g.sessionId))}
@@ -758,9 +761,12 @@ export function GalleryModal() {
                 ))}
                 {visibleLoose.length > 0 && (
                   <section className="gallery__group">
-                    <header className="gallery__group-header">
-                      <span className="gallery__group-label">{t("gallery.standalone")}</span>
-                      <span className="gallery__group-count">{visibleLoose.length}</span>
+                    <header className="gallery__group-header gallery__group-header--session">
+                      <span className="gallery__group-heading">
+                        <span className="gallery__group-marker" aria-hidden="true" />
+                        <span className="gallery__group-label">{t("gallery.standalone")}</span>
+                      </span>
+                      <span className="gallery__group-count">{t("gallery.groupCount", { count: visibleLoose.length })}</span>
                     </header>
                     <div className="gallery__grid">
                       {visibleLoose.map((item) => renderTile(item, "loose"))}
@@ -769,7 +775,11 @@ export function GalleryModal() {
                 )}
                 {visibleSessionGroups.length === 0 && visibleLoose.length === 0 && (
                   <div className="gallery__empty">
-                    {favoritesOnly ? t("gallery.emptyFavorites") : t("gallery.emptySessions")}
+                    {favoritesOnly
+                      ? t("gallery.emptyFavorites")
+                      : query.trim()
+                        ? t("gallery.noResults")
+                        : t("gallery.emptySessions")}
                   </div>
                 )}
               </>
@@ -785,8 +795,10 @@ export function GalleryModal() {
               dateGroups.map(([label, items]) => (
                 <section key={label} className="gallery__group">
                   <header className="gallery__group-header">
-                    <span className="gallery__group-label">{localizeBucket(label)}</span>
-                    <span className="gallery__group-count">{items.length}</span>
+                    <span className="gallery__group-heading">
+                      <span className="gallery__group-label">{localizeBucket(label)}</span>
+                    </span>
+                    <span className="gallery__group-count">{t("gallery.groupCount", { count: items.length })}</span>
                   </header>
                   <div className="gallery__grid">
                     {items.map((item) => renderTile(item, label))}

@@ -220,6 +220,7 @@
     "closeAria": "Close gallery",
     "closeTitle": "Close (Esc)",
     "sessionLabel": "Session {name}",
+    "groupCount": "{count} images",
     "standalone": "Standalone images",
     "emptySessions": "No sessions saved yet.",
     "emptyAll": "No images yet. Create one first.",
