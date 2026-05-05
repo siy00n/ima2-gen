@@ -1209,27 +1209,15 @@ export function MobileNodeWorkspace() {
             </button>
           </div>
 
-          {canAttachImage ? (
-            <>
-              <input
-                ref={attachInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={attachImage}
-                className="mobile-node-file-input"
-                aria-hidden="true"
-                tabIndex={-1}
-              />
-              <button
-                type="button"
-                className="mobile-node-button mobile-node-button--wide"
-                onClick={() => attachInputRef.current?.click()}
-                disabled={attachingImage || busy}
-              >
-                {attachingImage ? t("nodeInspector.attachImageBusy") : t("nodeInspector.attachImage")}
-              </button>
-            </>
-          ) : null}
+          <input
+            ref={attachInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={attachImage}
+            className="mobile-node-file-input"
+            aria-hidden="true"
+            tabIndex={-1}
+          />
 
           {data.imageUrl ? (
             <button
@@ -1380,78 +1368,106 @@ export function MobileNodeWorkspace() {
               <small>{t("mobileNode.actionsSummary")}</small>
             </summary>
             <div className="mobile-node-actions-details__body">
-              <div className="mobile-node-action-title">{t("nodeInspector.exportActions")}</div>
-              <div className="mobile-node-action-grid">
-                <button type="button" className="mobile-node-button" onClick={download} disabled={!data.imageUrl}>
-                  {t("result.download")}
-                </button>
-                <button type="button" className="mobile-node-button" onClick={() => void copyImage()} disabled={!data.imageUrl}>
-                  {t("result.copyImage")}
-                </button>
-                <button type="button" className="mobile-node-button" onClick={() => void copyPrompt()} disabled={!data.prompt}>
-                  {t("result.copyPrompt")}
-                </button>
-                {canRemoveImageReference ? (
+              <div className="mobile-node-actions-section">
+                <div className="mobile-node-action-title">{t("nodeInspector.exportActions")}</div>
+                <div className="mobile-node-action-grid">
+                  <button type="button" className="mobile-node-button" onClick={download} disabled={!data.imageUrl}>
+                    {t("result.download")}
+                  </button>
+                  <button type="button" className="mobile-node-button" onClick={() => void copyImage()} disabled={!data.imageUrl}>
+                    {t("result.copyImage")}
+                  </button>
+                  <button type="button" className="mobile-node-button" onClick={() => void copyPrompt()} disabled={!data.prompt}>
+                    {t("result.copyPrompt")}
+                  </button>
+                </div>
+              </div>
+
+              {canAttachImage || canRemoveImageReference ? (
+                <div className="mobile-node-actions-section">
+                  <div className="mobile-node-action-title">{t("mobileNode.imageActionsTitle")}</div>
+                  <div className="mobile-node-action-grid mobile-node-action-grid--image">
+                    {canAttachImage ? (
+                      <button
+                        type="button"
+                        className="mobile-node-button"
+                        onClick={() => attachInputRef.current?.click()}
+                        disabled={attachingImage || busy}
+                      >
+                        {attachingImage ? t("nodeInspector.attachImageBusy") : t("nodeInspector.attachImage")}
+                      </button>
+                    ) : null}
+                    {canRemoveImageReference ? (
+                      <button
+                        type="button"
+                        className="mobile-node-danger"
+                        onClick={() => removeNodeImageReference(selected.id)}
+                        disabled={busy}
+                      >
+                        {t("nodeInspector.removeImage")}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mobile-node-actions-section">
+                <div className="mobile-node-action-title">{t("nodeInspector.workflowActions")}</div>
+                <div className={`mobile-node-branch-inline-hint${isBranchGenerating ? " is-running" : ""}`}>
+                  {isBranchGenerating
+                    ? t("mobileNode.branchImpact", { count: children.length })
+                    : branchRegenerateState.reason || t("mobileNode.branchReady", { count: children.length })}
+                </div>
+                <div className="mobile-node-action-grid">
+                  <button
+                    type="button"
+                    className="mobile-node-button"
+                    onClick={() =>
+                      isBranchGenerating
+                        ? void cancelBranchGeneration(selected.id)
+                        : void regenerateBranch(selected.id)
+                    }
+                    disabled={isBranchGenerating ? false : !branchRegenerateState.canRegenerate}
+                  >
+                    {isBranchGenerating ? t("node.cancelBranch") : t("node.regenerateBranch")}
+                  </button>
+                  <button
+                    type="button"
+                    className="mobile-node-button"
+                    onClick={() => {
+                      selectNode(addSiblingNode(selected.id));
+                      setActiveView("node");
+                    }}
+                  >
+                    {t("mobileNode.addSibling")}
+                  </button>
+                  <button
+                    type="button"
+                    className="mobile-node-button"
+                    onClick={() => {
+                      selectNode(duplicateBranchRoot(selected.id));
+                      setActiveView("node");
+                    }}
+                  >
+                    {t("mobileNode.duplicateRoot")}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mobile-node-actions-section mobile-node-actions-section--danger">
+                <div className="mobile-node-action-title">{t("mobileNode.dangerActionsTitle")}</div>
+                <div className="mobile-node-action-grid mobile-node-action-grid--danger">
                   <button
                     type="button"
                     className="mobile-node-danger"
-                    onClick={() => removeNodeImageReference(selected.id)}
-                    disabled={busy}
+                    onClick={() => {
+                      deleteNode(selected.id);
+                      selectNode(null);
+                    }}
                   >
-                    {t("nodeInspector.removeImage")}
+                    {t("common.delete")}
                   </button>
-                ) : null}
-              </div>
-
-              <div className="mobile-node-action-title">{t("nodeInspector.workflowActions")}</div>
-              <div className={`mobile-node-branch-inline-hint${isBranchGenerating ? " is-running" : ""}`}>
-                {isBranchGenerating
-                  ? t("mobileNode.branchImpact", { count: children.length })
-                  : branchRegenerateState.reason || t("mobileNode.branchReady", { count: children.length })}
-              </div>
-              <div className="mobile-node-action-grid">
-                <button
-                  type="button"
-                  className="mobile-node-button"
-                  onClick={() =>
-                    isBranchGenerating
-                      ? void cancelBranchGeneration(selected.id)
-                      : void regenerateBranch(selected.id)
-                  }
-                  disabled={isBranchGenerating ? false : !branchRegenerateState.canRegenerate}
-                >
-                  {isBranchGenerating ? t("node.cancelBranch") : t("node.regenerateBranch")}
-                </button>
-                <button
-                  type="button"
-                  className="mobile-node-button"
-                  onClick={() => {
-                    selectNode(addSiblingNode(selected.id));
-                    setActiveView("node");
-                  }}
-                >
-                  {t("mobileNode.addSibling")}
-                </button>
-                <button
-                  type="button"
-                  className="mobile-node-button"
-                  onClick={() => {
-                    selectNode(duplicateBranchRoot(selected.id));
-                    setActiveView("node");
-                  }}
-                >
-                  {t("mobileNode.duplicateRoot")}
-                </button>
-                <button
-                  type="button"
-                  className="mobile-node-danger"
-                  onClick={() => {
-                    deleteNode(selected.id);
-                    selectNode(null);
-                  }}
-                >
-                  {t("common.delete")}
-                </button>
+                </div>
               </div>
             </div>
           </details>

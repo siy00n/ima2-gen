@@ -807,6 +807,16 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
       if (!(details instanceof HTMLDetailsElement)) throw new Error("actions is not a details element");
       if (details.open) throw new Error("actions should be collapsed by default");
     });
+    await page.locator(".mobile-node-actions-details > summary").click();
+    await page.locator(".mobile-node-actions-section--danger").waitFor({ state: "visible", timeout: 5_000 });
+    const nodeActionState = await page.evaluate(() => ({
+      sectionCount: document.querySelectorAll(".mobile-node-actions-section").length,
+      dangerButtonCount: document.querySelectorAll(".mobile-node-actions-section--danger .mobile-node-danger").length,
+      directWideButtons: document.querySelectorAll(".mobile-node-focus > .mobile-node-button--wide").length,
+    }));
+    assert(nodeActionState.sectionCount >= 3, `${label}: Node Actions should group export, workflow, and danger actions`);
+    assert(nodeActionState.dangerButtonCount === 1, `${label}: Node delete should live in the danger action section`);
+    assert(nodeActionState.directWideButtons === 0, `${label}: Node secondary image actions should not occupy the primary flow`);
 
     await page.locator(".mobile-node-connection-summary__main").click();
     await page.locator(".mobile-node-panel--connection").waitFor({ state: "visible", timeout: 5_000 });

@@ -676,8 +676,26 @@
 
 .mobile-node-actions-details__body {
   display: grid;
-  gap: 9px;
+  gap: 11px;
   padding: 0 12px 12px;
+}
+
+.mobile-node-actions-section {
+  display: grid;
+  gap: 7px;
+}
+
+.mobile-node-actions-section--danger {
+  padding-top: 2px;
+  border-top: 1px solid rgba(239, 68, 68, 0.18);
+}
+
+.mobile-node-action-grid--image {
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+}
+
+.mobile-node-action-grid--danger {
+  grid-template-columns: 1fr;
 }
 
 .mobile-node-workspace .option-group {
