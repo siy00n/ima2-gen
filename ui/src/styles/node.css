@@ -2996,7 +2996,6 @@ button.workflow-edge-badge__chip {
 
   .prompt-library-panel__dialog {
     height: min(88dvh, 760px);
-    padding-top: 28px;
   }
 
   .prompt-library-panel__body {
@@ -3020,19 +3019,21 @@ button.workflow-edge-badge__chip {
   }
 
   .prompt-library-panel__back {
-    min-height: 42px;
+    min-height: 36px;
     align-self: flex-start;
-    padding: 0 12px;
+    padding: 0 10px;
     border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: 10px;
+    border-radius: 999px;
     background: rgba(255, 255, 255, 0.055);
     color: var(--text);
     font: inherit;
+    font-size: 12px;
+    font-weight: 750;
     cursor: pointer;
   }
 
   .prompt-library-panel__preview {
-    max-height: none;
+    max-height: 34dvh;
   }
 
   .gallery {
@@ -3209,7 +3210,7 @@ button.workflow-edge-badge__chip {
   }
 
   .prompt-library-panel__dialog {
-    padding: 14px 14px max(16px, env(safe-area-inset-bottom));
+    padding: 0 0 max(12px, env(safe-area-inset-bottom));
     animation: mobile-sheet-slide-up 220ms ease both;
   }
 

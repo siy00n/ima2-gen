@@ -208,7 +208,11 @@ export function PromptLibraryPanel({
           aria-label={labels.close || "Close"}
         />
       )}
-      <div className="prompt-library-panel__dialog" role="dialog" aria-modal="true">
+      <div
+        className={`prompt-library-panel__dialog${showMobileDetail ? " prompt-library-panel__dialog--detail" : ""}${editorOpen ? " prompt-library-panel__dialog--editor" : ""}`}
+        role="dialog"
+        aria-modal="true"
+      >
         <header className="prompt-library-panel__header">
           <div className="prompt-library-panel__heading">
             <h2 className="prompt-library-panel__title">
@@ -307,6 +311,7 @@ export function PromptLibraryPanel({
                     prompt={prompt}
                     selected={selectedPrompt?.id === prompt.id}
                     highlighted={lastSavedId === prompt.id}
+                    compact={isMobile}
                     labels={labels}
                     onSelect={selectPrompt}
                     onToggleFavorite={
@@ -329,7 +334,8 @@ export function PromptLibraryPanel({
                 className="prompt-library-panel__back"
                 onClick={dismissDetail}
               >
-                {"<"} {labels.title || "Prompt library"}
+                <span aria-hidden="true">{"<"}</span>
+                <span>{labels.title || "Prompt library"}</span>
               </button>
             ) : null}
             {editorOpen ? (
@@ -375,49 +381,54 @@ export function PromptLibraryPanel({
                   </div>
                 ) : null}
                 <div className="prompt-library-panel__detail-actions">
-                  {onInsert && (
-                    <button
-                      type="button"
-                      className="prompt-library-panel__primary"
-                      onClick={() => onInsert(selectedPrompt)}
-                      disabled={!canApplyPrompt}
-                    >
-                      {labels.appendPrompt || labels.insert || "Append to prompt"}
-                    </button>
-                  )}
-                  {onUse && (
-                    <button
-                      type="button"
-                      onClick={() => onUse(selectedPrompt)}
-                      disabled={!canApplyPrompt}
-                    >
-                      {labels.replacePrompt || labels.use || "Replace prompt"}
-                    </button>
-                  )}
-                  {onToggleFavorite && (
-                    <button
-                      type="button"
-                      onClick={() => void onToggleFavorite(selectedPrompt.id, selectedPrompt)}
-                    >
-                      {selectedPrompt.isFavorite
-                        ? labels.unfavorite || "Remove favorite"
-                        : labels.favorite || "Favorite"}
-                    </button>
-                  )}
-                  {onUpdate && (
-                    <button type="button" onClick={() => openEditor(selectedPrompt)}>
-                      {labels.edit || "Edit"}
-                    </button>
-                  )}
-                  {onDelete && (
-                    <button
-                      type="button"
-                      className="prompt-library-panel__danger"
-                      onClick={() => void onDelete(selectedPrompt.id, selectedPrompt)}
-                    >
-                      {labels.delete || "Delete"}
-                    </button>
-                  )}
+                  <div className="prompt-library-panel__apply-actions">
+                    {onInsert && (
+                      <button
+                        type="button"
+                        className="prompt-library-panel__primary"
+                        onClick={() => onInsert(selectedPrompt)}
+                        disabled={!canApplyPrompt}
+                      >
+                        {labels.appendPrompt || labels.insert || "Append to prompt"}
+                      </button>
+                    )}
+                    {onUse && (
+                      <button
+                        type="button"
+                        className="prompt-library-panel__secondary"
+                        onClick={() => onUse(selectedPrompt)}
+                        disabled={!canApplyPrompt}
+                      >
+                        {labels.replacePrompt || labels.use || "Replace prompt"}
+                      </button>
+                    )}
+                  </div>
+                  <div className="prompt-library-panel__manage-actions">
+                    {onToggleFavorite && (
+                      <button
+                        type="button"
+                        onClick={() => void onToggleFavorite(selectedPrompt.id, selectedPrompt)}
+                      >
+                        {selectedPrompt.isFavorite
+                          ? labels.unfavorite || "Remove favorite"
+                          : labels.favorite || "Favorite"}
+                      </button>
+                    )}
+                    {onUpdate && (
+                      <button type="button" onClick={() => openEditor(selectedPrompt)}>
+                        {labels.edit || "Edit"}
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button
+                        type="button"
+                        className="prompt-library-panel__danger"
+                        onClick={() => void onDelete(selectedPrompt.id, selectedPrompt)}
+                      >
+                        {labels.delete || "Delete"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </>
             ) : (

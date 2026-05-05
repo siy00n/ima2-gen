@@ -656,6 +656,42 @@ async function assertMobileGalleryPolish(page, label, { expectTile = false, expe
   }
 }
 
+async function assertMobilePromptLibraryPolish(page, label) {
+  const row = page.locator(".prompt-library-row").first();
+  await row.waitFor({ state: "visible", timeout: 5_000 });
+  const rowLayout = await row.evaluate((el) => {
+    const rowRect = el.getBoundingClientRect();
+    const favorite = el.querySelector(".prompt-library-row__favorite");
+    const preview = el.querySelector(".prompt-library-row__preview");
+    const title = el.querySelector(".prompt-library-row__title");
+    const favoriteRect = favorite?.getBoundingClientRect();
+    const previewStyle = preview ? getComputedStyle(preview) : null;
+    const titleRect = title?.getBoundingClientRect();
+    const hiddenSecondaryButtons = [...el.querySelectorAll(".prompt-library-row__actions button:not(.prompt-library-row__favorite)")].every((button) => {
+      const style = getComputedStyle(button);
+      return style.display === "none";
+    });
+    const hitTarget = favoriteRect
+      ? document.elementFromPoint(favoriteRect.left + favoriteRect.width / 2, favoriteRect.top + favoriteRect.height / 2)
+      : null;
+    return {
+      rowHeight: rowRect.height,
+      favoriteWidth: favoriteRect?.width ?? 0,
+      favoriteHeight: favoriteRect?.height ?? 0,
+      favoriteHit: !!favorite && hitTarget?.closest("button") === favorite,
+      titleInside: !!titleRect && titleRect.top >= rowRect.top && titleRect.bottom <= rowRect.bottom,
+      previewClamp: previewStyle?.webkitLineClamp || "",
+      hiddenSecondaryButtons,
+    };
+  });
+  assert(rowLayout.rowHeight <= 104, `${label}: Prompt Library row should stay compact`);
+  assert(rowLayout.favoriteWidth >= 32 && rowLayout.favoriteHeight >= 32, `${label}: Prompt Library favorite hit target should be touchable`);
+  assert(rowLayout.favoriteHit, `${label}: Prompt Library favorite hit target should not be blocked`);
+  assert(rowLayout.titleInside, `${label}: Prompt Library title should stay inside the card`);
+  assert(rowLayout.previewClamp === "2", `${label}: Prompt Library preview should be clamped to two lines on mobile`);
+  assert(rowLayout.hiddenSecondaryButtons, `${label}: Prompt Library list cards should keep secondary actions out of the row`);
+}
+
 async function assertConnector(page, source, target, expectedTransfer, expectedBadge) {
   const connector = page.locator(`.mobile-node-map-connector[data-source="${source}"][data-target="${target}"]`);
   await connector.waitFor({ state: "attached", timeout: 5_000 });
@@ -787,6 +823,7 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     await page.locator(".prompt-library-panel__favorite-filter").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__add").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__import").waitFor({ state: "visible", timeout: 5_000 });
+    await assertMobilePromptLibraryPolish(page, `${label}: Node Prompt Library`);
     assert((await page.locator(".prompt-library-panel__close").count()) === 0, `${label}: Prompt Library should not show a visible close button`);
     const nodeLibraryHandleContent = await page
       .locator(".prompt-library-panel__dialog")
@@ -794,6 +831,14 @@ async function runViewportSmoke(browser, baseUrl, viewport, screenshotDir) {
     assert(nodeLibraryHandleContent === "none", `${label}: Prompt Library should not show a grab handle`);
     await page.locator(".prompt-library-row").first().click();
     await page.locator(".prompt-library-panel__back").waitFor({ state: "visible", timeout: 5_000 });
+    const detailActions = await page.evaluate(() => ({
+      applyGroups: document.querySelectorAll(".prompt-library-panel__apply-actions").length,
+      manageGroups: document.querySelectorAll(".prompt-library-panel__manage-actions").length,
+      primaryHeight: document.querySelector(".prompt-library-panel__primary")?.getBoundingClientRect().height ?? 0,
+    }));
+    assert(detailActions.applyGroups === 1, `${label}: Prompt Library detail should group apply actions`);
+    assert(detailActions.manageGroups === 1, `${label}: Prompt Library detail should group manage actions`);
+    assert(detailActions.primaryHeight >= 44, `${label}: Prompt Library primary action should keep touch height`);
     await mobileBack(page);
     await page.locator(".prompt-library-panel__search").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__add").click();
@@ -899,6 +944,7 @@ async function runClassicViewportSmoke(browser, baseUrl, viewport, screenshotDir
     await page.locator(".prompt-library-panel__favorite-filter").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__add").waitFor({ state: "visible", timeout: 5_000 });
     await page.locator(".prompt-library-panel__import").waitFor({ state: "visible", timeout: 5_000 });
+    await assertMobilePromptLibraryPolish(page, `${label}: Classic Prompt Library`);
     assert((await page.locator(".prompt-library-panel__close").count()) === 0, `${label}: Classic Prompt Library should not show a visible close button`);
     const classicLibraryHandleContent = await page
       .locator(".prompt-library-panel__dialog")

@@ -88,6 +88,7 @@ export function PromptLibraryRow({
             className={`prompt-library-row__favorite${
               prompt.isFavorite ? " prompt-library-row__favorite--on" : ""
             }`}
+            aria-pressed={prompt.isFavorite}
             onClick={(e) => {
               e.stopPropagation();
               onToggleFavorite(prompt);
