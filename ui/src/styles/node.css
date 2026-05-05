@@ -3283,23 +3283,17 @@ button.workflow-edge-badge__chip {
   .gallery,
   .prompt-library-panel__dialog,
   .right-panel {
-    background: rgba(17, 19, 26, 0.98);
-    border-top-color: rgba(255, 255, 255, 0.1);
-    border-radius: 18px 18px 0 0;
+    background: var(--mobile-app-surface);
+    border-top-color: var(--mobile-app-border);
+    border-radius: var(--mobile-app-radius-lg) var(--mobile-app-radius-lg) 0 0;
   }
 
-  .gallery__header {
-    gap: 10px;
-    padding: 14px 14px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(17, 19, 26, 0.98);
-  }
-
+  .gallery__header,
   .prompt-library-panel__header {
     gap: 10px;
     padding: 14px 14px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(17, 19, 26, 0.98);
+    border-bottom: 1px solid var(--mobile-app-border);
+    background: var(--mobile-app-surface);
   }
 
   .gallery__title,
@@ -3321,9 +3315,9 @@ button.workflow-edge-badge__chip {
   .gallery__search,
   .prompt-library-panel__search {
     min-height: 40px;
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--mobile-app-border);
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.045);
+    background: var(--mobile-app-surface-soft);
     font-size: 16px;
   }
 
@@ -3353,11 +3347,11 @@ button.workflow-edge-badge__chip {
   .prompt-library-panel__add,
   .prompt-library-panel__import {
     min-height: 36px;
-    border-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--mobile-app-border);
     border-radius: 10px;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.02)),
-      rgba(255, 255, 255, 0.045);
+      var(--mobile-app-surface-soft);
   }
 
   .prompt-library-panel__target {
